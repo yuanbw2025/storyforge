@@ -1,8 +1,11 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { X, CheckCircle2, AlertTriangle, RotateCcw, FileText, Trash2, ArrowRight, BookOpenCheck } from 'lucide-react'
 import type { UnifiedParseResult } from '../../../lib/types'
+import type { Character, OutlineNode, WorkspaceScope } from '../../../lib/types'
 import type { DocumentImportChunkCandidateV1, readDocumentImportChunkEvidenceV1 } from '../../../lib/import/document-parse-durable'
 import type { ImportSession } from '../../../lib/types/import-session'
+import { readOwnedRows } from '../../../lib/workspace/scope'
+import { detectSameNameConflictsV1, SAME_NAME_CONFLICT_RULES_V1, type SameNameConflictItemV1 } from '../../../lib/import/dedup'
 
 interface Props {
   session: ImportSession
@@ -60,7 +63,8 @@ export default function ImportReportModal({
     ? `已记录用量：输入 ${observation.usage.inputTokens ?? '—'}，输出 ${observation.usage.outputTokens ?? '—'}，合计 ${observation.usage.totalTokens} tokens。`
     : observation?.requestLifecycle?.phase === 'pre-dispatch' ? '请求未发送。'
       : observation?.requestLifecycle?.responseStatus ? `服务返回 HTTP ${observation.requestLifecycle.responseStatus}。` : null
-  if (review) return <ImportChunkReview key={review.candidate.candidateHash} filename={session.filename} review={review} onClose={onClose} attemptNote={attemptNote} />
+  if (review) return <ImportChunkReview key={review.candidate.candidateHash} filename={session.filename}
+    review={review} onClose={onClose} attemptNote={attemptNote} targetScope={session.targetScope} />
   const codexCandidates = session.merged?.codexCandidates?.length || 0
 
   return (
@@ -265,15 +269,55 @@ function StatCard({ label, value, color }: {
   )
 }
 
-function ImportChunkReview({ filename, review, onClose, attemptNote }: {
+function ImportChunkReview({ filename, review, onClose, attemptNote, targetScope }: {
   filename: string
   review: NonNullable<Props['review']>
   attemptNote: string | null
   onClose: () => void
+  /** 目标 scope（session.targetScope）：同名对照只在该实际写入范围内做，避免跨世界误报。 */
+  targetScope?: WorkspaceScope
 }) {
   const [draft, setDraft] = useState(() => structuredClone(review.candidate.result))
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
+  /** 032-L1-d-CHAR：候选角色/大纲与目标世界既有条目的同名清单（只读展示）。 */
+  const [sameNameConflicts, setSameNameConflicts] = useState<SameNameConflictItemV1[]>([])
+
+  // 该面已持有已解析的 UnifiedParseResult，因此可以就地做同名对照；
+  // 只读取目标 scope 的真实行，不写库、不改 adopt/CAS/候选 hash。
+  useEffect(() => {
+    let active = true
+    const compute = async () => {
+      if (!targetScope) { setSameNameConflicts([]); return }
+      try {
+        const [characters, outlines] = await Promise.all([
+          readOwnedRows<Character>(targetScope, 'characters', { owner: 'world' }),
+          readOwnedRows<OutlineNode>(targetScope, 'outlineNodes', { owner: 'work' }),
+        ])
+        if (!active) return
+        setSameNameConflicts(detectSameNameConflictsV1({
+          existingCharacters: characters.map(character => ({ id: character.id, name: character.name })),
+          existingOutlines: outlines.map(node => ({ id: node.id, title: node.title, summary: node.summary })),
+          incomingCharacters: (review.candidate.result.characters ?? [])
+            .map(character => (typeof (character as { name?: unknown }).name === 'string' ? ((character as { name: string }).name) : ''))
+            .filter(name => name.trim().length > 0),
+          incomingOutlines: (review.candidate.result.outline ?? []).flatMap(node => {
+            const record = node as { title?: unknown; summary?: unknown }
+            if (typeof record.title !== 'string' || !record.title.trim()) return []
+            return [{ title: record.title, summary: typeof record.summary === 'string' ? record.summary : '' }]
+          }),
+        }))
+      } catch {
+        // 提示仅用于展示：读取失败时保持空清单，绝不阻断确认/保存流程。
+        if (active) setSameNameConflicts([])
+      }
+    }
+    void compute()
+    return () => { active = false }
+    // draft 编辑不影响"本次将保存哪些名字"以外的检测口径；只按候选来源算一次。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [review.candidate.candidateHash])
+
   const confirm = async () => {
     if (saving || !review.canConfirm) return
     setSaving(true)
@@ -291,6 +335,32 @@ function ImportChunkReview({ filename, review, onClose, attemptNote }: {
           <button aria-label="稍后审查" onClick={onClose} disabled={saving}><X className="w-4 h-4" /></button>
         </div>
         <p className="text-sm text-text-secondary break-all">{filename}。确认后才保存本块内容，可先修改或删除不需要的内容。</p>
+
+        {/* 032-L1-d-CHAR：同名提示（仅当候选与目标世界既有条目同名时出现） */}
+        {sameNameConflicts.length > 0 && (
+          <div role="status" className="rounded-lg border border-warning/30 bg-warning/10 p-3 text-xs leading-relaxed">
+            <div className="flex items-start gap-1.5 mb-1.5 text-warning">
+              <AlertTriangle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
+              <span className="font-medium">检测到 {sameNameConflicts.length} 处同名条目（目标世界内已存在）</span>
+            </div>
+            <ul className="space-y-1 mb-2">
+              {sameNameConflicts.map((conflict, index) => (
+                <li key={`${conflict.kind}-${conflict.incomingName}-${index}`} className="text-text-secondary">
+                  <span className="text-text-primary font-medium">
+                    候选{conflict.kind === 'character' ? '角色' : '大纲'}「{conflict.incomingName}」
+                  </span>
+                  <span className="text-text-muted"> → 已有同名{conflict.kind === 'character' ? '角色' : '大纲'}「{conflict.existingName}」
+                    {conflict.similarity != null && conflict.similarity !== 1 && `（相似度 ${Math.round(conflict.similarity * 100)}%）`}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <p className="text-text-muted">
+              将按既有规则处理，不会静默覆盖或删除：世界观同名字段去重后追加；{SAME_NAME_CONFLICT_RULES_V1.characterAppend}{SAME_NAME_CONFLICT_RULES_V1.outlineMerge}异名条目一律保留不动。
+            </p>
+          </div>
+        )}
+
         <div className="space-y-2">
           {Object.entries(draft).filter(([key, value]) => key !== 'codexCandidates' && value && Object.keys(value).length > 0)
             .map(([key, value]) => (
