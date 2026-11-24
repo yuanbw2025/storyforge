@@ -236,7 +236,8 @@ function WorldviewFieldCandidateReviewV1({candidate,busy,visibleDraft,onUpdate,o
   </div>
 }
 
-// Current main V2 renderer retained pending a separately approved precise-diff bridge.
+// Current main V2 renderer. 054-V2-BRIDGE（DSH-054-V2显示桥授权.json）把同一冻结
+// 原文的精确对照接入本渲染器；保守块对照保留为不可比较/拒绝路径的回退。
 const STATUS_LABELS: Record<WorldviewTextBlockStatusV1, string> = {
   unchanged: '原块保留',
   'possibly-rewritten': '可能改写',
@@ -296,6 +297,67 @@ function WorldviewFieldCandidateReviewMainV2({
   const rightRef = useRef<HTMLTextAreaElement | null>(null)
   const syncing = useRef(false)
   const composing = useRef(false)
+
+  // 054-V2-BRIDGE（DSH-054-V2显示桥授权.json）：V2 也用同一份冻结原文的精确对照。
+  // 基线只取 restoreWorldviewFieldMasterV2 的 values 投影——即采纳比较用的同一原文；
+  // 不可比较、缺基线、越界或超长时保持下面的保守卡片，不改解析/草稿/采纳语义。
+  const diffIdentity = useMemo<DiffCandidateIdentityV2 | null>(() => {
+    if (!parsed) return null
+    const scope = candidate.payload.workspaceScope
+    if (!scope) return null
+    const eventId = candidate.event.id
+    if (typeof eventId !== 'number' || !Number.isSafeInteger(eventId)) return null
+    const conversationId = candidate.event.conversationId
+    const rawPayload: { runId?: unknown; runStepId?: unknown; runGeneration?: unknown } = candidate.payload
+    try {
+      return {
+        scope: {
+          projectId: String(scope.projectId), worldId: String(scope.worldId), workId: String(scope.workId),
+          ...(conversationId === undefined || conversationId === null ? {} : { conversationId: String(conversationId) }),
+        },
+        taskId: String(candidate.payload.taskId ?? ''), eventId, field: parsed.field,
+        ...(typeof rawPayload.runId === 'number' || typeof rawPayload.runId === 'string' ? { runId: String(rawPayload.runId) } : {}),
+        ...(typeof rawPayload.runStepId === 'string' && rawPayload.runStepId ? { runStepId: rawPayload.runStepId } : {}),
+        ...(Number.isSafeInteger(rawPayload.runGeneration) ? { runGeneration: Number(rawPayload.runGeneration) } : {}),
+      }
+    } catch { return null }
+  }, [candidate, parsed])
+  const diffBinding = useMemo<DiffSourceBindingV2 | null>(() => {
+    if (!diffIdentity || !parsed || typeof parsed.value !== 'string') return null
+    const admitted = WORLDVIEW_GENERATABLE_FIELD_SPECS.find(spec => spec.field === parsed.field && spec.type === 'longtext')
+    if (!admitted) return null
+    if (!frozenBaseline || typeof frozenBaseline.values !== 'object' || frozenBaseline.values === null) return null
+    const values = frozenBaseline.values as Record<string, unknown>
+    if (typeof values[parsed.field] !== 'string') return null
+    const operation = candidate.payload.worldviewFieldOperation
+    if (operation !== 'create' && operation !== 'rewrite' && operation !== 'expand' && operation !== 'polish') return null
+    return { identity: diffIdentity, payloadField: candidate.payload.worldviewField ?? '', parserField: parsed.field, admittedTextField: admitted.field, operation, baseSnapshot: { values } }
+  }, [diffIdentity, parsed, frozenBaseline, candidate.payload.worldviewField, candidate.payload.worldviewFieldOperation])
+  const diffFrozen = useMemo<FrozenDiffBaselineV2 | null>(() => {
+    if (!diffBinding) return null
+    try { return freezeWorldviewDiffBaselineV2(diffBinding) } catch { return null }
+  }, [diffBinding])
+  const [diffRevision, setDiffRevision] = useState(0)
+  useEffect(() => { setDiffRevision(value => value + 1) }, [draftValue, candidate.event.content])
+  const diffSource = useMemo(() => {
+    if (!diffFrozen || !diffBinding) return null
+    // 右侧只有在可见草稿（真实 ownership lookup）或未偏离已存 artifact 时才能归因。
+    if (!visibleDraft && draftValue !== savedValue) return null
+    const draftKind: DiffDraftKindV2 = parsed ? (typeof parsed.value === 'string' ? 'field-value' : 'raw-artifact') : 'unknown'
+    try {
+      return selectWorldviewDiffDisplaySourceV2({
+        frozen: diffFrozen, binding: diffBinding, candidateContent: candidate.event.content, rightRevision: diffRevision,
+        ...(visibleDraft ? { visible: { identity: diffBinding.identity, kind: draftKind, draft: { rawValue: visibleDraft.rawValue, status: visibleDraft.status } } } : {}),
+      })
+    } catch { return null }
+  }, [diffFrozen, diffBinding, candidate.event.content, diffRevision, visibleDraft, draftValue, savedValue, parsed])
+  const [diffBaselineHash, setDiffBaselineHash] = useState<{ identity: string; hash: string } | null>(null)
+  useEffect(() => {
+    let active = true
+    if (!diffFrozen) { setDiffBaselineHash(null); return () => { active = false } }
+    void hashCanonicalValue(diffFrozen).then(hash => { if (active) setDiffBaselineHash({ identity: diffFrozen.identity, hash }) }).catch(() => { if (active) setDiffBaselineHash(null) })
+    return () => { active = false }
+  }, [diffFrozen])
 
   useEffect(() => {
     setLocalValue(savedValue)
@@ -388,6 +450,21 @@ function WorldviewFieldCandidateReviewMainV2({
     ? comparison.rows.filter(row => row.status !== 'unchanged')
     : comparison.rows
 
+  // 精确对照只在冻结来源真实可用且两侧都在转移上限内时挂载；其余一律回到保守卡片。
+  const preciseDiff = diffFrozen && diffSource?.available && diffBaselineHash?.identity === diffFrozen.identity
+    && diffSource.left.length <= WORLDVIEW_DIFF_MAX_TRANSFER_UNITS_V1 && diffSource.right.length <= WORLDVIEW_DIFF_MAX_TRANSFER_UNITS_V1
+    ? { identity: diffFrozen.identity, left: diffSource.left, right: diffSource.right, hash: diffBaselineHash.hash }
+    : null
+  const applyDiffRange = (start: number, end: number) => {
+    if (composing.current) return
+    const element = rightRef.current
+    if (!element) return
+    const map = worldviewLFMap(draftValue)
+    if (map.domText !== element.value) return
+    element.focus({ preventScroll: true })
+    element.setSelectionRange(map.rawToDom(start, 'before'), map.rawToDom(end, 'after'))
+  }
+
   const sync = (source: 'left' | 'right', event: UIEvent<HTMLTextAreaElement>) => {
     if (!syncScroll || syncing.current) return
     const target = source === 'left' ? rightRef.current : leftRef.current
@@ -459,8 +536,12 @@ function WorldviewFieldCandidateReviewMainV2({
         </div>
       )}
 
-      {(operation === 'expand' || operation === 'polish') && (
+      {(operation === 'expand' || operation === 'polish') && (preciseDiff ? (
+        <WorldviewTextDiff left={preciseDiff.left} right={preciseDiff.right} identityKey={preciseDiff.identity} baselineHash={preciseDiff.hash}
+          rightRevision={diffRevision} sourceKind="field-value" onEditRange={applyDiffRange}/>
+      ) : (
         <div className="rounded border border-border bg-bg-base p-3">
+          {frozenBaseline && <p role="status" className="mb-2 text-[10px] text-text-muted">此候选暂不能精确对照，已保留保守块对照；原文与草稿均未改写。</p>}
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
               <p className="text-xs font-medium text-text-primary">文本块对照</p>
@@ -496,7 +577,7 @@ function WorldviewFieldCandidateReviewMainV2({
             )) : <p className="text-xs text-text-muted">没有可显示的变化。</p>}
           </div>
         </div>
-      )}
+      ))}
     </div>
   )
 }

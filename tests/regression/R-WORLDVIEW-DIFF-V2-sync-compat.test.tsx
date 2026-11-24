@@ -9,6 +9,17 @@ import { WORLDVIEW_TEXT_COMPARISON_VERSION_V1 } from '../../src/lib/agent/worldv
 import type { MasterCopilotController, PendingMasterCandidate } from '../../src/components/agent/useMasterCopilot'
 import type { Project } from '../../src/lib/types'
 
+// 5 的 DSH-054-V2显示桥授权.json 允许的窄片：V2 显示接入现有精确 diff。
+// 这里只记录 Worker job（不换实现、不发网络），用来证明左右两侧真实来源。
+class FixtureWorker {
+  static jobs: Array<{ leftRaw: string; rightRaw: string; identityKey: string; baselineHash: string; rightRevision: number; sourceKind: string }> = []
+  onmessage: ((event: MessageEvent) => void) | null = null
+  onerror: ((event: Event) => void) | null = null
+  onmessageerror: ((event: MessageEvent) => void) | null = null
+  postMessage(job: { leftRaw: string; rightRaw: string; identityKey: string; baselineHash: string; rightRevision: number; sourceKind: string }) { FixtureWorker.jobs.push(job) }
+  terminate() { /* display-only fixture */ }
+}
+
 // Self-contained 054 integration-recovery compatibility cases. They pin the
 // two-direction routing decided in DSH-054-同步冲突授权.json: main V2 keeps its
 // own controls/baseline/edit/adopt path and really uses the pinned live
@@ -41,7 +52,7 @@ async function setValue(element: HTMLTextAreaElement, value: string) {
   })
 }
 const waitFor = vi.waitFor
-beforeEach(() => { vi.stubGlobal('fetch', vi.fn(() => { throw new Error('054 sync compat forbids network/model') })) })
+beforeEach(() => { FixtureWorker.jobs = []; vi.stubGlobal('Worker', FixtureWorker); vi.stubGlobal('fetch', vi.fn(() => { throw new Error('054 sync compat forbids network/model') })) })
 afterEach(async () => { await cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks() })
 
 function v2Candidate(): PendingMasterCandidate {
@@ -69,14 +80,55 @@ describe('054 sync recovery: main V2 preserved, frozen V1 isolated', () => {
     expect(invalid).not.toHaveBeenCalled()
     expect(restoreMock).toHaveBeenCalled() // baseline restore actually requested on the V2 route
   })
-  it('keeps the pinned live comparison helper as the real V2 consumer, not a fake reachability entry', async () => {
+  it('mounts the precise diff for V2 on the same frozen adoption baseline, without the V1 strict shell', async () => {
     await render(<WorldviewFieldCandidateReview candidate={v2Candidate()} busy={false} onUpdate={vi.fn()} />)
     await waitFor(() => expect(document.body.textContent).toMatch(/当前全文/))
-    // The V2 renderer renders its conservative comparison card through the
-    // live main helper; the frozen worker diff shell is not mounted for V2.
-    expect(document.body.textContent).toContain('文本块对照')
+    // 054-V2-BRIDGE: the V2 route mounts the frozen-source precise diff, so the
+    // conservative block card is gone once the comparison is comparable.
+    await waitFor(() => expect(document.querySelector('[data-diff-scroller]')).toBeTruthy())
+    expect(document.body.textContent).not.toContain('文本块对照')
+    expect(document.querySelector('.worldview-review-v2')).toBeNull()
+    await waitFor(() => expect(FixtureWorker.jobs.length).toBeGreaterThan(0))
+    const job = FixtureWorker.jobs[0]
+    // left is literally the adoption baseline projection, not a new baseline.
+    expect(job.leftRaw).toBe(String(baseline.values.worldOrigin))
+    expect(job.rightRaw).toBe('扩写后的长稿正文。')
+    expect(job.sourceKind).toBe('field-value')
+    expect(job.identityKey.length).toBeGreaterThan(0)
+    expect(job.baselineHash.length).toBeGreaterThan(0)
+  })
+  it('uses the visible draft value as the precise right side instead of re-parsing the draft text', async () => {
+    await render(<WorldviewFieldCandidateReview candidate={v2Candidate()} busy={false} onUpdate={vi.fn()} visibleDraft={{ rawValue: '扩写后的长稿正文。作者手改', status: 'saving' }} />)
+    await waitFor(() => expect(FixtureWorker.jobs.length).toBeGreaterThan(0))
+    expect(FixtureWorker.jobs[0].leftRaw).toBe(String(baseline.values.worldOrigin))
+    expect(FixtureWorker.jobs[0].rightRaw).toBe('扩写后的长稿正文。作者手改')
+  })
+  it('falls back to the conservative card when the frozen baseline cannot supply that field', async () => {
+    restoreMock.mockResolvedValueOnce({ baseline: { ...baseline, values: { worldStructure: '另一个字段' } } })
+    await render(<WorldviewFieldCandidateReview candidate={v2Candidate()} busy={false} onUpdate={vi.fn()} />)
+    await waitFor(() => expect(document.body.textContent).toContain('文本块对照'))
     expect(document.body.textContent).toContain(`算法 ${WORLDVIEW_TEXT_COMPARISON_VERSION_V1}`)
+    expect(document.body.textContent).toContain('此候选暂不能精确对照')
     expect(document.querySelector('[data-diff-scroller]')).toBeNull()
+    // 拒绝路径：没有权威冻结原文时不得自造基线，也不得发对照 job。
+    expect(FixtureWorker.jobs).toHaveLength(0)
+  })
+  it('rejects a non-string frozen value and a non-comparable operation without inventing a baseline', async () => {
+    // 冻结投影缺 own string 时不猜正文，直接回退保守卡片。
+    restoreMock.mockResolvedValueOnce({ baseline: { ...baseline, values: { worldOrigin: 42 } } })
+    await render(<WorldviewFieldCandidateReview candidate={v2Candidate()} busy={false} onUpdate={vi.fn()} />)
+    await waitFor(() => expect(document.body.textContent).toContain('文本块对照'))
+    expect(document.body.textContent).toContain('此候选暂不能精确对照')
+    expect(document.querySelector('[data-diff-scroller]')).toBeNull()
+    expect(FixtureWorker.jobs).toHaveLength(0)
+    await cleanup()
+    // rewrite 不是可精确对照的 operation，保持原有重写回看路径。
+    const rewrite = v2Candidate()
+    ;(rewrite.payload as { worldviewFieldOperation: string }).worldviewFieldOperation = 'rewrite'
+    await render(<WorldviewFieldCandidateReview candidate={rewrite} busy={false} onUpdate={vi.fn()} />)
+    await waitFor(() => expect(document.body.textContent).toContain('查看重写前原文'))
+    expect(document.querySelector('[data-diff-scroller]')).toBeNull()
+    expect(FixtureWorker.jobs).toHaveLength(0)
   })
   it('routes a strict V1 candidate to the frozen054 V1 renderer whose unknown identity stays read-only', async () => {
     const update = vi.fn(), invalid = vi.fn()
