@@ -1113,6 +1113,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
         onRichText: () => { setMarkdownSwitching(false) },
         onLargePaste: pending => { pendingPasteRef.current = pending; setPendingPaste(pending) },
         placeholder: '开始写作…',
+        entityReferences: entityReferencesRef.current,
       })
       session.setDisplayMode(markdownModeRef.current === 'source' ? 'source' : 'preview')
     } catch (error) {
@@ -1419,6 +1420,9 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     codexEntries,
     worldGroupId: project.enableMultiWorld ? chapterWorldGroupId : undefined,
   }), [characters, itemEntries, locations, codexCategories, codexEntries, project.enableMultiWorld, chapterWorldGroupId])
+  const entityReferencesRef = useRef(entityReferences)
+  useEffect(() => { entityReferencesRef.current = entityReferences }, [entityReferences])
+
   const perspectiveCharacters = useMemo(() => characters
     .filter(character => character.id != null)
     .filter(character => (
