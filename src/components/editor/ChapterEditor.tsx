@@ -968,12 +968,23 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       })
   }, [outlineNodeId, chapters, selectChapter, nodes, getOrCreateByOutlineNode, project.id])
 
+  /** CM 激活时以会话为准读取真实正文；非 CM 路径保持原 editorRef→content 回退。 */
+  const readActiveEditorContent = useCallback((): { html: string; plain: string; wordCount: number } => {
+    const session = markdownSessionRef.current
+    if (session) {
+      const html = session.getHtml()
+      const plain = session.getPlainText()
+      return { html, plain, wordCount: session.getWordCount() }
+    }
+    const html = editorRef.current?.getHTML() ?? content
+    const plain = editorRef.current?.getPlainText() ?? htmlToPlainText(html)
+    return { html, plain, wordCount: countWords(plain) }
+  }, [content])
+
   const persistCurrentEditorContent = useCallback(async (): Promise<{ html: string; plain: string; wordCount: number } | null> => {
     await flushChapterDrafts()
     if (!currentChapter?.id) return null
-    const html = editorRef.current?.getHTML() ?? content
-    const plain = editorRef.current?.getPlainText() ?? htmlToPlainText(html)
-    const wc = countWords(plain)
+    const { html, plain, wordCount: wc } = readActiveEditorContent()
     if (shouldPersistChapterEditorContentV1(currentChapter, html, wc)) {
       await updateChapter(currentChapter.id, { content: html, wordCount: wc })
     }
@@ -981,7 +992,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     setPlainText(plain)
     setSavedContent(html)
     return { html, plain, wordCount: wc }
-  }, [content, currentChapter, updateChapter, flushChapterDrafts])
+  }, [currentChapter, updateChapter, flushChapterDrafts, readActiveEditorContent])
 
   const handleManualSave = useCallback(async () => {
     if (manualSaving) return
@@ -1001,9 +1012,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     setManualSaveError('')
     try {
       await flushChapterDrafts()
-      const html = editorRef.current?.getHTML() ?? content
-      const plain = editorRef.current?.getPlainText() ?? htmlToPlainText(html)
-      const wc = countWords(plain)
+      const { html, plain, wordCount: wc } = readActiveEditorContent()
       await updateChapter(currentChapter.id, buildChapterStatusPatchV1(html, wc, status))
       setContent(html)
       setPlainText(plain)
@@ -1011,7 +1020,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     } catch (error) {
       setManualSaveError(error instanceof Error ? error.message : String(error))
     }
-  }, [content, currentChapter?.id, updateChapter, flushChapterDrafts])
+  }, [currentChapter?.id, updateChapter, flushChapterDrafts, readActiveEditorContent])
 
   // 切换章节：同步到本地 state（RichEditor 会基于 value 重建内容）
   useEffect(() => {
@@ -1126,6 +1135,61 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       setMarkdownError(error instanceof Error ? error.message : '切换显示失败，当前草稿已保留。')
     }
   }, [markdownMode, markdownCmActive])
+
+  /**
+   * 外部已提交内容进入 CM 会话（AI 采纳/导入/其他入口 updateChapter）。
+   * 只在章行确实是已提交状态时才同步，并让 adapter 校验身份/版本/基线；
+   * 任一不符即抛错——这里只显式提示并保留作者未保存输入，不覆盖、不静默丢弃。
+   * 同步本身 0 次 updateChapter、0 次 AI 调用，撤销是新作者编辑。
+   */
+  useEffect(() => {
+    const session = markdownSessionRef.current
+    const chapterId = currentChapter?.id
+    if (!session || chapterId == null || !markdownCmActive) return
+    const incoming = currentChapter?.content ?? ''
+    if (!incoming) return
+    const storeUpdatedAt = currentChapter?.updatedAt
+    let sessionHtml: string
+    try {
+      sessionHtml = session.getHtml()
+    } catch (error) {
+      setMarkdownError(error instanceof Error ? error.message : '当前 Markdown 草稿尚不能核对，外部内容未同步。')
+      return
+    }
+    if (incoming === sessionHtml) return
+    let cancelled = false
+    void (async () => {
+      try {
+        const committed = await db.chapters.get(chapterId)
+        if (cancelled) return
+        if (!committed || committed.projectId !== project.id) return
+        // 章行必须仍是本次观测到的已提交版本；否则等下一轮，避免拿旧值覆盖。
+        if (committed.content !== incoming || committed.updatedAt !== storeUpdatedAt) return
+        session.commitExternalHtml({
+          identity: session.adapter.identity,
+          sourceRevision: session.getSourceRevision(),
+          baselineEpoch: session.adapter.baselineEpoch,
+          sourceHtml: sessionHtml,
+          html: committed.content,
+          receiptId: `chapter-commit:${chapterId}:${committed.updatedAt}`,
+          origin: 'external-adopt',
+        })
+        if (cancelled) return
+        // 本地视图状态跟随已提交内容；不落库、不产生 revision。
+        setContent(committed.content)
+        setPlainText(htmlToPlainText(committed.content))
+        setSavedContent(committed.content)
+        setMarkdownError('')
+        setImpactInfo('正文已在其它入口更新，Markdown 会话已同步；此次同步可撤销。')
+      } catch (error) {
+        // 回执缺失、版本/基线不符或正在组合输入：作者草稿原样保留，只提示。
+        setMarkdownError(error instanceof Error ? error.message : '外部内容未能同步到 Markdown 会话，作者草稿已保留。')
+      }
+    })()
+    return () => { cancelled = true }
+    // 只在章行的已提交内容/版本变化时评估同步；会话自身编辑不回灌。
+  }, [currentChapter?.content, currentChapter?.updatedAt, currentChapter?.id, markdownCmActive, project.id])
+
 
   /** 富文本↔CM 是明确编辑边界：先 flush 草稿成功后再切模式；失败停留原模式。 */
   const switchMarkdownMode = useCallback(async (next: LongformMarkdownEditorModeV1) => {
