@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { extractTextFromFile } from '../../../lib/doc-parser'
+import { extractTextFromFile, textLayerReportLineV1 } from '../../../lib/doc-parser'
 import { chunkDocument, quickHash } from '../../../lib/import/chunker'
 import type { ImportSession } from '../../../lib/types/import-session'
 import { hashImportChunkTextV1, hasFrozenImportIdentityV1, readImportSessionAuthorityV1, useImportSessionStore } from '../../../stores/import-session'
@@ -10,6 +10,8 @@ export default function useImportSessionRecovery(projectId: number, activeWorldI
   const [reusable, setReusable] = useState<ImportSession | null>(null)
   const [blobRestored, setBlobRestored] = useState(false)
   const [restoringBlob, setRestoringBlob] = useState(false)
+  /** 032-L1-a：恢复出的原件没有可复制文本时，保留会话但不继续解析。 */
+  const [textLayerBlocked, setTextLayerBlocked] = useState<string | null>(null)
 
   useEffect(() => {
     if (!navigator.storage?.persist) return
@@ -52,6 +54,13 @@ export default function useImportSessionRecovery(projectId: number, activeWorldI
         const file = new File([row.blob], row.filename, { type: row.blob.type })
         const result = await extractTextFromFile(file)
         if (cancelled) return
+        if (result.status === 'empty') {
+          // 不切块、不登记块文本、不产生候选：扫描件恢复只能停在原件。
+          setTextLayerBlocked(textLayerReportLineV1({ filename: row.filename, sizeBytes: row.blob.size, pageCount: result.pageCount, status: result.status }))
+          setBlobRestored(false)
+          return
+        }
+        setTextLayerBlocked(null)
         const plans = chunkDocument(result.text, { targetChars: frozen.chunkSize })
         let matches = quickHash(result.text) === frozen.fileHash && plans.length === frozen.totalChunks
         for (const plan of plans) {
@@ -88,6 +97,7 @@ export default function useImportSessionRecovery(projectId: number, activeWorldI
     reusable,
     blobRestored,
     restoringBlob,
+    textLayerBlocked,
     clearUnfinished: () => {
       setUnfinished(null)
       setBlobRestored(false)
