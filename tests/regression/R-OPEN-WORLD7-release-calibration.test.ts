@@ -174,6 +174,36 @@ describe('TOW-G7-11 · 发布候选叙事、重复、时长和成本校准', () 
     expect(JSON.stringify(evidence)).not.toContain('must-not-enter-evidence')
   })
 
+  it('grader 输出上限取登记 Skill 值而非应用自设固定额度（B38b/B50）', async () => {
+    const grade = {
+      schema: 'storyforge.text-open-world-creator-calibration-grade', version: 1,
+      scores: [
+        { metricKey: 'mainline-quality', score: 91, rationale: '闭合。' },
+        { metricKey: 'significant-stories', score: 88, rationale: '升级清晰。' },
+        { metricKey: 'template-differentiation', score: 86, rationale: '变体不同。' },
+      ], findings: [],
+    }
+    const bodies: Record<string, unknown>[] = []
+    vi.stubGlobal('fetch', vi.fn(async (_url: unknown, init?: RequestInit) => {
+      bodies.push(JSON.parse(String(init?.body)))
+      return new Response(JSON.stringify({
+        choices: [{ finish_reason: 'stop', message: { content: JSON.stringify(grade) } }],
+        usage: { prompt_tokens: 10, completion_tokens: 10, total_tokens: 20 },
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+    }))
+    await runTextOpenWorldCreatorIndependentCalibrationReviewV1({
+      projectId: 701,
+      config: { provider: 'agnes', apiKey: 'isolated-only', model: 'independent-narrative-grader-v1',
+        baseUrl: 'https://grader.example/v1', temperature: 0.7, maxTokens: 0 },
+      context: reviewContext(),
+    })
+    const { getAgentSkillV1 } = await import('../../src/lib/agent/skill-registry')
+    const { requireFixedBudgetValueV1 } = await import('../../src/lib/agent/finite-budget')
+    expect(bodies).toHaveLength(1)
+    expect(bodies[0].max_tokens).toBe(requireFixedBudgetValueV1(getAgentSkillV1('prose.review').maxOutputTokens))
+    expect(bodies[0].max_tokens).not.toBe(2_400)
+  })
+
   it.each(['说明\n```json\n{}\n```', '```json\n{}', '{}\n{}'])('不修补含额外正文、截断或多个对象的grader输出: %s', async output => {
     const fetchMock = vi.fn(async () => new Response(JSON.stringify({
       choices: [{ finish_reason: 'stop', message: { content: output } }],
