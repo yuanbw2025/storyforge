@@ -2,7 +2,7 @@ import { requireFixedBudgetValueV1 } from '../agent/finite-budget'
 import Dexie from 'dexie'
 import { recordCreationModelRequestV1, recordCreationModelResponseV1, recordUnavailableCreationResponseV1 } from '../agent/run/creation-response-evidence'
 import { chat, resolveRequestConfig, type ChatResult } from '../ai/client'
-import { freezeModelCapacityV1, modelInputBudgetV1, prepareModelCapacityV1 } from '../ai/model-capacity'
+import { evidencedInputBudgetV1, prepareModelCapacityV1 } from '../ai/model-capacity'
 import { useAIConfigStore } from '../../stores/ai-config'
 import type {
   AdaptationBriefV1,
@@ -389,11 +389,10 @@ export async function screenplayStageInputBudgetV1(input: {
     ?? resolveRequestConfig(useAIConfigStore.getState().config, { category: input.category, projectId: input.projectId }).config
   try {
     const prepared = await prepareModelCapacityV1(resolved)
-    const budget = modelInputBudgetV1(freezeModelCapacityV1(prepared), input.outputReservation)
-    const value = Math.floor(budget.inputBudget)
+    const value = evidencedInputBudgetV1({ config: prepared, outputReservation: input.outputReservation })
     // 已证实容量更大时按容量；保守/未知容量不得低于原参考，避免把既有可用
     // 任务压回更小的窗口。固定值只是下限参考，不再是上限。
-    if (Number.isSafeInteger(value) && value > 0) return Math.max(SCREENPLAY_STAGE_DEFAULT_INPUT_TOKENS_V1, value)
+    if (value != null) return Math.max(SCREENPLAY_STAGE_DEFAULT_INPUT_TOKENS_V1, value)
   } catch {
     // 容量未证实（离线/未知模型）时退回缺省参考，不放大作者上限。
   }
