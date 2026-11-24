@@ -1,7 +1,9 @@
 import { requireFixedBudgetValueV1 } from '../agent/finite-budget'
 import Dexie from 'dexie'
 import { recordCreationModelRequestV1, recordCreationModelResponseV1, recordUnavailableCreationResponseV1 } from '../agent/run/creation-response-evidence'
-import { chat, type ChatResult } from '../ai/client'
+import { chat, resolveRequestConfig, type ChatResult } from '../ai/client'
+import { freezeModelCapacityV1, modelInputBudgetV1, prepareModelCapacityV1 } from '../ai/model-capacity'
+import { useAIConfigStore } from '../../stores/ai-config'
 import type {
   AdaptationBriefV1,
   AIConfig,
@@ -372,6 +374,32 @@ async function selectedContext(input: { scope: WorkspaceScope; adaptationProject
   return { root, sourceUnitKeys, scenes, issues }
 }
 
+/** B31a：改编阶段输入预算跟随已绑定连接的已证实容量（按本阶段最坏两次调用
+ * 预留输出），不再使用固定 48k 应用额度。容量未知时保留缺省参考，仍由请求级
+ * assemble/admission 兜底；作者显式上限不被放大。 */
+const SCREENPLAY_STAGE_DEFAULT_INPUT_TOKENS_V1 = 48_000
+
+export async function screenplayStageInputBudgetV1(input: {
+  aiConfig?: AIConfig
+  projectId: number
+  category: string
+  outputReservation: number
+}): Promise<number> {
+  const resolved = input.aiConfig
+    ?? resolveRequestConfig(useAIConfigStore.getState().config, { category: input.category, projectId: input.projectId }).config
+  try {
+    const prepared = await prepareModelCapacityV1(resolved)
+    const budget = modelInputBudgetV1(freezeModelCapacityV1(prepared), input.outputReservation)
+    const value = Math.floor(budget.inputBudget)
+    // 已证实容量更大时按容量；保守/未知容量不得低于原参考，避免把既有可用
+    // 任务压回更小的窗口。固定值只是下限参考，不再是上限。
+    if (Number.isSafeInteger(value) && value > 0) return Math.max(SCREENPLAY_STAGE_DEFAULT_INPUT_TOKENS_V1, value)
+  } catch {
+    // 容量未证实（离线/未知模型）时退回缺省参考，不放大作者上限。
+  }
+  return SCREENPLAY_STAGE_DEFAULT_INPUT_TOKENS_V1
+}
+
 function assertPrerequisites(stage: ScreenplayProfessionalStageV1, root: Awaited<ReturnType<typeof rootFor>>, counts: { facts: number; edges: number; decisions: number; beats: number; cards: number; scenes: number; issues: number }, targets: { scenes: number; issues: number }) {
   if (stage !== 'source-analysis' && counts.facts === 0) throw new Error('[screenplay-run] 请先完成来源事实分析')
   if (stage === 'adaptation-brief' && counts.edges === 0) throw new Error('[screenplay-run] 请先确认因果图')
@@ -383,7 +411,7 @@ function assertPrerequisites(stage: ScreenplayProfessionalStageV1, root: Awaited
   if (stage === 'targeted-rewrite' && (targets.scenes !== 1 || targets.issues === 0)) throw new Error('[screenplay-run] 定点改写必须选择一场及其开放问题')
 }
 
-function contract(scope: WorkspaceScope, stage: ScreenplayProfessionalStageV1) {
+function contract(scope: WorkspaceScope, stage: ScreenplayProfessionalStageV1, inputBudgetTokens: number) {
   const config = STAGES[stage]; const skill = getAgentSkillV1(config.skillId)
   return {
     version: 1 as const,
@@ -392,7 +420,7 @@ function contract(scope: WorkspaceScope, stage: ScreenplayProfessionalStageV1) {
     scope: { projectId: scope.projectId, worldGroupId: null },
     permissions: { contextSourceKeys: [...skill.contextSourceKeys], writeTargets: skill.writeTargets.map(target => ({ table: target.table, fields: [...target.fields], mode: 'author-confirmed' as const })) },
     executionBindings: [{ stepId: config.stepId, ...createAgentSkillExecutionBindingV1(skill) }],
-    budget: { maxModelCalls: 2, maxToolCalls: 0, maxInputTokens: 48_000, maxOutputTokens: requireFixedBudgetValueV1(skill.maxOutputTokens) * 2, maxAttemptsPerStep: 2, maxProtocolErrors: 1 },
+    budget: { maxModelCalls: 2, maxToolCalls: 0, maxInputTokens: inputBudgetTokens, maxOutputTokens: requireFixedBudgetValueV1(skill.maxOutputTokens) * 2, maxAttemptsPerStep: 2, maxProtocolErrors: 1 },
     acceptance: [
       { id: `${config.stepId}.candidate`, kind: 'output-present' as const, required: true },
       { id: `${config.stepId}.author`, kind: 'author-confirmed' as const, required: true },
@@ -447,14 +475,18 @@ export async function generateScreenplayProfessionalCandidateV1(input: {
     issues,
   }, { scenes: input.stage === 'scene-draft' ? (input.targetSceneKeys?.length ?? 0) : selected.scenes.length, issues: selected.issues.length })
   const config = STAGES[input.stage]; const skill = getAgentSkillV1(config.skillId)
-  let snapshot = await createAgentRunV1({ scope: input.scope, worldGroupId: null, contract: contract(input.scope, input.stage) })
+  const outputReservation = requireFixedBudgetValueV1(skill.maxOutputTokens) * 2
+  const inputBudgetTokens = await screenplayStageInputBudgetV1({
+    aiConfig: input.aiConfig, projectId: input.scope.projectId, category: config.category, outputReservation,
+  })
+  let snapshot = await createAgentRunV1({ scope: input.scope, worldGroupId: null, contract: contract(input.scope, input.stage, inputBudgetTokens) })
   snapshot = await append(input.scope, snapshot, 'step.scheduled', { stepId: config.stepId })
   snapshot = await append(input.scope, snapshot, 'step.started', { stepId: config.stepId, attempt: 1 })
   try {
   const assembled = await assembleContext({
     projectId: input.scope.projectId, scope: input.scope, sourceKeys: [...skill.contextSourceKeys], adaptationProjectId: selected.root.id!,
     adaptationSourceManifestVersion: selected.root.activeSourceManifestVersion, adaptationSourceUnitKeys: selected.sourceUnitKeys,
-    screenplaySceneIds: selected.scenes.map(scene => scene.id!), modelConfig: input.aiConfig, provider: input.aiConfig?.provider, model: input.aiConfig?.model, inputBudgetMaxTokens: 48_000,
+    screenplaySceneIds: selected.scenes.map(scene => scene.id!), modelConfig: input.aiConfig, provider: input.aiConfig?.provider, model: input.aiConfig?.model, inputBudgetMaxTokens: inputBudgetTokens,
   })
   const contextManifest = await createContextManifestFromAssemblyV1({ runId: snapshot.run.id, stepId: config.stepId, attempt: 1, projectId: input.scope.projectId, worldGroupId: null, declaredSourceKeys: [...skill.contextSourceKeys], assembled, readerVersion: `screenplay-${input.stage}-context-v1` })
   snapshot = await append(input.scope, snapshot, 'context.assembled', { stepId: config.stepId, attempt: 1, manifestHash: contextManifest.manifestHash })
