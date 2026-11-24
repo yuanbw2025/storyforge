@@ -348,11 +348,15 @@ export async function prepareInspirationCopilot(input: {
       rendered.messages.push({ role: 'user', content: `【登记读取的完整素材】\n${nodeInput.contextText}` })
       rendered.evidence.renderedPromptHash = await hashCanonicalValue(rendered.messages)
     }
-    const maxTokens = rendered.generationOverrides.maxTokens ?? 6000
-    if (maxTokens > requireFixedBudgetValueV1(skill.maxOutputTokens)) throw new Error(`模板配置的输出上限超过当前任务预算${requireFixedBudgetValueV1(skill.maxOutputTokens)} tokens，请降低后重新生成；未调用模型。`)
+    // B20a: the registered Skill limit is a governance ceiling for the author's
+    // own template override — it must not become a fabricated default dispatch
+    // cap. Without an explicit override the wire follows the connection's
+    // evidenced capacity (0/absent = automatic).
+    const explicitMaxTokens = rendered.generationOverrides.maxTokens
+    if (explicitMaxTokens != null && explicitMaxTokens > requireFixedBudgetValueV1(skill.maxOutputTokens)) throw new Error(`模板配置的输出上限超过当前任务预算${requireFixedBudgetValueV1(skill.maxOutputTokens)} tokens，请降低后重新生成；未调用模型。`)
     nodeInput.frozenPromptMessages = rendered.messages
-    nodeInput.generationOverrides = { ...rendered.generationOverrides, maxTokens }
-    nodeInput.promptExecutionEvidence = { ...rendered.evidence, effectiveMaxTokens: maxTokens }
+    nodeInput.generationOverrides = { ...rendered.generationOverrides }
+    nodeInput.promptExecutionEvidence = { ...rendered.evidence, effectiveMaxTokens: explicitMaxTokens ?? null }
   }
   const node = createInspirationCopilotNode(nodeInput, dependencies)
   return {
