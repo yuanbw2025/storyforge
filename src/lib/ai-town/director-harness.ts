@@ -1,4 +1,6 @@
-import { chat } from '../ai/client'
+import { requireFixedBudgetValueV1 } from '../agent/finite-budget'
+import { chat, resolveRequestConfig } from '../ai/client'
+import { evidencedInputBudgetV1, prepareModelCapacityV1 } from '../ai/model-capacity'
 import { createAgentSkillExecutionBindingV1 } from '../agent/execution-binding'
 import { getAgentSkillV1 } from '../agent/skill-registry'
 import { createAgentRunCheckpointV1, readLatestVerifiedAgentRunCheckpointV1 } from '../agent/run/checkpoint'
@@ -147,10 +149,34 @@ function modelMessages(objective: string, context: string): ChatMessage[] {
   }, { role: 'user', content: `【目标】${objective}\n\n${context}` }]
 }
 
+/** B37：AI 小镇导演输入预算跟随已绑定连接的已证实容量（预留本 Skill 输出），
+ * 不再固定 20k 应用额度。注入 adapter（runAI）沿用缺省；未知/保守容量不低
+ * 于原参考，不放大作者上限；请求级装配/准入继续兜底。 */
+const AI_TOWN_DIRECTOR_DEFAULT_INPUT_TOKENS_V1 = 20_000
+
+export async function aiTownDirectorInputBudgetV1(input: {
+  aiConfig?: AIConfig
+  projectId: number
+  category: string
+  outputReservation: number
+}): Promise<number> {
+  if (!input.aiConfig) return AI_TOWN_DIRECTOR_DEFAULT_INPUT_TOKENS_V1
+  try {
+    const resolved = resolveRequestConfig(input.aiConfig, { category: input.category, projectId: input.projectId }).config
+    const prepared = await prepareModelCapacityV1(resolved)
+    const value = evidencedInputBudgetV1({ config: prepared, outputReservation: input.outputReservation })
+    if (value != null) return Math.max(AI_TOWN_DIRECTOR_DEFAULT_INPUT_TOKENS_V1, value)
+  } catch {
+    // 容量未证实（离线/未知模型）时退回缺省参考。
+  }
+  return AI_TOWN_DIRECTOR_DEFAULT_INPUT_TOKENS_V1
+}
+
 function contract(input: {
   objective: string
   boundary: Awaited<ReturnType<typeof captureAiTownDirectorRuntimeHarnessBoundaryV1>>
   runtimeBindingHash: string
+  inputBudgetTokens: number
 }) {
   const skill = getAgentSkillV1('prose.ai-town-director')
   return {
@@ -161,7 +187,7 @@ function contract(input: {
     permissions: { contextSourceKeys: ['aiTownDirectorRuntime'], writeTargets: [] },
     runtimeBindingHash: input.runtimeBindingHash,
     executionBindings: [{ stepId: AI_TOWN_DIRECTOR_STEP_ID_V1, ...createAgentSkillExecutionBindingV1(skill) }],
-    budget: { maxModelCalls: 1, maxToolCalls: 0, maxInputTokens: 20_000, maxOutputTokens: skill.maxOutputTokens, maxAttemptsPerStep: 1 },
+    budget: { maxModelCalls: 1, maxToolCalls: 0, maxInputTokens: input.inputBudgetTokens, maxOutputTokens: skill.maxOutputTokens, maxAttemptsPerStep: 1 },
     acceptance: [
       { id: 'runtime.candidate', kind: 'output-present' as const, required: true },
       { id: 'runtime.freshness', kind: 'deterministic-check' as const, required: true },
@@ -223,11 +249,16 @@ export async function generateAiTownDirectorCandidateV1(input: {
       ? { provider: 'test-adapter', model: 'injected', transport: 'chat-v1' }
       : { provider: input.aiConfig?.provider, model: input.aiConfig?.model, transport: 'chat-v1' },
   })
+  const directorInputBudget = await aiTownDirectorInputBudgetV1({
+    aiConfig: input.aiConfig, projectId: input.scope.projectId,
+    category: 'runtime.prose.ai-town-director',
+    outputReservation: requireFixedBudgetValueV1(getAgentSkillV1('prose.ai-town-director').maxOutputTokens),
+  })
   let snapshot = await createAgentRunV1({
     scope: input.scope,
     productRuntimeSessionId: input.productRuntimeSessionId,
     worldGroupId: boundary.scope.worldGroupId,
-    contract: contract({ objective, boundary, runtimeBindingHash }),
+    contract: contract({ objective, boundary, runtimeBindingHash, inputBudgetTokens: directorInputBudget }),
   })
   await input.onRunCreated?.(snapshot.run.id)
   snapshot = await append(input.scope, snapshot, 'step.scheduled', { stepId: AI_TOWN_DIRECTOR_STEP_ID_V1 })
@@ -241,7 +272,7 @@ export async function generateAiTownDirectorCandidateV1(input: {
       sourceKeys: ['aiTownDirectorRuntime'],
       modelConfig: input.aiConfig, provider: input.aiConfig?.provider,
       model: input.aiConfig?.model,
-      inputBudgetMaxTokens: 20_000,
+      inputBudgetMaxTokens: directorInputBudget,
     })
     if (!assembled.included.includes('aiTownDirectorRuntime')) fail('AI 小镇导演上下文为空')
     await assertAiTownDirectorRuntimeHarnessFreshV1({ scope: input.scope, contractScope: snapshot.contract.scope })

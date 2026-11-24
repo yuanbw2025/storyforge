@@ -456,7 +456,7 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 | `relation.extract` | `src/lib/agent/run/character-relationship-durable.ts:299` |
 | `review.outline-workshop` | `src/lib/outline/workshop.ts:457` |
 | `runtime.character.chat-narrative-action` | `src/lib/character-interaction/action-choice-harness.ts:132` |
-| `runtime.prose.ai-town-director` | `src/lib/ai-town/director-harness.ts:271` |
+| `runtime.prose.ai-town-director` | `src/lib/ai-town/director-harness.ts:302` |
 | `runtime.ttrpg-gm` | `src/lib/ttrpg/decision-harness.ts:135` |
 | `runtime.ttrpg-player` | `src/lib/ttrpg/player-harness.ts:311` |
 | `scene.verify` | `src/components/scene/SceneVerifyPanel.tsx:99` |
@@ -483,7 +483,7 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 - `src/lib/agent/story-arc-copilot.ts:1718 · chat`
 - `src/lib/agent/story-core-copilot.ts:606 · chat`
 - `src/lib/agent/worldview-field-copilot.ts:1066 · chat`
-- `src/lib/character-interaction/harness.ts:900 · chat`
+- `src/lib/character-interaction/harness.ts:936 · chat`
 - `src/lib/character-interaction/memory-review-harness.ts:74 · chat`
 - `src/lib/character-interaction/situation-harness.ts:190 · chat`
 - `src/lib/comic/durable-production.ts:517 · chat`
@@ -597,4 +597,4 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 
 ---
 
-生成时间基准:commit `145e0d0fb`
+生成时间基准:commit `2046b9d05`
