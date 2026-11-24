@@ -76,3 +76,12 @@ export function buildLongformMarkdownIdentityV1(scope: WorkspaceScope, chapterId
   if (!Number.isSafeInteger(chapterId) || chapterId < 1) throw new Error('章节身份不完整，不能建立 Markdown 会话。')
   return { projectId: scope.projectId, worldId: scope.worldId, workId: scope.workId, chapterId, chapterUid }
 }
+
+/**
+ * 会话重建键：只含 scope + 章节身份，**故意不含显示模式**。
+ * 源码↔实时预览是同一 CM EditorState/history 的两种显示，只能 setDisplayMode；
+ * 只有换章、准入变化或富文本↔CM 边界才允许重建会话（那会开始新的撤销段）。
+ */
+export function longformMarkdownMountKeyV1(input: { scope: WorkspaceScope; chapterId: number }): string {
+  return `${input.scope.projectId}:${input.scope.worldId}:${input.scope.workId}:${input.chapterId}`
+}

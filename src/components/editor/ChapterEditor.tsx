@@ -40,7 +40,7 @@ import { saveChapterOrganizationSelectionV1 } from '../../lib/agent/chapter-orga
 import { getAIConfigRequiredMessage, isAIConfigReady } from '../../lib/ai/config-readiness'
 import { db } from '../../lib/db/schema'
 import { useActiveWork } from '../../hooks/useActiveWork'
-import { LongformMarkdownSessionV1, buildLongformMarkdownIdentityV1, type LongformMarkdownEditorModeV1 } from '../../lib/editor/longform-markdown-session'
+import { LongformMarkdownSessionV1, buildLongformMarkdownIdentityV1, longformMarkdownMountKeyV1, type LongformMarkdownEditorModeV1 } from '../../lib/editor/longform-markdown-session'
 import { assembleContext } from '../../lib/registry/assemble-context'
 import { prepareProseGatewayAssemblyV1, type ProseGatewayAssemblyV1 } from '../../lib/prose/gateway-context'
 import { resolveChapterDisplayMeta } from '../../lib/outline/chapter-display'
@@ -309,6 +309,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
   const markdownHostRef = useRef<HTMLDivElement | null>(null)
   const markdownSessionRef = useRef<LongformMarkdownSessionV1 | null>(null)
   const markdownMountKeyRef = useRef('')
+  const markdownModeRef = useRef<LongformMarkdownEditorModeV1>('richtext')
   const markdownAdmitted = LongformMarkdownSessionV1.canMount({ project, work: { kind: activeWork?.kind ?? null, novelProfile: activeWork?.novelProfile ?? null } })
   const editorChapterIdRef = useRef(currentChapter?.id)
   const loadedEditorChapterIdRef = useRef<number | null>(null)
@@ -1063,33 +1064,30 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
 
   // 打开章节时按 plan 用户交互合同裁决默认模式：既有非空章保持原富文本语义，
   // 只有新空章才默认实时预览；打开本身不写库、不推进 revision。
+  // 这里不改会话键：换章引发的重建由会话生命周期 effect 的 cleanup 负责。
   useEffect(() => {
-    markdownSessionRef.current?.destroy()
-    markdownSessionRef.current = null
-    markdownMountKeyRef.current = ''
     setMarkdownMode(markdownAdmitted ? LongformMarkdownSessionV1.defaultModeFor(currentChapter?.content ?? '') : 'richtext')
     setMarkdownError('')
     // 只在换章/准入变化时重新裁决；content 每键变化不能重置模式或拆掉进行中的会话。
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentChapter?.id, markdownAdmitted])
 
-  // R8 挂载：CM 会话只在 markdown 模式激活；离开即销毁，不碰 RichEditor 会话。
+  const markdownCmActive = markdownAdmitted && markdownMode !== 'richtext'
+  // 生命周期 effect 不能把 mode 放进依赖：否则每次源码↔预览都重建会话并丢掉撤销栈。
+  markdownModeRef.current = markdownMode
+
+  // R8 挂载：同章同准入只维持一份 CM 会话/state/history；离开 CM 或换章才销毁。
   // 打开/滚动/光标/源码↔预览切换 0 章节更新：仅 html 实际变化才 stage 草稿。
   useEffect(() => {
     const host = markdownHostRef.current
-    if (markdownMode === 'richtext' || !host || !currentChapter?.id || !markdownAdmitted) {
-      markdownSessionRef.current?.destroy()
-      markdownSessionRef.current = null
-      markdownMountKeyRef.current = ''
-      return
-    }
+    if (!markdownCmActive || !host || !currentChapter?.id) return
     const scope = editorWorkspaceScope
     const chapterId = currentChapter.id
     const chapterUid = currentChapter.ragDocumentId
     if (!scope || !chapterUid) { setMarkdownError('章节稳定身份不可用，Markdown 模式未开启。'); return }
-    const mountKey = `${scope.projectId}:${scope.worldId}:${scope.workId}:${chapterId}:${markdownMode}`
-    if (markdownMountKeyRef.current === mountKey) return
-    const baselineHtml = markdownMountKeyRef.current ? chapterDrafts.read(chapterId)?.html ?? currentChapter.content ?? '' : content
+    const mountKey = longformMarkdownMountKeyV1({ scope, chapterId })
+    if (markdownMountKeyRef.current === mountKey && markdownSessionRef.current) return
+    const baselineHtml = chapterDrafts.read(chapterId)?.html ?? currentChapter.content ?? ''
     let session: LongformMarkdownSessionV1
     try {
       session = new LongformMarkdownSessionV1({
@@ -1101,12 +1099,11 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
         onRichText: () => { setMarkdownSwitching(false) },
         placeholder: '开始写作…',
       })
-      session.setDisplayMode(markdownMode === 'source' ? 'source' : 'preview')
+      session.setDisplayMode(markdownModeRef.current === 'source' ? 'source' : 'preview')
     } catch (error) {
       setMarkdownError(error instanceof Error ? error.message : 'Markdown 会话建立失败；已保留富文本。')
       return
     }
-    markdownSessionRef.current?.destroy()
     markdownSessionRef.current = session
     markdownMountKeyRef.current = mountKey
     setMarkdownError('')
@@ -1115,8 +1112,20 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       if (markdownSessionRef.current === session) markdownSessionRef.current = null
       if (markdownMountKeyRef.current === mountKey) markdownMountKeyRef.current = ''
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- 会话生命周期按章/模式/准入键重建，不随 content 每键重建
-  }, [markdownMode, markdownAdmitted, currentChapter?.id, currentChapter?.ragDocumentId, editorWorkspaceScope])
+    // 重建只由换章/准入/CM 边界触发，绝不随显示模式或每键 content 重建。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [markdownCmActive, currentChapter?.id, currentChapter?.ragDocumentId, editorWorkspaceScope])
+
+  // 源码↔实时预览：同一个 CM 会话/EditorState/history 只切显示，不重建、不写库。
+  useEffect(() => {
+    const session = markdownSessionRef.current
+    if (!session || !markdownCmActive) return
+    try {
+      session.setDisplayMode(markdownMode === 'source' ? 'source' : 'preview')
+    } catch (error) {
+      setMarkdownError(error instanceof Error ? error.message : '切换显示失败，当前草稿已保留。')
+    }
+  }, [markdownMode, markdownCmActive])
 
   /** 富文本↔CM 是明确编辑边界：先 flush 草稿成功后再切模式；失败停留原模式。 */
   const switchMarkdownMode = useCallback(async (next: LongformMarkdownEditorModeV1) => {
