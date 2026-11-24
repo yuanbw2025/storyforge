@@ -14,7 +14,7 @@ import { usePromptStore } from '../../stores/prompt'
 import { getAIConfigRequiredMessage, isAIConfigReady } from '../ai/config-readiness'
 import { resolveRequestConfig, type ChatResult } from '../ai/client'
 import { modelDispatchWasCancelledV1 } from '../ai/codex-transport'
-import { prepareModelCapacityV1, freezeModelCapacityV1 } from '../ai/model-capacity'
+import { prepareModelCapacityV1, freezeModelCapacityV1, modelInputBudgetV1 } from '../ai/model-capacity'
 import { buildDocumentParseFrameV1, assessDocumentParseRequestV1 } from './document-parse-request'
 import { createAgentSkillExecutionBindingV1 } from '../agent/execution-binding'
 import { executeFrozenFormalAIEntryV1, freezeFormalAIEntryBindingV1 } from '../agent/formal-ai-entry'
@@ -41,7 +41,22 @@ import { normalizeUnified } from './unified-merge'
 
 const STEP = 'document-import.parse'
 const SKILL = 'inspiration.document-import-parse'
-const MAX_INPUT_TOKENS = 100_000
+/** B21a: the per-chunk input budget follows the bound connection's evidenced
+ * capacity after reserving the Skill output clamp — not a fixed 100k
+ * application ceiling. The result stays an exact positive integer and is still
+ * enforced by `assessDocumentParseRequestV1`, so an over-capacity chunk fails
+ * deterministically before any paid dispatch. */
+function documentParseChunkInputBudgetV1(config: import('../types').AIConfig, skillMaxOutputTokens: number): number {
+  const capacity = freezeModelCapacityV1(config)
+  const requestedOutput = Math.min(
+    config.maxTokens > 0 ? config.maxTokens : skillMaxOutputTokens,
+    skillMaxOutputTokens,
+  )
+  const budget = modelInputBudgetV1(capacity, requestedOutput)
+  const value = Math.floor(budget.inputBudget)
+  if (!Number.isSafeInteger(value) || value <= 0) fail('文档解析任务预算无效。')
+  return value
+}
 const ATTEMPT = 1
 const CATEGORIES = 'documentImportCodexCategories'
 const SHA = /^[a-f0-9]{64}$/
@@ -143,13 +158,14 @@ export async function createDocumentImportChunkCandidateV1(input: ChunkInput & {
   if (!isAIConfigReady(routed.config)) fail(getAIConfigRequiredMessage(routed.config))
   const resolved = { ...routed, config: await prepareModelCapacityV1(routed.config) }
   freezeModelCapacityV1(resolved.config)
+  const inputBudgetTokens = documentParseChunkInputBudgetV1(resolved.config, requireFixedBudgetValueV1(skill.maxOutputTokens))
   // A fresh World may reach document import before opening Codex. Initialize its
   // built-in definitions through the store before the registered read-only source.
   if (session.importTarget === 'project') await useCodexStore.getState().ensureBuiltIns(scope)
   const worldGroupId = session.targetWorldGroupId ?? null
   const sourceKeys = session.importTarget === 'project' ? ['manualText', CATEGORIES] : ['manualText']
   const assembled = await assembleContext({ scope, projectId: input.projectId, worldGroupId, sourceKeys,
-    documentImportSessionId: session.id, manualSourceText: text, inputBudgetMaxTokens: MAX_INPUT_TOKENS,
+    documentImportSessionId: session.id, manualSourceText: text, inputBudgetMaxTokens: inputBudgetTokens,
     modelConfig: resolved.config, provider: resolved.config.provider, model: resolved.config.model })
   const originalSegment = assembled.segments[assembled.included.indexOf('manualText')]
   if (originalSegment?.content !== text)
@@ -170,7 +186,7 @@ export async function createDocumentImportChunkCandidateV1(input: ChunkInput & {
   })
   if (!messages.some(message => message.content.includes(text))) fail('原分块没有逐字进入请求。')
   const admission = assessDocumentParseRequestV1({ config: resolved.config, messages, options: providerOptions,
-    maxInputTokens: MAX_INPUT_TOKENS, maxOutputTokens: requireFixedBudgetValueV1(skill.maxOutputTokens) })
+    maxInputTokens: inputBudgetTokens, maxOutputTokens: requireFixedBudgetValueV1(skill.maxOutputTokens) })
   if (!admission.fits) fail('完整请求超出当前模型或文档解析任务预算；未创建付费尝试，原文分块保持不变。')
   const frozenResolution = { ...resolved, config: admission.config }
   input.signal?.throwIfAborted()
@@ -184,7 +200,7 @@ export async function createDocumentImportChunkCandidateV1(input: ChunkInput & {
       permissions: { contextSourceKeys: sourceKeys, writeTargets: [] },
       runtimeBindingHash,
       executionBindings: [{ stepId: STEP, ...createAgentSkillExecutionBindingV1(skill), formalEntry }],
-      budget: { maxModelCalls: 1, maxToolCalls: 0, maxInputTokens: MAX_INPUT_TOKENS,
+      budget: { maxModelCalls: 1, maxToolCalls: 0, maxInputTokens: inputBudgetTokens,
         maxOutputTokens: requireFixedBudgetValueV1(skill.maxOutputTokens), maxAttemptsPerStep: 1 },
       acceptance: [{ id: 'document-import.candidate', kind: 'output-present', required: true },
         { id: 'document-import.author', kind: 'author-confirmed', required: true }],

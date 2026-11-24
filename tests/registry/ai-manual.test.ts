@@ -29,10 +29,10 @@ function assertContextManualMatchesRuntime(manual: string): void {
   const header = '| key | 标签 | 作用域 | 层级 | 预算(token) |'
   expect(tableLines.filter(line => line === header), '来源表必须有唯一完整表头').toHaveLength(1)
   const rows: ManualContextRow[] = tableLines.filter(line => line !== header && !/^\|(?:[-: ]+\|)+$/.test(line)).map(line => {
-    const match = line.match(/^\| `([^`]+)` \| ([^|]*) \| ([^|]*) \| ([^|]*) \| (\d+|完整任务基线|按请求容量选读)(（旧装配参考；V2完整捕获不以此截原文）)?(（仅显式任务选用）)? \|$/)
+    const match = line.match(/^\| `([^`]+)` \| ([^|]*) \| ([^|]*) \| ([^|]*) \| (\d+|完整任务基线|按请求容量选读|按任务请求预算全文交付)(（旧装配参考；V2完整捕获不以此截原文）)?(（仅显式任务选用）)? \|$/)
     if (!match) throw new Error(`上下文来源行包含未知格式、预算或注记：${line}`)
     return { key: match[1] ?? '', label: match[2] ?? '', scope: match[3] ?? '', layer: match[4] ?? '',
-      budgetTokens: ['完整任务基线', '按请求容量选读'].includes(match[5] ?? '') ? null : Number(match[5]),
+      budgetTokens: ['完整任务基线', '按请求容量选读', '按任务请求预算全文交付'].includes(match[5] ?? '') ? null : Number(match[5]),
       fullCaptureVersion: match[6] ? 'registered-host-full-v2' : null, explicitSelectionOnly: Boolean(match[7]) }
   })
   const keys = rows.map(row => row.key)
@@ -84,9 +84,10 @@ describe('Phase 3.1 · AI 说明书自动生成', () => {
     expect(manual).toContain('`projectName` `genres` `dimension`')
 
     const manualText = CONTEXT_SOURCES.find(source => source.key === 'manualText')
-    expect(manualText?.budgetTokens).toBe(100_000)
+    // B21a/B20b：全文来源改按任务请求预算交付，不再携带固定 100k 应用额度。
+    expect(manualText?.budgetTokens).toBeNull()
     expect(manualText?.fullCapture).toEqual({ version: 'registered-host-full-v2', sourceVersion: 'manualText-full-v2' })
-    expect(manual).toContain(`| \`manualText\` | 用户指定内容 | manual | L0 | 100000${fullCaptureBudgetNote} |`)
+    expect(manual).toContain(`| \`manualText\` | 用户指定内容 | manual | L0 | 按任务请求预算全文交付${fullCaptureBudgetNote} |`)
     expect(manual).toContain('| `fact-ledger` | `temporalFacts` | `FACT_PREDICATE_REGISTRY + PROJECT_TABLES.worldSemantic.projector + FIELD_REGISTRY + source hash CAS` |')
   })
 
