@@ -435,6 +435,7 @@ export class AuthoringMarkdownViewV1 {
 
   destroy() {
     this.destroyed = true; cancelAnimationFrame(this.compositionFrame); this.pasteAbort?.abort()
-    // cleanup popup on destroy
+    this.listeners.clear(); this.widgets.clear(); this.toolbarSelections.clear(); this.view.destroy(); this.adapter.detachViewExtensions()
+    this.popupEl?.remove(); this.popupEl = null
   }
 }
