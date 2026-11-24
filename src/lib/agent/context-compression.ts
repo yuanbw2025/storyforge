@@ -266,6 +266,24 @@ function fallbackEvidence(input: {
  * Creates one bounded per-task compression session. A mutable claimed-source set
  * prevents concurrent read tools from exceeding the Skill quota.
  */
+/**
+ * B20c: output budget for one compression call. The source's own overage drives
+ * it; the per-skill policy value is only a floor for small sources. Keeps the
+ * "原文能放就保原文" rule — a large source is not summarized to death by a fixed
+ * application ceiling.
+ */
+export function compressionOutputBudgetV1(input: {
+  summaryTargetTokens: number
+  envelopeTokens: number
+  policyMaxOutputTokens: number
+}): number {
+  const derived = Math.max(256, input.summaryTargetTokens + input.envelopeTokens + 64)
+  const floor = Number.isSafeInteger(input.policyMaxOutputTokens) && input.policyMaxOutputTokens > 0
+    ? input.policyMaxOutputTokens
+    : 0
+  return Math.max(derived, floor)
+}
+
 export function createAgentContextCompressionSessionV1(input: {
   policy: AgentSkillContextCompressionPolicyV1
   config: AIConfig
@@ -306,10 +324,15 @@ export function createAgentContextCompressionSessionV1(input: {
       version: 1, summary: '', coveredAnchorIds: anchors.map(anchor => anchor.id),
       evidenceQuotes: anchors.map(anchor => ({ anchorId: anchor.id, quote: anchor.quote })),
     }))
-    const maxOutputTokens = Math.min(
-      input.policy.maxOutputTokens,
-      Math.max(256, summaryTargetTokens + envelopeTokens + 64),
-    )
+    // B20c: the compression answer is sized by this source's real overage
+    // (summary target + JSON envelope), not clamped to a flat per-skill 3k cap.
+    // The Skill policy value stays as the minimum working window for small
+    // sources, so no call is squeezed below a usable answer.
+    const maxOutputTokens = compressionOutputBudgetV1({
+      summaryTargetTokens,
+      envelopeTokens,
+      policyMaxOutputTokens: input.policy.maxOutputTokens,
+    })
     const callMeta: AICallMeta = {
       category: `${input.routingCategory}.context-compression`, projectId: input.projectId,
       configOverrides: { maxTokens: maxOutputTokens, temperature: 0.1 },
