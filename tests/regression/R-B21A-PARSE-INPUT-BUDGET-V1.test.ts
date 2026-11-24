@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { db } from '../../src/lib/db/schema'
-import { createDocumentImportChunkCandidateV1 } from '../../src/lib/import/document-parse-durable'
+import { createDocumentImportChunkCandidateV1, documentParseChunkInputBudgetV1 } from '../../src/lib/import/document-parse-durable'
+import { resetModelCapacityForTestsV1 } from '../../src/lib/ai/model-capacity'
 import { clearChunkTexts, registerChunkTexts } from '../../src/lib/import/pipeline'
 import { hashImportChunkTextV1, useImportSessionStore } from '../../src/stores/import-session'
 import { quickHash } from '../../src/lib/import/chunker'
@@ -12,6 +13,7 @@ const sessions: number[] = []
 const previous = useAIConfigStore.getState()
 
 beforeEach(async () => {
+  resetModelCapacityForTestsV1()
   await db.delete(); await db.open()
   useAIConfigStore.setState({
     config: { provider: 'custom', model: 'isolated-b21a-model', baseUrl: 'https://isolated.invalid/v1',
@@ -20,6 +22,7 @@ beforeEach(async () => {
   })
 })
 afterEach(() => {
+  resetModelCapacityForTestsV1()
   for (const id of sessions.splice(0)) clearChunkTexts(id)
   useAIConfigStore.setState(previous); vi.unstubAllGlobals(); db.close()
 })
@@ -67,6 +70,16 @@ describe('B21a · 文档分块输入预算跟随真实容量，而非固定 100k
     expect(candidate.result).toBeTruthy()
     expect(post.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1)
   }, 20_000)
+
+  it('预算推导：已证实大容量按容量，未知/保守容量不低于原 100k 参考', () => {
+    const evidenced = documentParseChunkInputBudgetV1({ provider: 'deepseek', model: 'deepseek-v4-flash',
+      baseUrl: 'https://api.deepseek.com/v1', apiKey: 'isolated-only', maxTokens: 8_000, temperature: 0 }, 16_384)
+    expect(evidenced).toBeGreaterThan(100_000)
+    const unknown = documentParseChunkInputBudgetV1({ provider: 'custom', model: 'unknown-conservative-model',
+      baseUrl: 'https://isolated.invalid/v1', apiKey: 'isolated-only', contextWindow: 262_144,
+      maxTokens: 8_000, temperature: 0 }, 16_384)
+    expect(unknown).toBeGreaterThanOrEqual(100_000)
+  })
 
   it('超出模型真实容量的整块：派发前确定性拒绝，零 POST、零 Run', async () => {
     const unit = '北境有山川城池，原文必须逐字交付。'
