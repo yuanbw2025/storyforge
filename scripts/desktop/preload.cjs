@@ -1,7 +1,9 @@
 const { contextBridge, ipcRenderer } = require('electron')
 contextBridge.exposeInMainWorld('storyforgeClient', Object.freeze({
   http: Object.freeze({
+    getCapabilities: () => ipcRenderer.invoke('client-http:capabilities'),
     open: /** @param {unknown} options */ options => ipcRenderer.invoke('client-http:open', options),
+    openChunked: /** @param {unknown} options */ options => ipcRenderer.invoke('client-http:openChunked', options),
     read: /** @param {unknown} options */ options => ipcRenderer.invoke('client-http:read', options),
     cancel: /** @param {unknown} options */ options => ipcRenderer.invoke('client-http:cancel', options),
   }),

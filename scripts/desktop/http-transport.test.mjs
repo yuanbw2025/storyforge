@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { createHash } from 'node:crypto'
 import { EventEmitter } from 'node:events'
 import test from 'node:test'
 import { installHttpTransport } from './http-transport.mjs'
@@ -82,5 +83,56 @@ test('duplicate IDs and bounded concurrency reject before another dispatch, dest
     f.contents.emit('destroyed')
     assert.ok(f.calls.every(([, options]) => options.signal?.aborted))
     await assert.rejects(f.call('read', f.options), /unavailable/)
+  } finally { f.clear() }
+})
+
+test('chunked large body sends exactly one complete POST with verified SHA-256 and blocked tampering', async () => {
+  const f = fixture()
+  const body = Buffer.alloc(4 * 1024 * 1024 + 17, 0x5a)
+  const hash = createHash('sha256').update(body).digest('hex')
+  const chunkSize = 4 * 1024 * 1024
+  const send = async (index, total, data, digest = hash, url = f.options.url, method = f.options.method) =>
+    f.call('openChunked', { ...f.options, chunkIndex: String(index), totalChunks: String(total), bodySha256: digest,
+      body: data.toString('base64'), url, method })
+  try {
+    const capabilities = await f.call('capabilities', { id: f.options.id })
+    assert.equal(capabilities.chunkedBodyVersion, 1)
+    const first = await send(0, 2, body.subarray(0, chunkSize))
+    assert.equal(first.status, 0)
+    assert.equal(f.calls.length, 0)
+    const second = await send(1, 2, body.subarray(chunkSize))
+    assert.equal(second.status, 200)
+    assert.equal(f.calls.length, 1)
+    const [, init] = f.calls[0]
+    assert.equal(Buffer.compare(init.body, body), 0)
+    assert.equal(init.method, 'POST')
+    assert.equal(Buffer.from((await f.call('read', f.options)).data, 'base64').toString(), 'data: 中文\n\n')
+  } finally { f.clear() }
+})
+test('incomplete sequence, duplicate index, wrong hash, inconsistent url or cancel never dispatch', async () => {
+  const body = Buffer.alloc(4 * 1024 * 1024 + 1, 0x41)
+  const hash = createHash('sha256').update(body).digest('hex')
+  const make = () => fixture()
+  const base = { chunkIndex: '0', totalChunks: '2', bodySha256: hash, body: body.subarray(0, 4 * 1024 * 1024).toString('base64') }
+  const cases = [
+    ['incomplete', async f => { await f.call('openChunked', { ...f.options, ...base }); assert.equal(f.calls.length, 0) }],
+    ['duplicate', async f => { await f.call('openChunked', { ...f.options, ...base }); await assert.rejects(f.call('openChunked', { ...f.options, ...base }), /Inconsistent|chunk/) }],
+    ['hash', async f => { await f.call('openChunked', { ...f.options, ...base }); await assert.rejects(f.call('openChunked', { ...f.options, ...base, chunkIndex: '1', bodySha256: '0'.repeat(64), body: body.subarray(4 * 1024 * 1024).toString('base64') }), /Inconsistent|chunk/) }],
+    ['url', async f => { await f.call('openChunked', { ...f.options, ...base }); await assert.rejects(f.call('openChunked', { ...f.options, ...base, chunkIndex: '1', url: 'https://other.example/v1/chat/completions', body: body.subarray(4 * 1024 * 1024).toString('base64') }), /Inconsistent|chunk/) }],
+    ['cancel', async f => { await f.call('openChunked', { ...f.options, ...base }); await f.call('cancel', { id: f.options.id }); await assert.rejects(f.call('openChunked', { ...f.options, ...base, chunkIndex: '1', body: body.subarray(4 * 1024 * 1024).toString('base64') }), /Cancelled|chunk/) }],
+  ]
+  for (const [label, run] of cases) {
+    const f = make()
+    try { await run(f); assert.equal(f.calls.length, 0, label) } finally { f.clear() }
+  }
+})
+test('legacy single open still accepts bodies above the old 32MiB cap as one complete POST', async () => {
+  const f = fixture()
+  const body = Buffer.alloc(33 * 1024 * 1024, 0x31)
+  try {
+    const meta = await f.call('open', { ...f.options, body: body.toString('base64') })
+    assert.equal(meta.status, 200)
+    assert.equal(f.calls.length, 1)
+    assert.equal(Buffer.compare(f.calls[0][1].body, body), 0)
   } finally { f.clear() }
 })
