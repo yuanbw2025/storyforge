@@ -460,7 +460,7 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 | `runtime.ttrpg-gm` | `src/lib/ttrpg/decision-harness.ts:135` |
 | `runtime.ttrpg-player` | `src/lib/ttrpg/player-harness.ts:311` |
 | `scene.verify` | `src/components/scene/SceneVerifyPanel.tsx:99` |
-| `story.timeline` | `src/lib/agent/run/impact-story-timeline-regeneration-durable.ts:689`<br/>`src/lib/agent/run/story-timeline-extraction-durable.ts:761` |
+| `story.timeline` | `src/lib/agent/run/impact-story-timeline-regeneration-durable.ts:691`<br/>`src/lib/agent/run/story-timeline-extraction-durable.ts:761` |
 | `style.learn` | `src/lib/agent/run/style-learning-durable.ts:494` |
 | `world-group.expand` | `src/lib/agent/run/worldview-expand-durable.ts:472` |
 | `world-group.suggest` | `src/lib/agent/run/world-suggest-durable.ts:623` |
@@ -597,4 +597,4 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 
 ---
 
-生成时间基准:commit `d79994d60`
+生成时间基准:commit `a2ee9af20`

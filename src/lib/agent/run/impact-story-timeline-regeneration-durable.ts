@@ -349,7 +349,7 @@ function contract(input: {
       maxModelCalls: 1,
       maxToolCalls: 0,
       maxInputTokens: 16_000,
-      maxOutputTokens: Math.min(requireFixedBudgetValueV1(skill.maxOutputTokens), 2_000),
+      maxOutputTokens: requireFixedBudgetValueV1(skill.maxOutputTokens),
       maxAttemptsPerStep: 1,
       maxProtocolErrors: 0,
     },
@@ -622,10 +622,12 @@ export async function generateImpactStoryTimelineRegenerationCandidateV1(input: 
   const notify = (boundary: ImpactStoryTimelineRegenerationBoundaryV1, current: AgentRunSnapshotV1) =>
     onDurableBoundary?.call(callbackReceiver, boundary, current)
   if (!input.runAI && !input.aiConfig) throw new Error('年表重建缺少 AI 配置。')
+  // B50：输出上限取登记 Skill 值（4_000），不再叠加应用自设的 2_000 额度。
   const requestMeta = {
     category: 'story.timeline' as const,
     projectId: input.scope.projectId,
-    configOverrides: { maxTokens: 2_000 },
+    configOverrides: { maxTokens: requireFixedBudgetValueV1(
+      getAgentSkillV1(IMPACT_STORY_TIMELINE_REGENERATION_SKILL_ID_V1, 'prose').maxOutputTokens) },
     contextOverflowPolicy: 'reject' as const,
   }
   if (!input.runAI) {
@@ -689,7 +691,8 @@ export async function generateImpactStoryTimelineRegenerationCandidateV1(input: 
       : chat(prepared.messages, input.aiConfig!, {
           category: 'story.timeline',
           projectId: input.scope.projectId,
-          configOverrides: { maxTokens: 2_000 },
+          configOverrides: { maxTokens: requireFixedBudgetValueV1(
+            getAgentSkillV1(IMPACT_STORY_TIMELINE_REGENERATION_SKILL_ID_V1, 'prose').maxOutputTokens) },
           contextOverflowPolicy: 'reject',
         }, undefined, resultMeta))
   } catch (error) {

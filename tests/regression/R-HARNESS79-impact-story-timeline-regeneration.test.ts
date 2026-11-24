@@ -1,3 +1,5 @@
+import { requireFixedBudgetValueV1 } from '../../src/lib/agent/finite-budget'
+import { getAgentSkillV1 } from '../../src/lib/agent/skill-registry'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { buildImpactHandoffV2 } from '../../src/lib/consistency/impact-handoff'
 import { buildEditImpactGraphV1 } from '../../src/lib/consistency/impact-analysis'
@@ -166,6 +168,10 @@ describe.sequential('R-HARNESS79 · H57 单事件故事年表受控重建', { ti
       fixture.sourceChapterId,
       fixture.targetChapterId,
     ])
+    // B50：合同输出预算取登记 Skill 值，不再叠加应用自设 2_000。
+    expect(generated.snapshot.contract.budget.maxOutputTokens)
+      .toBe(requireFixedBudgetValueV1(getAgentSkillV1('prose.story-timeline-extraction').maxOutputTokens))
+    expect(generated.snapshot.contract.budget.maxOutputTokens).not.toBe(2_000)
     expect((await db.storyTimelineEvents.get(fixture.eventId))?.description).toContain('完全开启')
     expect(generated.snapshot.projection.state).toBe('awaiting_confirmation')
 
