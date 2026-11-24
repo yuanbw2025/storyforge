@@ -15,6 +15,19 @@ import { buildQualityRevisionRequestV1, freezeQualityRevisionPlanV1, qualityRevi
 import { previewQualityRevisionHTMLV1 } from '../../prose/quality-revision-html'
 import { buildQualityRecheckRequestV1, parseQualityRecheckV1 } from '../../prose/quality-recheck'
 import { QUALITY_RECHECK_STEP_V1, type QualityRevisionEvidenceV1 } from '../../prose/quality-revision-evidence'
+
+/**
+ * B20b: the team-budget reservation is an accounting forecast, never a dispatch
+ * cap. Explicit author limits lead; otherwise the forecast is the frozen
+ * contract's own per-call share (two calls: one revision, one recheck) instead
+ * of an unexplained literal.
+ */
+export function qualityRevisionCallForecastTokensV1(explicitMaxTokens: number, contractOutputBudget: number, calls = 2): number {
+  if (Number.isInteger(explicitMaxTokens) && explicitMaxTokens > 0) return explicitMaxTokens
+  const share = Math.floor(contractOutputBudget / Math.max(1, calls))
+  if (!Number.isSafeInteger(share) || share < 1) throw new Error('修订轮次缺少可用的会计预算。')
+  return share
+}
 import type { QualityReviewModeV1 } from '../../prose/quality-review'
 import { proseRenderedRequestV1 } from '../../prose/request-evidence'
 import { prepareQualityResolutionV1 } from '../../prose/quality-request-budget'
@@ -96,7 +109,8 @@ async function runQualityRevisionLockedV1(input: QualityRevisionInputV1): Promis
     acceptance: [...base.acceptance, { id: 'quality-revision.scope', kind: 'deterministic-check', required: true }, { id: 'quality-revision.recheck', kind: 'deterministic-check', required: true }],
     verificationPlan: base.verificationPlan.map(item => ({ ...item, criterionIds: [...item.criterionIds, 'quality-revision.scope', 'quality-revision.recheck'] })), failurePolicy: { onProtocolError: 'fail', onVerificationFailure: 'fail', onStaleInput: 'pause-for-author' } }
   const budget = new AgentTeamBudgetTracker(useAIConfigStore.getState().agentTeamBudgetProfile)
-  const first = budget.reserveCall({ label: '作者范围修订', messages, maxOutputTokens: resolution.config.maxTokens || 16000 })
+  const forecastTokens = qualityRevisionCallForecastTokensV1(resolution.config.maxTokens, contract.budget.maxOutputTokens ?? 0)
+  const first = budget.reserveCall({ label: '作者范围修订', messages, maxOutputTokens: forecastTokens })
   await assertWorkspaceContentRevisionFreshV1(revision, { scope: input.scope, worldGroupId: input.worldGroupId })
   if (input.signal?.aborted) throw new Error('修订已停止，未发送模型请求。')
   let snapshot = await createAgentRunV1({ scope: input.scope, worldGroupId: input.worldGroupId, contract })
@@ -125,7 +139,7 @@ async function runQualityRevisionLockedV1(input: QualityRevisionInputV1): Promis
     if (recheckResolution.config.maxTokens > requireFixedBudgetValueV1(checker.maxOutputTokens)) throw new Error('复核输出上限超过本轮预算。')
     const recheckAssembly = await prepareProseGatewayAssemblyV1({ ...input, projectId: input.scope.projectId, operation: 'review', qualityRecheck: true, authorRequest: '只复核一次修订候选，检查所选问题与新问题。', config: recheckResolution.config, allowOutlineOnlyAgentDraft: true })
     const recheckMessages = await buildQualityRecheckRequestV1({ plan, originalReport: review.report, chapterTitle: chapter.title, candidateText: preview.outputText, registeredContext: recheckAssembly.text })
-    const second = budget.reserveCall({ label: '范围修订一次复核', messages: recheckMessages, maxOutputTokens: recheckResolution.config.maxTokens || 16000 })
+    const second = budget.reserveCall({ label: '范围修订一次复核', messages: recheckMessages, maxOutputTokens: qualityRevisionCallForecastTokensV1(recheckResolution.config.maxTokens, contract.budget.maxOutputTokens ?? 0) })
     snapshot = await append(input.scope, snapshot, 'step.scheduled', { stepId: QUALITY_RECHECK_STEP_V1 })
     snapshot = await append(input.scope, snapshot, 'step.started', { stepId: QUALITY_RECHECK_STEP_V1, attempt: 1 })
     const execution = recheckAssembly.contextGatewayExecution
