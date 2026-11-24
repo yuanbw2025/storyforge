@@ -1,6 +1,8 @@
 import type { AIRequestConfigResolution, ChatResult } from '../ai/client'
 import { supportsVerifiedJsonObjectResponseV1 } from '../ai/provider-capabilities'
 import { executeRegisteredAIEntryV1 } from '../agent/formal-ai-entry'
+import { requireFixedBudgetValueV1 } from '../agent/finite-budget'
+import { getAgentSkillV1 } from '../agent/skill-registry'
 import { hashCanonicalValue } from '../agent/run/hash'
 import type {
   AIConfig,
@@ -407,13 +409,17 @@ export async function runTextOpenWorldCreatorIndependentCalibrationReviewV1(inpu
           },
         }
       : supportsVerifiedJsonObjectResponseV1(input.config.provider) ? { responseFormat: 'json_object' as const } : undefined
+    // B38b/B50：评测条目按其登记 Skill 的输出上限执行，不再使用应用自设的
+    // 2_400 固定额度（该 schema 允许最多 30 条 findings × 1000 字符，固定值
+    // 与真实输出需要脱钩）；冻结分辨率与实际派发使用同一值。
+    const calibrationOutputTokens = requireFixedBudgetValueV1(getAgentSkillV1('prose.review').maxOutputTokens)
     const frozenResolution = input.frozenResolution ? {
       ...input.frozenResolution,
-      config: { ...input.frozenResolution.config, temperature: 0, maxTokens: 2_400 },
+      config: { ...input.frozenResolution.config, temperature: 0, maxTokens: calibrationOutputTokens },
     } : undefined
     const output = await executeRegisteredAIEntryV1(
       'eval.text-open-world.release-calibration-grader', requestMessages,
-      { ...input.config, temperature: 0, maxTokens: 2_400 },
+      { ...input.config, temperature: 0, maxTokens: calibrationOutputTokens },
       { category: 'review.text-open-world.release-calibration-grader', projectId: input.projectId, contextOverflowPolicy: 'reject' },
       controller.signal, result,
       requestOptions,
