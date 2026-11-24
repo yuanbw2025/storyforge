@@ -185,3 +185,83 @@ export function checkOutlineDuplicate(
 
   return { isDuplicate: false }
 }
+
+// ── 4. 同名冲突只读汇总（032-L1-d：确认前提示，不改写入语义） ─────────────
+
+export interface SameNameConflictInputV1 {
+  /** 目标世界内已存在的角色（按 id + name 对齐，供 checkCharacterDuplicate） */
+  existingCharacters?: ReadonlyArray<{ id?: number; name: string }>
+  /** 目标作品/世界已存在的大纲节点（供 checkOutlineDuplicate） */
+  existingOutlines?: ReadonlyArray<{ id?: number; title: string; summary: string }>
+  /** 本次待导入的角色名（AI 解析候选） */
+  incomingCharacters?: readonly string[]
+  /** 本次待导入的大纲标题（AI 解析候选） */
+  incomingOutlines?: readonly { title: string; summary: string }[]
+}
+
+/** 既有规则提示语（与 chunk-writer 行为一一对应，不新增口径） */
+export const SAME_NAME_CONFLICT_RULES_V1 = Object.freeze({
+  characterAppend: '同名角色将按目标世界的既有规则合并字段内容；异名角色不受影响、不会被删除。',
+  outlineMerge: '同名大纲将按目标世界的既有规则挂到该节点；异名节点不受影响、不会被删除。',
+  worldviewAppend: '同名字段的内容会按句子去重后追加到现有字段；不会覆盖原文。',
+})
+
+export interface SameNameConflictItemV1 {
+  kind: 'character' | 'outline'
+  incomingName: string
+  existingId?: number
+  existingName: string
+  similarity?: number
+  hint: string
+}
+
+/**
+ * 纯检测：把"即将写入的条目名"与"目标世界已有条目"逐项对照，产出同名清单。
+ *
+ * 只做展示前的可见性判断，不做任何 DB/adopt/写入动作，也不改变
+ * chunk-writer 既有的合并/追加语义。无同名时返回空数组（调用方据此不渲染区块）。
+ */
+export function detectSameNameConflictsV1(input: SameNameConflictInputV1): SameNameConflictItemV1[] {
+  const items: SameNameConflictItemV1[] = []
+
+  if (input.incomingCharacters?.length) {
+    const existing = input.existingCharacters ?? []
+    const byName = new Map<string, number>()
+    for (const character of existing) {
+      if (character.id == null || !character.name.trim()) continue
+      byName.set(character.name.trim(), character.id)
+    }
+    for (const rawName of input.incomingCharacters) {
+      const name = typeof rawName === 'string' ? rawName.trim() : ''
+      if (!name) continue
+      const result = checkCharacterDuplicate(name, byName)
+      if (result.isDuplicate && result.matchedName) {
+        items.push({
+          kind: 'character', incomingName: name,
+          existingId: result.existingId, existingName: result.matchedName,
+          hint: SAME_NAME_CONFLICT_RULES_V1.characterAppend,
+        })
+      }
+    }
+  }
+
+  if (input.incomingOutlines?.length) {
+    // checkOutlineDuplicate 只读，转成可变数组以满足其参数类型（不改检测语义）。
+    const existing: Array<{ id?: number; title: string; summary: string }> = [...(input.existingOutlines ?? [])]
+    for (const node of input.incomingOutlines) {
+      const title = typeof node?.title === 'string' ? node.title.trim() : ''
+      if (!title) continue
+      const result = checkOutlineDuplicate(title, node.summary ?? '', existing)
+      if (result.isDuplicate) {
+        items.push({
+          kind: 'outline', incomingName: title,
+          existingId: result.existingId, existingName: title,
+          similarity: result.similarity,
+          hint: SAME_NAME_CONFLICT_RULES_V1.outlineMerge,
+        })
+      }
+    }
+  }
+
+  return items
+}
