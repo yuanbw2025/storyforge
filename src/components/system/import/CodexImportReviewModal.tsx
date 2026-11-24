@@ -6,6 +6,7 @@ import type { CodexEntry, WorkspaceScope } from '../../../lib/types'
 import { db } from '../../../lib/db/schema'
 import { resolveScope, readOwnedRows } from '../../../lib/workspace/scope'
 import { useProjectStore } from '../../../stores/project'
+import { verifyImportProjectTargetGroupV1 } from '../../../stores/import-session'
 import {
   detectCodexSameNameConflictsV1,
   CODEX_SAME_NAME_RULE_V1,
@@ -18,6 +19,10 @@ interface Props {
   categories: readonly CodexImportCategoryOption[]
   onConfirm: (candidates: CodexImportCandidate[]) => Promise<void>
   onCancel: () => void
+  /** 032-L1-d-CODEX-MULTIWORLD：冻结会话的目标 scope（用于只读取目标世界词条）。 */
+  targetScope?: WorkspaceScope
+  /** 本次实际写入的世界组；与 handleConfirmCodex 口径一致。 */
+  targetWorldGroupId?: number | null
 }
 
 export default function CodexImportReviewModal({
@@ -26,6 +31,8 @@ export default function CodexImportReviewModal({
   categories,
   onConfirm,
   onCancel,
+  targetScope,
+  targetWorldGroupId = null,
 }: Props) {
   const [drafts, setDrafts] = useState(() => candidates.map(candidate => ({
     ...candidate,
@@ -61,9 +68,19 @@ export default function CodexImportReviewModal({
         if (projectId == null) { setSameNameConflicts([]); return }
         const project = await db.projects.get(projectId)
         if (!active) return
-        // 世界组语义未定（多世界）时不给提示：宁缺勿误报。
-        if (!project || project.enableMultiWorld) { setSameNameConflicts([]); return }
-        const scope: WorkspaceScope = await resolveScope({ projectId })
+        let scope: WorkspaceScope
+        let worldGroupId: number | null
+        if (project?.enableMultiWorld) {
+          // 多世界：必须已选且与冻结会话口径一致，否则保守空清单（宁缺勿误报）。
+          if (targetWorldGroupId == null || !targetScope) { setSameNameConflicts([]); return }
+          await verifyImportProjectTargetGroupV1(targetScope, targetWorldGroupId)
+          if (!active) return
+          scope = targetScope
+          worldGroupId = targetWorldGroupId
+        } else {
+          scope = await resolveScope({ projectId })
+          worldGroupId = null
+        }
         if (!active) return
         const entries = await readOwnedRows<CodexEntry>(scope, 'codexEntries', { owner: 'world' })
         if (!active) return
@@ -74,7 +91,7 @@ export default function CodexImportReviewModal({
             categoryId: categoryByRef.get(draft.categoryRef)?.categoryId ?? null,
             name: draft.name,
           })),
-          worldGroupId: null,
+          worldGroupId,
         }))
       } catch {
         // 纯展示提示：读取失败保持空清单，绝不阻断审查/确认流程。
@@ -83,9 +100,9 @@ export default function CodexImportReviewModal({
     }
     void compute()
     return () => { active = false }
-    // drafts 改名后重算，使提示跟随作者编辑；分类目录变化同样重算。
+    // drafts 改名后重算，使提示跟随作者编辑；分类目录或目标世界组变化同样重算。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [drafts, categories])
+  }, [drafts, categories, targetScope, targetWorldGroupId])
 
   const updateDraft = (index: number, patch: Partial<CodexImportCandidate>) => {
     setDrafts(current => current.map((draft, draftIndex) =>

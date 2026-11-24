@@ -693,6 +693,12 @@ export default function ImportDocPanel({ project, onNavigate }: Props) {
           filename={codexReview.session.filename}
           candidates={codexReview.session.merged?.codexCandidates || []}
           categories={codexReview.categories}
+          // 032-L1-d-CODEX-MULTIWORLD：把冻结会话的目标 scope 与本次实际写入的世界组口径交给模态，
+          // 与 handleConfirmCodex 的 worldGroupId 计算保持一致（避免跨世界误报）。
+          targetScope={codexReview.session.targetScope}
+          targetWorldGroupId={codexReview.session.importTarget === 'project'
+            ? (codexReview.session.targetWorldGroupId ?? null)
+            : (project.enableMultiWorld ? targetWorldGroupId : null)}
           onConfirm={candidates => handleConfirmCodex(codexReview.session, candidates)}
           onCancel={() => setCodexReview(null)}
         />
