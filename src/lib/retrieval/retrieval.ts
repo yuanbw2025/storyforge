@@ -570,8 +570,27 @@ export async function retrieveChunks(args: {
     if (score > 0) scored.push({ chunk, score })
   }
   scored.sort((a, b) => b.score - a.score || b.chunk.sourceChapterId - a.chunk.sourceChapterId)
-  // 取 top-K 后按时间(章序→块序)重组，便于阅读
-  const top = scored.slice(0, topK)
+  // 取 top-K 后按时间(章序→块序)重组，便于阅读。
+  // B10c 长尾召回：同一章的高分块不得独占全部名额。按“每章第 1 名、每章
+  // 第 2 名……”的轮次交错选取，总分次序仍决定每轮内部排序；章数不足时
+  // 退化为原始全局 top-K，返回总数始终为 min(topK, 命中块数)。
+  const byRank: RetrievedChunk[][] = []
+  const perChapterRank = new Map<number, number>()
+  for (const row of scored) {
+    const rank = perChapterRank.get(row.chunk.sourceChapterId) ?? 0
+    perChapterRank.set(row.chunk.sourceChapterId, rank + 1)
+    while (byRank.length <= rank) byRank.push([])
+    byRank[rank].push(row)
+  }
+  const interleaved: RetrievedChunk[] = []
+  for (const round of byRank) {
+    for (const row of round) {
+      if (interleaved.length >= topK) break
+      interleaved.push(row)
+    }
+    if (interleaved.length >= topK) break
+  }
+  const top = interleaved
   top.sort((a, b) =>
     (orderOf.get(a.chunk.sourceChapterId)! - orderOf.get(b.chunk.sourceChapterId)!) ||
     (a.chunk.chunkIndex - b.chunk.chunkIndex))
