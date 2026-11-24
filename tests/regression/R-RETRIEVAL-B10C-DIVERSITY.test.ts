@@ -80,4 +80,23 @@ describe('B10c · retrieveChunks 章多样性长尾召回', () => {
     const sorted = [...orders].sort((a, b) => chaps.indexOf(a) - chaps.indexOf(b))
     expect(orders).toEqual(sorted)
   })
+
+  it('晚章规则：同分命中时更晚的章优先进入召回', async () => {
+    const { pid, scope, chaps } = await seedChapters([
+      '守灯人擦拭青铜铃并记录灯谱。',
+      '守灯人把青铜铃交给邮差保管。',
+      '守灯人取回青铜铃放进灯舱。',
+      '当前章：守灯人准备出海。',
+    ])
+    for (const id of chaps) {
+      const chapter = await db.chapters.get(id)
+      await rebuildChapterChunks({ projectId: pid, chapter: chapter!, knownEntities: ['青铜铃'] })
+    }
+    const got = await retrieveChunks({
+      projectId: pid, scope, currentChapterId: chaps[3], queryTerms: ['青铜铃'], topK: 1,
+    })
+    // 三个章节块同分命中；晚章加成让最晚的证据块胜出，但不得越过真实分差。
+    expect(got).toHaveLength(1)
+    expect(got[0]!.chunk.sourceChapterId).toBe(chaps[2])
+  })
 })
