@@ -1,5 +1,11 @@
 # Multiple worlds, locations, and maps
 
+## November 25: exact comparison and complete map sources
+
+Worldview expansion/polish candidates offer Previous/Next change, Copy original/Copy candidate and Locate in candidate. Expand collapsed ranges before selecting, or copy a whole side. Exact comparison uses the frozen adoption baseline. Invalid sources, display limits or computation failures retain full drafts with an explicit fallback rather than truncating formal content. Text differences do not verify facts; development records retain bounded performance evidence rather than treating merge as all-device acceptance. Based on #525.
+
+World expansion/map assembly use evidenced capacity of the actual routed creative model and freeze that budget for recovery. Evidenced small windows are not enlarged by old reference values. Missing or clipped registered map sources stop before the model request. Automatic map output stays automatic; explicit author limits are checked against the contract. Retain settings, candidates and checkpoints before recovery. Based on #610/#647/#649/#650.
+
 ## November 23: setting-field length and recovery
 
 World-setting fields admitted to V2 use complete registered sources and support Automatic/task-based, Approximate, Exact or Range length intent. Expansion uses the counting-basis choices shown in the panel. Check actual panel counts rather than model-reported word counts.

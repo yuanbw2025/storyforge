@@ -1,5 +1,9 @@
 # Costs, tokens, and saving money
 
+## November 25: forecasts, limits and actual usage
+
+Team reservations and UI estimates serve accounting/authorization preflight rather than automatically becoming per-dispatch content caps. Actual requests remain subject to explicit author/template limits, Skill/protocol restrictions, balance and service capability. Long tasks can use more tokens; required compression, revisions and steps also incur usage. Range-revision reservations follow frozen contracts and invalid budgets fail explicitly. Automatic settings/removal of old constants mean neither free nor unlimited service. Based on #604/#607/#614/#615.
+
 StoryForge uses your configured model services. Costs depend on the provider, actual model, and request. The project does not provide a universal free-model allowance.
 
 ## Which operations may cost money?

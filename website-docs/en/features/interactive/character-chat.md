@@ -1,9 +1,15 @@
 ---
 productId: upper.character-interaction
 status: preview
-lastVerified: 2026-11-13
+lastVerified: 2026-11-25
 ---
 # Character chat
+
+## November 25: dialogue input and full read-aloud text
+
+Except for the action-choice family with its own frozen evidence constraints, dialogue Skills use evidenced bound-connection capacity rather than a uniform old 16k window. Unknown capacity keeps conservative references. The action-choice family's 16k evidence boundary remains, along with character knowledge, history isolation, explicit actions and save recovery. Based on #636.
+
+Read-aloud cleanup retains complete messages instead of silently taking only 2,000 characters. Actual TTS per-call limits may explicitly reject long text. Dictation and recording/image/audio resource limits remain. For an explicit length error, split text yourself after checking the full original message. Based on #642.
 
 ## November 13: saving, recovery and usage checks
 

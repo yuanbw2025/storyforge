@@ -1,5 +1,9 @@
 # Longform: continuity, post-chapter review, and revision
 
+## November 25: post-chapter processing and full handoff
+
+New organization/memory tasks size input/output from chapter material and actual model capacity. Valid states, reconciliations and citations retain full results; direct handoff no longer takes only six citations, and summaries scale with information. Check authorization and usage; explicit finite budgets may still block a task before dispatch. New tasks use V2, while historical tasks restore under their frozen identities. Adoption, version and no-resend rules remain. Based on #595/#598.
+
 ## November 19: inventory/timeline adoption stalls
 
 A shared digest-ordering path that could leave inventory or story-timeline adoption waiting indefinitely is fixed. Atomic writes/rollback, source checks and author confirmation remain. For unknown outcomes, inspect the original task's candidate and receipt rather than dispatching another model request over the evidence. This does not establish one cause for every historical stall. Based on #498.

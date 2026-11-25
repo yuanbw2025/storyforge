@@ -1,9 +1,13 @@
 ---
 productId: upper.ai-town
 status: preview
-lastVerified: 2026-11-23
+lastVerified: 2026-11-25
 ---
 # Epilogue AI town
+
+## November 25: director-task input capacity
+
+Director tasks assemble resident state, events and memory using evidenced bound-connection capacity, with the same budget in the contract and request. The 20k value remains an unknown/default reference; it does not enlarge author limits or bypass admission. Knowledge, event versions, explicit start and life-save rules remain; larger capacity does not establish long-run quality or cost acceptance. Based on #638.
 
 ## November 23: library search and compact authoring
 

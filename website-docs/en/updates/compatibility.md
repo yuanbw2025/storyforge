@@ -1,5 +1,11 @@
 # Versions, upgrades, and data compatibility
 
+## November 25, 2026 · Mainline editing and capacity fixes
+
+The latest public formal release remains [v4.0.8](https://github.com/yuanbw2025/storyforge/releases/tag/v4.0.8) (`41a6e865`, November 19 at 16:02 UTC, database v14/backup v18). v4.0.9 is still an unpublished draft without a formal date. Reviewed mainline `a6362b7e` uses database v16/backup v20; aligning matrices/fixtures is not another format upgrade.
+
+Use editing modes, import hints, exact comparison and capacity fixes through each guide's actual entries; historical tasks restore under frozen identities. Keep original backups before upgrading; older programs must not directly open newer databases. See [development](/en/updates/development-status) for remaining037 editor/032 import and real-device/provider long-task acceptance.
+
 ## November 23, 2026 · Mainline complete-content fixes
 
 The latest formal release remains v4.0.8 (`41a6e865`, database v14/backup v18); v4.0.9 is still an unpublished draft. Mainline `e91a0955` uses database v16/backup v20. This round's JSON/candidate/compilation-envelope fixes do not add schema or backup-format versions.

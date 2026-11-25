@@ -1,5 +1,9 @@
 # Character-driven plotting
 
+## November 25: character candidates and state evolution
+
+Character creation, supplementation, revision, character-driven work and state-evolution copilots use the bound connection for output instead of adding old small dispatch caps. Author-template limits still undergo Skill checks; absent limits are not recorded as author choices. Review and explicitly adopt candidates; state evolution retains scope/version checks. Based on #606/#608/#632.
+
 Entry: Longform workbench → Character-driven (角色驱动). Derive plots from desires, contradictions, and change, then use a selected plan for outlining or later writing.
 
 ## Planning and revision

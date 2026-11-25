@@ -1,9 +1,15 @@
 ---
 productId: upper.text-open-world
 status: preview
-lastVerified: 2026-11-13
+lastVerified: 2026-11-25
 ---
 # Text open world
+
+## November 25: filtering and runtime capacity
+
+Open-world libraries offer title filtering/Clear search. Creator, source, launch, detail and save areas are more compact; the selected work/runtime precedes independent built-in examples while examples remain available. Journey, version, save and explicit-start rules are unchanged. Based on #590.
+
+Runtime/private-evolution input follows evidenced connection capacity with conservative unknown-capacity references. Release calibration uses the registered Skill output value without an extra small cap. Calibration remains read-only and does not establish player, model-quality or commercial acceptance. Based on #639/#641.
 
 ## November 13: saving, recovery and usage checks
 

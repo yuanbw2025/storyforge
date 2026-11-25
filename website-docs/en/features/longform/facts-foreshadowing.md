@@ -1,5 +1,9 @@
 # Foreshadowing, facts, knowledge, and states
 
+## November 25: story-timeline regeneration output
+
+Impact-driven story-timeline regeneration uses the registered Skill output limit without halving it again. Existing candidate, source and downstream checks remain; a larger output window does not replace author review of facts and chronology. Based on #643.
+
 ## November 13: saving, recovery and usage checks
 
 Concurrent confirmation of conflicting facts preserves the first valid save and requires review of the other result, rather than creating contradictory current facts. If prose changes after inventory/timeline extraction, adoption rechecks the original text; repeated confirmation keeps the first valid receipt. Unrelated session records no longer reset Canon pagination, while real source edits still require rereading. Sources: [#350](https://github.com/yuanbw2025/storyforge/pull/350), [#357](https://github.com/yuanbw2025/storyforge/pull/357), [#429](https://github.com/yuanbw2025/storyforge/pull/429).

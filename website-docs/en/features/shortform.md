@@ -1,9 +1,13 @@
 ---
 productId: independent.shortform
 status: released
-lastVerified: 2026-11-23
+lastVerified: 2026-11-25
 ---
 # Short fiction
+
+## November 25: complete short-fiction candidates
+
+Long candidate fields, keep/avoid items, escalation levels, review findings and chapter prose no longer lose tails to old shared count/length caps. Input/output follow material, work targets and actual service capability. The chosen 5,000–25,000-character, 3–8-chapter planning skeleton remains, as do structural labels, dependencies, stale checks and author adoption. The six-stage workflow, versions and derivation are unchanged. Based on #596.
 
 ## November 23: compact tabs and title editing
 
