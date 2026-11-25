@@ -7,7 +7,7 @@ import { sha256 } from '@noble/hashes/sha2.js'
 import { bytesToHex } from '@noble/hashes/utils.js'
 import type { WorkspaceScope } from '../types'
 import { isPortableResourceUidV1 } from '../context-gateway/resource-uid'
-import { countWords, htmlToPlainText, plainTextToHtml } from '../utils/html'
+import { countWords, htmlToPlainText, isHtml, plainTextToHtml } from '../utils/html'
 import { authoringSchemaV1, parseAuthoringHtmlV1, splitAuthoringHtmlV1 } from './authoring-html-blocks'
 import { joinMarkdownBlockProjectionsV1, projectAuthoringPmV1, projectProtectedTextV1 } from './authoring-markdown-projection'
 import { compileNovelMarkdownV1, createNovelMarkdownStateV1, type CompiledNovelBlockV1 } from './novel-markdown-codec'
@@ -116,6 +116,7 @@ export class AuthoringDocumentAdapterV1 {
   private gaps: { pos: number; html: string }[] = []
   private pendingChanges: ChangeSet | null = null
   private lastHtml = ''
+  private plainFragments = new Map<string, string>()
   private nextBlockKey = 1
   private composing = false
   private compositionStarted = false
@@ -186,6 +187,7 @@ export class AuthoringDocumentAdapterV1 {
     this.pendingChanges = null
     this.lastHtml = html
     if (originals.length) this.assembleHtml()
+    this.readPlainText()
   }
 
   private createState(source: string): EditorState {
@@ -245,6 +247,29 @@ export class AuthoringDocumentAdapterV1 {
     return html
   }
 
+  private readPlainText(): string {
+    if (!isHtml(this.lastHtml)) return htmlToPlainText(this.lastHtml)
+    // Reparse only changed HTML fragments. A keystroke must not rebuild a
+    // second DOM for every unchanged paragraph in a long chapter.
+    const current = new Map<string, string>()
+    const read = (html: string) => {
+      const text = current.get(html) ?? this.plainFragments.get(html) ?? htmlToPlainText(html, { normalize: false })
+      current.set(html, text)
+      return text
+    }
+    const parts: string[] = []
+    let gap = 0
+    for (const row of this.rows) {
+      while (gap < this.gaps.length && this.gaps[gap].pos <= row.from) parts.push(read(this.gaps[gap++].html))
+      parts.push(read(row.html))
+    }
+    while (gap < this.gaps.length) parts.push(read(this.gaps[gap++].html))
+    this.plainFragments = current
+    // Normalize once across fragment boundaries, preserving the existing
+    // whole-document plain-text contract, including empty paragraphs and gaps.
+    return parts.join('').replace(/\n{3,}/g, '\n\n').trim()
+  }
+
   private materialize() {
     this.assertNotComposing()
     if (!this.pendingChanges) return
@@ -293,12 +318,12 @@ export class AuthoringDocumentAdapterV1 {
     this.rows = result; this.gaps = gaps; this.pendingChanges = null
     const html = this.assembleHtml(), previous = this.lastHtml
     this.lastHtml = html
-    if (html !== previous) this.onHtmlChange?.(html, htmlToPlainText(html))
+    if (html !== previous) this.onHtmlChange?.(html, this.readPlainText())
   }
 
   getSource(): string { return this.state.doc.toString() }
   getHtml(): string { this.materialize(); return this.lastHtml }
-  getPlainText(): string { return htmlToPlainText(this.getHtml()) }
+  getPlainText(): string { this.getHtml(); return this.readPlainText() }
   getWordCount(): number { return countWords(this.getPlainText()) }
   getEnvelopes() { this.materialize(); return this.rows.map(row => ({ key: row.key, from: row.from, to: row.to, html: row.html, htmlHash: row.htmlHash, protected: row.protected, pendingSyntax: row.pendingSyntax })) }
 
@@ -370,7 +395,7 @@ export class AuthoringDocumentAdapterV1 {
       this.currentBaselineEpoch++
       if (!transaction.annotation(externalAdoption)) {
         this.currentSourceRevision++
-        if (this.lastHtml !== previous) this.onHtmlChange?.(this.lastHtml, htmlToPlainText(this.lastHtml))
+        if (this.lastHtml !== previous) this.onHtmlChange?.(this.lastHtml, this.readPlainText())
       }
       return
     }
