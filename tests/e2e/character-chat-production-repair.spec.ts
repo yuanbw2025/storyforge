@@ -5,11 +5,11 @@ for (const failure of ['opening', 'review-output-limit'] as const) test(failure 
   ? 'rejected opening stays stopped after refresh and explicit repair receives its original error'
   : 'truncated opening review keeps paid evidence and explicit independent review excludes the rejected report', async ({page, browser}) => {
   test.setTimeout(120_000)
-  registerBrowserFixtureAIConfigV1(page, { provider: 'openai', model: 'test', baseUrl: 'https://chat-repair.invalid/v1', maxTokens: 16000, apiKey: 'isolated-test-key' })
+  registerBrowserFixtureAIConfigV1(page, { provider: 'custom', model: 'test', baseUrl: 'https://chat-repair.invalid/v1', maxTokens: 16000, apiKey: 'isolated-test-key' }, { serviceContextWindow: 64000 })
   await page.addInitScript(() => localStorage.setItem('storyforge_guide_completed', 'e2e'))
   const requests: string[] = []
   let rejected = ''
-  await page.route('https://chat-repair.invalid/**', async route => {
+  await page.route('https://chat-repair.invalid/v1/chat/completions', async route => {
     const body = route.request().postDataJSON(), prompt = body.messages.map((m: {content: string}) => m.content).join('\n')
     requests.push(prompt)
     const review = prompt.includes('开场的语义审查者')
@@ -124,11 +124,14 @@ for (const {rejectedRepair, referenceWire, invalidOption = false, privateKnownFa
   {rejectedRepair: false, referenceWire: true, privateKnownFact: true},
 ]) test(`one automatic targeted opening repair, then author choice or a durable stop (rejected=${rejectedRepair}, references=${referenceWire}, invalidOption=${invalidOption}, private=${privateKnownFact})`, async ({page}) => {
   test.setTimeout(120_000)
-  registerBrowserFixtureAIConfigV1(page, { provider: privateKnownFact ? 'agnes' : 'openai', model: 'test', baseUrl: 'https://chat-auto-repair.invalid/v1', maxTokens: 16000, apiKey: 'isolated-test-key' })
+  registerBrowserFixtureAIConfigV1(page, privateKnownFact
+    ? { provider: 'agnes', model: 'agnes-2.5-flash', baseUrl: 'https://apihub.agnes-ai.com/v1', maxTokens: 16000, apiKey: 'isolated-test-key' }
+    : { provider: 'custom', model: 'test', baseUrl: 'https://chat-auto-repair.invalid/v1', maxTokens: 16000, apiKey: 'isolated-test-key' },
+  privateKnownFact ? {} : { serviceContextWindow: 64000 })
   await page.addInitScript(() => localStorage.setItem('storyforge_guide_completed', 'e2e'))
   const requests: string[] = []
   let firstRaw = ''
-  await page.route('https://chat-auto-repair.invalid/**', async route => {
+  await page.route(/^https:\/\/(?:chat-auto-repair\.invalid|apihub\.agnes-ai\.com)\/v1\/chat\/completions$/, async route => {
     const body = route.request().postDataJSON()
     const prompt = body.messages.map((message: {content: string}) => message.content).join('\n')
     expect(body.response_format).toMatchObject(privateKnownFact && prompt.includes('开场的语义审查者')

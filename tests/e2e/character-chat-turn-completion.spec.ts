@@ -12,11 +12,11 @@ const action = {kind: 'complete', text: reply, goalKey: 'find-seal', evidenceFac
   waitingForPlayer: false, newFacts: [{factKey: 'lit-entry', kind: 'observation', text: '门边亮了起来。', evidenceFactKeys: ['lost'], evidenceExcerpt: '门边亮了起来。'}],
   disclosures: [], threadUpdates: [], goalStatus: null, turnCompletion: {version: 1, purpose, evidenceExcerpt: '门边亮了起来。'}}
 
-async function setup(page: Page, passed = true, provider: 'openai' | 'agnes' = 'openai') {
-  registerBrowserFixtureAIConfigV1(page, { provider, baseUrl: 'https://turn-completion.invalid/v1', model: 'test', maxTokens: 8000, apiKey: 'isolated-test-key' })
+async function setup(page: Page, passed = true, provider: 'custom' | 'agnes' = 'custom') {
+  registerBrowserFixtureAIConfigV1(page, { provider, baseUrl: provider === 'agnes' ? 'https://apihub.agnes-ai.com/v1' : 'https://turn-completion.invalid/v1', model: provider === 'agnes' ? 'agnes-2.5-flash' : 'test', maxTokens: 8000, apiKey: 'isolated-test-key' }, provider === 'custom' ? { serviceContextWindow: 64000 } : {})
   await page.addInitScript(() => localStorage.setItem('storyforge_guide_completed', 'e2e'))
   const calls: string[] = []
-  await page.route('https://turn-completion.invalid/**', async route => {
+  await page.route(/^https:\/\/(?:turn-completion\.invalid|apihub\.agnes-ai\.com)\/v1\/chat\/completions$/, async route => {
     const messages = route.request().postDataJSON().messages, text = JSON.stringify(messages)
     const step = messages[0].content.startsWith('这是尚未发生的角色行动选择草稿') ? 'choice'
       : text.includes('本次持久化行动候选') ? 'review' : 'expression'
@@ -59,7 +59,7 @@ async function setup(page: Page, passed = true, provider: 'openai' | 'agnes' = '
 
 for (const width of [390, 1440]) test(`local completion leaves an active goal without filling the second action at ${width}`, async ({page}) => {
   await page.setViewportSize({width, height: 900})
-  const {calls, read} = await setup(page, true, width === 390 ? 'agnes' : 'openai')
+  const {calls, read} = await setup(page, true, width === 390 ? 'agnes' : 'custom')
   await expect(page.getByLabel('演绎节奏', {exact: true})).toHaveValue('2')
   const before = await read()
   await page.getByPlaceholder('对当前场景中的角色说话…').fill('我不想帮忙，你自己安排吧。')

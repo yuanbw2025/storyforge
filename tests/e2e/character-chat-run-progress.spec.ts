@@ -6,7 +6,7 @@ test.beforeEach(async ({page}) => {
   await page.addInitScript(() => {
     localStorage.setItem('storyforge_guide_completed', 'e2e')
   })
-  registerBrowserFixtureAIConfigV1(page, { provider: 'openai', baseUrl: 'https://chat-progress.invalid/v1', model: 'test', maxTokens: 6000, apiKey: 'isolated-test-key' })
+  registerBrowserFixtureAIConfigV1(page, { provider: 'custom', baseUrl: 'https://chat-progress.invalid/v1', model: 'test', maxTokens: 6000, apiKey: 'isolated-test-key' }, { serviceContextWindow: 64000 })
 })
 async function seed(page: Page) {
   await gotoWithBrowserFixtureAIConfigV1(page, './chat/library')
@@ -30,7 +30,7 @@ const review = {checks: ['continuity', 'permissions', 'player-agency', 'visibili
 test('shows actual generation and review phases without displaying the unadopted reply or private review', async ({page}, testInfo) => {
   const generation = gate(), checking = gate()
   let calls = 0
-  await page.route('https://chat-progress.invalid/**', async route => {
+  await page.route('https://chat-progress.invalid/v1/chat/completions', async route => {
           if (await fulfillChatActionChoiceFixture(route)) return
     const check = ++calls === 2
     await (check ? checking : generation).promise
@@ -67,7 +67,7 @@ for (const phase of ['choice', 'expression'] as const) test(`refresh labels the 
   const stage = phase === 'choice' ? '正在选择角色的下一步行动' : '等待角色行动'
   const expectedCalls = phase === 'choice' ? 1 : 2
   let calls = 0
-  await page.route('https://chat-progress.invalid/**', async route => {
+  await page.route('https://chat-progress.invalid/v1/chat/completions', async route => {
     calls++
     if (phase === 'expression' && await fulfillChatActionChoiceFixture(route)) return
     await generation.promise
@@ -93,7 +93,7 @@ for (const phase of ['choice', 'expression'] as const) test(`refresh labels the 
 test('cancelling during review stops local progress and cannot apply the late response', async ({page}) => {
   const checking = gate()
   let calls = 0
-  await page.route('https://chat-progress.invalid/**', async route => {
+  await page.route('https://chat-progress.invalid/v1/chat/completions', async route => {
           if (await fulfillChatActionChoiceFixture(route)) return
     const check = ++calls === 2
     if (check) await checking.promise

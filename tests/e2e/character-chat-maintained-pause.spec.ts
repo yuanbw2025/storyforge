@@ -5,9 +5,9 @@ import { registerBrowserFixtureAIConfigV1, gotoWithBrowserFixtureAIConfigV1, rel
 const firstReply = '我先暂缓寻找铜印。它还没找回，未查明的部分也不能算作谁的过错。'
 const nextReply = '铜印还没找回。我恢复寻找，先问清能从哪份现存记录核对。'
 const privateReason = '仅供审查的维持暂停依据，不应发布为角色台词'
-const config = {provider: 'openai' as const, baseUrl: 'https://maintained-pause.invalid/v1', model: 'turn-end-fixture', apiKey: 'isolated-test-key', maxTokens: 9000}
+const config = {provider: 'custom' as const, baseUrl: 'https://maintained-pause.invalid/v1', model: 'turn-end-fixture', apiKey: 'isolated-test-key', maxTokens: 9000}
 test.beforeEach(async ({page}) => {
-  registerBrowserFixtureAIConfigV1(page, config)
+  registerBrowserFixtureAIConfigV1(page, config, { serviceContextWindow: 64000 })
   await page.addInitScript(() => localStorage.setItem('storyforge_guide_completed', 'e2e'))
 })
 
@@ -35,7 +35,7 @@ async function read(page: Page, f: Awaited<ReturnType<typeof seed>>) {
 }
 async function provider(page: Page, handoff: unknown, passed = true) {
   const calls: string[] = []; let expressions = 0
-  await page.route('https://maintained-pause.invalid/**', async route => {
+  await page.route('https://maintained-pause.invalid/v1/chat/completions', async route => {
     const messages = route.request().postDataJSON().messages, text = JSON.stringify(messages)
     const step = messages[0].content.startsWith('这是尚未发生的角色行动选择草稿') ? 'choice'
       : text.includes('本次持久化交还控制候选') ? 'review-control'

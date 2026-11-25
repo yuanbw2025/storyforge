@@ -5,7 +5,7 @@ import { registerBrowserFixtureAIConfigV1, unregisterBrowserFixtureAIConfigV1, g
 
 // Exercise the actual application default in isolated browser data.
 test.beforeEach(async ({page}) => {
-  registerBrowserFixtureAIConfigV1(page, { provider: 'openai', baseUrl: 'https://chat-choice.invalid/v1', model: 'choice-fixture', maxTokens: 9000, apiKey: 'isolated-test-key' }, { ifAbsent: true })
+  registerBrowserFixtureAIConfigV1(page, { provider: 'custom', baseUrl: 'https://chat-choice.invalid/v1', model: 'choice-fixture', maxTokens: 9000, apiKey: 'isolated-test-key' }, { serviceContextWindow: 64000, ifAbsent: true })
   await page.addInitScript(() => localStorage.setItem('storyforge_guide_completed', 'e2e'))
 })
 
@@ -19,7 +19,7 @@ type Phase = 'fresh' | 'choice-raw' | 'choice-saved' | 'expression-raw' | 'candi
 
 async function provider(page: Page, malformedReview = false, strictChoice = false) {
   const calls: string[] = []
-  await page.route('https://chat-choice.invalid/**', async route => {
+  await page.route(/^https:\/\/(?:chat-choice\.invalid|apihub\.agnes-ai\.com)\/v1\/chat\/completions$/, async route => {
     const request = route.request().postDataJSON(), prompt = JSON.stringify(request.messages)
     const step = request.messages[0].content.startsWith('这是尚未发生的角色行动选择草稿') ? 'choice'
       : prompt.includes('本次持久化行动候选') ? 'review' : 'expression'
@@ -59,7 +59,7 @@ async function seed(page: Page, phase: Phase, directorBudget = 3) {
     try {
       await harness.generateInteractionRuntimeCandidateV1({scope: f.scope, productRuntimeSessionId: f.sessionId, participantKey: 'guard',
         skillId: 'character.chat-narrative-action', objective: '隔离浏览器中断恢复夹具',
-        aiConfig: {provider: 'openai', baseUrl: 'https://chat-choice.invalid/v1', model: 'choice-fixture', apiKey: 'isolated-test-key', temperature: .2, maxTokens: 9000},
+        aiConfig: {provider: 'custom', baseUrl: 'https://chat-choice.invalid/v1', model: 'choice-fixture', apiKey: 'isolated-test-key', temperature: .2, maxTokens: 9000},
         onRunCreated: (id: number) => {runId = id},
         onActionChoiceBoundary: (boundary: string) => {
           if (phase === 'choice-raw' && boundary === 'raw-response.saved' || phase === 'choice-saved' && boundary === 'choice.saved'
@@ -162,7 +162,7 @@ test('cancelling a saved choice preserves the story without expression or review
 })
 
 for (const budget of [2, 3]) test(`fresh action respects the three-call allowance in the actual controls (${budget})`, async ({page}) => {
-  if (budget === 3) registerBrowserFixtureAIConfigV1(page, { provider: 'agnes', baseUrl: 'https://chat-choice.invalid/v1', model: 'choice-fixture', maxTokens: 9000, apiKey: 'isolated-test-key' })
+  if (budget === 3) registerBrowserFixtureAIConfigV1(page, { provider: 'agnes', baseUrl: 'https://apihub.agnes-ai.com/v1', model: 'agnes-2.5-flash', maxTokens: 9000, apiKey: 'isolated-test-key' })
   const calls = await provider(page, false, budget === 3), f = await seed(page, 'fresh', budget), before = await read(page, f.sessionId)
   await page.getByLabel('本轮行动角色', {exact: true}).selectOption('guard')
   const start = page.getByRole('button', {name: '让角色开场', exact: true})

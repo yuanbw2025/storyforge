@@ -8,7 +8,7 @@ test.beforeEach(async ({page}) => {
   await page.addInitScript(() => {
     localStorage.setItem('storyforge_guide_completed', 'e2e')
   })
-  registerBrowserFixtureAIConfigV1(page, { provider: 'openai', baseUrl: 'https://control-handoff.invalid/v1', model: 'control-fixture', maxTokens: 9000, apiKey: 'isolated-test-key' })
+  registerBrowserFixtureAIConfigV1(page, { provider: 'custom', baseUrl: 'https://control-handoff.invalid/v1', model: 'control-fixture', maxTokens: 9000, apiKey: 'isolated-test-key' }, { serviceContextWindow: 64000 })
 
 })
 
@@ -41,7 +41,7 @@ async function seed(page: Page) {
 
 async function provider(page: Page, handoff: {version: number; source: {messageId: string; sequence: number}}) {
   const calls: string[] = []
-  await page.route('https://control-handoff.invalid/**', async route => {
+  await page.route('https://control-handoff.invalid/v1/chat/completions', async route => {
     const request = route.request().postDataJSON(), text = JSON.stringify(request.messages)
     const step = request.messages[0].content.startsWith('这是尚未发生的角色行动选择草稿') ? 'choice'
       : text.includes('本次持久化交还控制候选') ? 'review' : 'result'
@@ -140,7 +140,7 @@ test('refresh resumes a saved control result through review without repeating se
     let runId: number | null = null
     try {
       await harness.generateInteractionRuntimeCandidateV1({scope: f.scope, productRuntimeSessionId: f.sessionId, participantKey: 'guard', skillId: 'character.chat-narrative-action',
-        objective: '核验静默交还控制恢复', aiConfig: {provider: 'openai', baseUrl: 'https://control-handoff.invalid/v1', model: 'control-fixture', apiKey: 'isolated-test-key', maxTokens: 9000},
+        objective: '核验静默交还控制恢复', aiConfig: {provider: 'custom', baseUrl: 'https://control-handoff.invalid/v1', model: 'control-fixture', apiKey: 'isolated-test-key', maxTokens: 9000},
         onRunCreated: (id: number) => {runId = id}, onActionExpressionBoundary: (name: string) => {if (name === 'candidate.persisted') throw Error('expected-control-interruption')}})
     } catch (error) {if (!String(error).includes('expected-control-interruption')) throw error}
     if (runId == null) throw Error('missing run')

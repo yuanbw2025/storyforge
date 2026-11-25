@@ -7,7 +7,7 @@ async function seed(page: Page) {
   await page.addInitScript(() => {
     localStorage.setItem('storyforge_guide_completed', 'e2e')
   })
-  registerBrowserFixtureAIConfigV1(page, { provider: 'openai', baseUrl: 'https://chat-direction.invalid/v1', model: 'test', maxTokens: 8000, apiKey: 'isolated-test-key' })
+  registerBrowserFixtureAIConfigV1(page, { provider: 'custom', baseUrl: 'https://chat-direction.invalid/v1', model: 'test', maxTokens: 8000, apiKey: 'isolated-test-key' }, { serviceContextWindow: 64000 })
   await gotoWithBrowserFixtureAIConfigV1(page, './chat/library')
   const f = await page.evaluate(async () => {const load = new Function('p', 'return import(p)'); return (await load('/storyforge/tests/helpers/chat-narrative-fixture.ts')).seedChatNarrativeRuntimeFixture({maxActionsPerTrigger: 3})})
   await gotoWithBrowserFixtureAIConfigV1(page, `./chat/play?project=${f.scope.projectId}&work=${f.scope.workId}&session=${f.sessionId}`)
@@ -20,7 +20,7 @@ const review = () => ({checks: ['continuity', 'permissions', 'player-agency', 'v
 
 test('defaults to two steps, remembers explicit pacing and stops for player decisions within a three-step allowance', async ({page}) => {
   let actions = 0, calls = 0
-  await page.route('https://chat-direction.invalid/**', async route => {
+  await page.route('https://chat-direction.invalid/v1/chat/completions', async route => {
           if (await fulfillChatActionChoiceFixture(route)) return
     calls++
     const prompt = route.request().postDataJSON().messages.map((m: {content: string}) => m.content).join('\n')
@@ -74,7 +74,7 @@ test('defaults to two steps, remembers explicit pacing and stops for player deci
 for (const interrupt of ['message', 'stop'] as const) test(`${interrupt} interrupts a bounded run without replaying its committed first action`, async ({page}) => {
   let actions = 0, calls = 0, release!: () => void
   const gate = new Promise<void>(resolve => {release = resolve})
-  await page.route('https://chat-direction.invalid/**', async route => {
+  await page.route('https://chat-direction.invalid/v1/chat/completions', async route => {
           if (await fulfillChatActionChoiceFixture(route)) return
     calls++
     const prompt = route.request().postDataJSON().messages.map((m: {content: string}) => m.content).join('\n')

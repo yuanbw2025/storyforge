@@ -15,12 +15,12 @@ for (const {width, imageFailure} of [{width: 390, imageFailure: false}, {width: 
   await page.addInitScript(() => {
     localStorage.setItem('storyforge_guide_completed', 'e2e')
   })
-  registerBrowserFixtureAIConfigV1(page, { provider: 'agnes', baseUrl: 'https://chat-journey.invalid/v1', model: 'agnes-2.5-flash', maxTokens: 16000, apiKey: 'isolated-test-key' })
+  registerBrowserFixtureAIConfigV1(page, { provider: 'agnes', baseUrl: 'https://apihub.agnes-ai.com/v1', model: 'agnes-2.5-flash', maxTokens: 16000, apiKey: 'isolated-test-key' })
   const calls: string[] = []
   const imageCalls: string[] = []
   const providerImageHashes: string[] = []
   let actionCount = 0
-  await page.route('https://chat-journey.invalid/**', async route => {
+  await page.route('https://apihub.agnes-ai.com/**', async route => {
     if (route.request().url().endsWith('/images/generations')) {
       const request = route.request().postDataJSON()
       expect(request.model).toBe('agnes-image-2.1-flash')

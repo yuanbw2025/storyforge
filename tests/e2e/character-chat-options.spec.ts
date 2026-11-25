@@ -9,8 +9,8 @@ test('compares two actions, keeps the choice over refresh, and applies only the 
   await page.addInitScript(() => {
     localStorage.setItem('storyforge_guide_completed', 'e2e')
   })
-  registerBrowserFixtureAIConfigV1(page, { provider: 'openai', baseUrl: 'https://chat-options.invalid/v1', model: 'test', maxTokens: 8000, apiKey: 'isolated-test-key' })
-  await page.route('https://chat-options.invalid/**', async route => {
+  registerBrowserFixtureAIConfigV1(page, { provider: 'custom', baseUrl: 'https://chat-options.invalid/v1', model: 'test', maxTokens: 8000, apiKey: 'isolated-test-key' }, { serviceContextWindow: 64000 })
+  await page.route('https://chat-options.invalid/v1/chat/completions', async route => {
           if (await fulfillChatActionChoiceFixture(route)) return
     const prompt = route.request().postDataJSON().messages.map((m: {content: string}) => m.content).join('\n')
     const review = prompt.includes('本次持久化行动候选组')

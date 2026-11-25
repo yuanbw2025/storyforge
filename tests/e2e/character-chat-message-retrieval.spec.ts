@@ -9,8 +9,8 @@ test('exclusion previews retained consequences, survives refresh and affects the
   await page.addInitScript(() => {
     localStorage.setItem('storyforge_guide_completed', 'e2e')
   })
-  registerBrowserFixtureAIConfigV1(page, { provider: 'openai', baseUrl: 'https://chat-retrieval.invalid/v1', model: 'test', maxTokens: 6000, apiKey: 'isolated-test-key' })
-  await page.route('https://chat-retrieval.invalid/**', async route => {
+  registerBrowserFixtureAIConfigV1(page, { provider: 'custom', baseUrl: 'https://chat-retrieval.invalid/v1', model: 'test', maxTokens: 6000, apiKey: 'isolated-test-key' }, { serviceContextWindow: 64000 })
+  await page.route('https://chat-retrieval.invalid/v1/chat/completions', async route => {
           if (await fulfillChatActionChoiceFixture(route)) return
     const prompt = route.request().postDataJSON().messages.map((m: {content: string}) => m.content).join('\n')
     let output: unknown

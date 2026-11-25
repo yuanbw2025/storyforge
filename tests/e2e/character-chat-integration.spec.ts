@@ -11,8 +11,8 @@ for (const rejectClosure of [false, true]) test(`related goal closure is atomic 
     await page.addInitScript(() => {
         localStorage.setItem('storyforge_guide_completed', 'e2e');
     });
-    registerBrowserFixtureAIConfigV1(page, { provider: 'openai', baseUrl: 'https://chat-closure.invalid/v1', model: 'test', maxTokens: 4000, apiKey: 'isolated-test-key' })
-    await page.route('https://chat-closure.invalid/**', async route => {
+    registerBrowserFixtureAIConfigV1(page, { provider: 'custom', baseUrl: 'https://chat-closure.invalid/v1', model: 'test', maxTokens: 4000, apiKey: 'isolated-test-key' }, { serviceContextWindow: 64000 })
+    await page.route('https://chat-closure.invalid/v1/chat/completions', async route => {
             if (await fulfillChatActionChoiceFixture(route)) return
         calls++;
         const prompt = route.request().postDataJSON().messages.map((m: {content: string}) => m.content).join('\n');
@@ -67,8 +67,8 @@ for (const rejectReflection of [false, true]) test(`role revises its plans and h
     await page.addInitScript(() => {
         localStorage.setItem('storyforge_guide_completed', 'e2e');
     });
-    registerBrowserFixtureAIConfigV1(page, { provider: 'openai', baseUrl: 'https://chat-reflection.invalid/v1', model: 'test', maxTokens: 4000, apiKey: 'isolated-test-key' })
-    await page.route('https://chat-reflection.invalid/**', async route => {
+    registerBrowserFixtureAIConfigV1(page, { provider: 'custom', baseUrl: 'https://chat-reflection.invalid/v1', model: 'test', maxTokens: 4000, apiKey: 'isolated-test-key' }, { serviceContextWindow: 64000 })
+    await page.route('https://chat-reflection.invalid/v1/chat/completions', async route => {
             if (await fulfillChatActionChoiceFixture(route)) return
         calls++;
         const prompt = route.request().postDataJSON().messages.map((m: {content: string}) => m.content).join('\n');
@@ -125,8 +125,8 @@ for (const rejectRelationship of [false, true]) test(`dialogue relationship cons
     await page.addInitScript(() => {
         localStorage.setItem('storyforge_guide_completed', 'e2e');
     });
-    registerBrowserFixtureAIConfigV1(page, { provider: 'openai', baseUrl: 'https://chat-relationship.invalid/v1', model: 'test', maxTokens: 4000, apiKey: 'isolated-test-key' })
-    await page.route('https://chat-relationship.invalid/**', async route => {
+    registerBrowserFixtureAIConfigV1(page, { provider: 'custom', baseUrl: 'https://chat-relationship.invalid/v1', model: 'test', maxTokens: 4000, apiKey: 'isolated-test-key' }, { serviceContextWindow: 64000 })
+    await page.route('https://chat-relationship.invalid/v1/chat/completions', async route => {
             if (await fulfillChatActionChoiceFixture(route)) return
         calls++;
         const prompt = route.request().postDataJSON().messages.map((m: {content: string}) => m.content).join('\n');
@@ -190,8 +190,8 @@ for (const rejectReview of [false, true]) test(`player situation request is revi
     await page.addInitScript(() => {
         localStorage.setItem('storyforge_guide_completed', 'e2e');
     });
-    registerBrowserFixtureAIConfigV1(page, { provider: 'openai', baseUrl: 'https://chat-runtime-situation.invalid/v1', model: 'test', maxTokens: 6000, apiKey: 'isolated-test-key' })
-    await page.route('https://chat-runtime-situation.invalid/**', async route => {
+    registerBrowserFixtureAIConfigV1(page, { provider: 'custom', baseUrl: 'https://chat-runtime-situation.invalid/v1', model: 'test', maxTokens: 6000, apiKey: 'isolated-test-key' }, { serviceContextWindow: 64000 })
+    await page.route('https://chat-runtime-situation.invalid/v1/chat/completions', async route => {
             if (await fulfillChatActionChoiceFixture(route)) return
         calls++;
         const prompt = JSON.stringify(route.request().postDataJSON().messages);
@@ -247,8 +247,8 @@ test('refresh resumes an unreviewed situation with one explicit review and no re
     await page.addInitScript(() => {
         localStorage.setItem('storyforge_guide_completed', 'e2e');
     });
-    registerBrowserFixtureAIConfigV1(page, { provider: 'openai', baseUrl: 'https://chat-situation-resume.invalid/v1', model: 'test', maxTokens: 6000, apiKey: 'isolated-test-key' })
-    await page.route('https://chat-situation-resume.invalid/**', async route => {
+    registerBrowserFixtureAIConfigV1(page, { provider: 'custom', baseUrl: 'https://chat-situation-resume.invalid/v1', model: 'test', maxTokens: 6000, apiKey: 'isolated-test-key' }, { serviceContextWindow: 64000 })
+    await page.route('https://chat-situation-resume.invalid/v1/chat/completions', async route => {
             if (await fulfillChatActionChoiceFixture(route)) return
         calls++;
         const output = calls === 1 ? {kind: 'chat-situation', title: '敲门声', location: '驿站', timeLabel: '傍晚', newFacts: [{factKey: 'knocking', kind: 'observation', text: '门外传来敲门声。', audienceKeys: ['player', 'guard', 'artisan'], evidenceFactKeys: ['road'], seedExcerpt: '门外传来敲门声'}], newGoals: [], newThreads: [], possibilities: [{actorKey: 'guard', text: '可以隔门询问，也可以等待。', evidenceFactKeys: ['knocking']}]} : {checks: ['continuity', 'permissions', 'player-agency', 'visibility', 'meaningful-direction'].map(check => ({check, passed: true, reason: '工程夹具'}))};
@@ -262,7 +262,7 @@ test('refresh resumes an unreviewed situation with one explicit review and no re
         const v = await api.readProductRuntimeStateVersion(f.sessionId);
         await api.requestChatNarrativeTrigger({sessionId: f.sessionId, commandId: 'seed', baseSequence: v.sequence, baseStateHash: v.stateHash, kind: 'player-seed', sourceEventSequence: v.sequence, seed: '门外传来敲门声。'});
         try {
-            await (await load('/storyforge/src/lib/character-interaction/harness.ts')).generateInteractionRuntimeCandidateV1({scope: f.scope, productRuntimeSessionId: f.sessionId, participantKey: 'player', skillId: 'character.chat-situation-construction', objective: '内化情境请求', aiConfig: {provider: 'openai', baseUrl: 'https://chat-situation-resume.invalid/v1', model: 'test', apiKey: 'isolated-test-key', maxTokens: 6000}, onSituationDraftSaved: () => {throw new Error('host-crashed');}});
+            await (await load('/storyforge/src/lib/character-interaction/harness.ts')).generateInteractionRuntimeCandidateV1({scope: f.scope, productRuntimeSessionId: f.sessionId, participantKey: 'player', skillId: 'character.chat-situation-construction', objective: '内化情境请求', aiConfig: {provider: 'custom', baseUrl: 'https://chat-situation-resume.invalid/v1', model: 'test', apiKey: 'isolated-test-key', maxTokens: 6000}, onSituationDraftSaved: () => {throw new Error('host-crashed');}});
         } catch (error) {if (!String(error).includes('host-crashed')) throw error;}
         return f;
     });
@@ -286,8 +286,8 @@ test('a malformed action review never exposes the unapproved reply or coordinato
     await page.addInitScript(() => {
         localStorage.setItem('storyforge_guide_completed', 'e2e');
     });
-    registerBrowserFixtureAIConfigV1(page, { provider: 'openai', baseUrl: 'https://chat-review-private.invalid/v1', model: 'test', maxTokens: 9000, apiKey: 'isolated-test-key' })
-    await page.route('https://chat-review-private.invalid/**', async route => {
+    registerBrowserFixtureAIConfigV1(page, { provider: 'custom', baseUrl: 'https://chat-review-private.invalid/v1', model: 'test', maxTokens: 9000, apiKey: 'isolated-test-key' }, { serviceContextWindow: 64000 })
+    await page.route('https://chat-review-private.invalid/v1/chat/completions', async route => {
             if (await fulfillChatActionChoiceFixture(route)) return
         calls++;
         const request = route.request().postDataJSON();
@@ -320,8 +320,8 @@ test('two browser pages cannot duplicate a narrative model call and player inter
     await context.addInitScript(() => {
         localStorage.setItem('storyforge_guide_completed', 'e2e');
     });
-    registerBrowserFixtureAIConfigV1(context, { provider: 'openai', baseUrl: 'https://chat-concurrency.invalid/v1', model: 'test', maxTokens: 4000, apiKey: 'isolated-test-key' })
-    await context.route('https://chat-concurrency.invalid/**', async route => {
+    registerBrowserFixtureAIConfigV1(context, { provider: 'custom', baseUrl: 'https://chat-concurrency.invalid/v1', model: 'test', maxTokens: 4000, apiKey: 'isolated-test-key' }, { serviceContextWindow: 64000 })
+    await context.route('https://chat-concurrency.invalid/v1/chat/completions', async route => {
             if (await fulfillChatActionChoiceFixture(route)) return
         calls++; requestStarted(); await responseReady;
         const action = {kind: 'attempt', text: '尚未提交的后门邀请', goalKey: 'find-seal', evidenceFactKeys: ['lost'], audienceKeys: ['guard', 'player'], waitingForPlayer: true, newFacts: [], disclosures: [], threadUpdates: [], goalStatus: null};
@@ -341,7 +341,7 @@ test('two browser pages cannot duplicate a narrative model call and player inter
         await expect(other.getByRole('button', {name: '让角色继续', exact: true})).toBeDisabled();
         const concurrent = await other.evaluate(async f => {
             const load = new Function('p', 'return import(p)');
-            try { await (await load('/storyforge/src/lib/character-interaction/harness.ts')).generateInteractionRuntimeCandidateV1({scope: f.scope, productRuntimeSessionId: f.sessionId, participantKey: 'guard', skillId: 'character.chat-narrative-action', objective: 'duplicate attempt', aiConfig: {provider: 'openai', baseUrl: 'https://chat-concurrency.invalid/v1', model: 'test', apiKey: 'isolated-test-key'}}); return 'unexpected'; }
+            try { await (await load('/storyforge/src/lib/character-interaction/harness.ts')).generateInteractionRuntimeCandidateV1({scope: f.scope, productRuntimeSessionId: f.sessionId, participantKey: 'guard', skillId: 'character.chat-narrative-action', objective: 'duplicate attempt', aiConfig: {provider: 'custom', baseUrl: 'https://chat-concurrency.invalid/v1', model: 'test', apiKey: 'isolated-test-key'}}); return 'unexpected'; }
             catch (error) {return String(error);}
         }, fixture);
         expect(concurrent).toContain('另一页面正在生成');
@@ -366,8 +366,8 @@ test('normal narrative chat opens, accepts refusal, continues and reloads withou
     await page.addInitScript(() => {
         localStorage.setItem('storyforge_guide_completed', 'e2e');
     });
-    registerBrowserFixtureAIConfigV1(page, { provider: 'openai', baseUrl: 'https://chat-action.invalid/v1', model: 'test', temperature: .2, maxTokens: 4000, apiKey: 'isolated-test-key' })
-    await page.route('https://chat-action.invalid/**', async route => {
+    registerBrowserFixtureAIConfigV1(page, { provider: 'custom', baseUrl: 'https://chat-action.invalid/v1', model: 'test', temperature: .2, maxTokens: 4000, apiKey: 'isolated-test-key' }, { serviceContextWindow: 64000 })
+    await page.route('https://chat-action.invalid/v1/chat/completions', async route => {
             if (await fulfillChatActionChoiceFixture(route)) return
         calls++;
         const prompt = JSON.stringify(route.request().postDataJSON().messages);
@@ -427,8 +427,8 @@ test(`v3 production offers initial situations, retains them across refresh and f
     await page.addInitScript(() => {
         localStorage.setItem('storyforge_guide_completed', 'e2e');
     });
-    registerBrowserFixtureAIConfigV1(page, { provider: 'openai', baseUrl: 'https://chat-situation.invalid/v1', model: 'test', temperature: .2, maxTokens: 16000, apiKey: 'isolated-test-key' })
-    await page.route('https://chat-situation.invalid/**', async route => {
+    registerBrowserFixtureAIConfigV1(page, { provider: 'custom', baseUrl: 'https://chat-situation.invalid/v1', model: 'test', temperature: .2, maxTokens: 16000, apiKey: 'isolated-test-key' }, { serviceContextWindow: 64000 })
+    await page.route('https://chat-situation.invalid/v1/chat/completions', async route => {
             if (await fulfillChatActionChoiceFixture(route)) return
         const body = route.request().postDataJSON();
         const prompt = JSON.stringify(body.messages);
@@ -624,8 +624,8 @@ test('narrative situation survives browser reload and checkpoint branch with rol
 test('character chat pages stay open; draft and confirmed main Agent candidate survive refresh', async ({ page }, info) => {
     test.setTimeout(120000);
     await page.addInitScript(() => { localStorage.setItem('storyforge_guide_completed', 'e2e');   });
-    registerBrowserFixtureAIConfigV1(page, { provider: 'openai', baseUrl: 'https://chat-test.invalid/v1', model: 'test', temperature: .2, maxTokens: 8000, apiKey: 'isolated-test-key' })
-    await page.route('https://chat-test.invalid/**', route => route.fulfill({ contentType: 'application/json', body: JSON.stringify({ choices: [{ message: { role: 'assistant', content: chatActionResponseFixture(route, { answer: '建议让玩家成为档案员，请确认。', changes: [{field: 'playerRole', value: '档案员', reason: '按作者本次要求起草身份提议，不改动其他设置。', basis: 'proposal', evidence: []}] }) }, finish_reason: 'stop' }], usage: { prompt_tokens: 100, completion_tokens: 100, total_tokens: 200 } }) }));
+    registerBrowserFixtureAIConfigV1(page, { provider: 'custom', baseUrl: 'https://chat-test.invalid/v1', model: 'test', temperature: .2, maxTokens: 8000, apiKey: 'isolated-test-key' }, { serviceContextWindow: 64000 })
+    await page.route('https://chat-test.invalid/v1/chat/completions', route => route.fulfill({ contentType: 'application/json', body: JSON.stringify({ choices: [{ message: { role: 'assistant', content: chatActionResponseFixture(route, { answer: '建议让玩家成为档案员，请确认。', changes: [{field: 'playerRole', value: '档案员', reason: '按作者本次要求起草身份提议，不改动其他设置。', basis: 'proposal', evidence: []}] }) }, finish_reason: 'stop' }], usage: { prompt_tokens: 100, completion_tokens: 100, total_tokens: 200 } }) }));
     for (const [id] of CHAT_PAGES) {
         await gotoWithBrowserFixtureAIConfigV1(page, `./chat/${id}`);
         await expect(page.getByTestId('character-chat-page')).toBeVisible();
