@@ -1,4 +1,7 @@
 // Eval-only. Production algorithms, original fixtures, no author database or adoption.
+/** @typedef {{start:number,end:number,sourceLength:number,part:string}} EvalSelection */
+/** @typedef {{role:'system'|'user'|'assistant',content:string}} EvalMessage */
+/** @typedef {{raw:string,selection:EvalSelection}} EvalAnswer */
 import { readFile, mkdir, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
@@ -14,6 +17,7 @@ const { profile, apiKey } = local.loadProfile(process.argv[3] || 'agnes-primary'
 await mkdir(output, { recursive: false })
 const server = await createServer({ server: { middlewareMode: true }, appType: 'custom' })
 let count = 0
+/** @param {string|Buffer} text */
 const hash = text => createHash('sha256').update(text).digest('hex')
 const evidence = []
 const sourceHashes = Object.fromEntries(await Promise.all(['src/lib/reference-analysis/adaptive-requests.ts', 'src/lib/reference-analysis/request-capacity.ts', 'src/lib/reference-analysis/derived-agent-plan.ts', 'scripts/evaluate-reference-capacity.mjs'].map(async path => [path, hash(await readFile(path))])))
@@ -28,13 +32,17 @@ try {
     '【块5】小弥把铜钥匙交回柳迟，并说明阿渡去领药。钥匙的归还者是小弥，不是阿渡亲手归还。篇末止于这一天，不能推断柳迟或阿渡此后的死亡。',
   ]
   const filler = '【逐块分析补充】港口日常描写保留安静体验的成立空间，不能把所有停顿改成袭击；来源没有支持更晚的结局。\n'
+  /** @param {number} repetitions */
   const makeSource = repetitions => facts.map((fact, i) => `【块 ${i + 1}】\n${fact}\n${filler.repeat(repetitions)}`).join('\n')
   const small = makeSource(20)
   const large = makeSource(500)
   await writeFile(resolve(output, 'fixtures.json'), JSON.stringify({ small, large, hashes: { small: hash(small), large: hash(large) } }, null, 2))
+  /** @param {EvalSelection} selection */
   const messages = selection => buildReferenceDerivedMessagesV1({ mode: 'summary', summaryKeys: ['characterCraft', 'plotStructure'],
     registeredContext: `${referenceSelectionContextV1(selection)}\n登记维度：characterCraft、plotStructure`,
   })
+  /** @param {EvalMessage[]} messages
+   * @param {EvalSelection} selection */
   const invoke = async (messages, selection) => {
     const id = String(++count).padStart(3, '0')
     const defaults = { ...profile.api.chat.requestDefaults }
@@ -59,13 +67,15 @@ try {
     console.log(`evaluation ${id} preserved`)
     return { raw, finishReason }
   }
-  const cases = [['large-complete', large, null], ['small-complete', small, null], ['small-window-stress', small, 3600]].filter(([name]) => !process.env.REFERENCE_CAPACITY_SMALL_ONLY || name !== 'large-complete')
-  for (const [name, source, inputLimit] of cases) {
+  /** @type {Array<[string,string,number|null]>} */
+  const cases = [['large-complete', large, null], ['small-complete', small, null], ['small-window-stress', small, 3600]]
+  for (const [name, source, inputLimit] of cases.filter(([name]) => !process.env.REFERENCE_CAPACITY_SMALL_ONLY || name !== 'large-complete')) {
     const before = count
     try {
+      /** @type {EvalAnswer[]} */
       const answers = await runAdaptiveReferenceRequestsV1({ source, inputLimit, messages, invoke })
       const global = answers.length === 1 ? answers[0].raw : await reviewReferenceAcrossBatchesV1({ answers, inputLimit, invoke,
-        messages: selection => buildReferenceCrossRangeMessagesV1(selection, ['characterCraft', 'plotStructure']),
+        messages: (/** @type {EvalSelection} */ selection) => buildReferenceCrossRangeMessagesV1(selection, ['characterCraft', 'plotStructure']),
       })
       const final = JSON.parse(global)
       if (Object.keys(final).join('|') !== 'characterCraft|plotStructure' || !Object.values(final).every(value => typeof value === 'string' && value.trim())) throw Error('Final protocol failed; raw answers retained')
@@ -77,7 +87,7 @@ try {
       await writeFile(resolve(output, name + '.result.json'), JSON.stringify(result, null, 2))
       evidence.push({ name, outcome: 'returned', calls: result.calls, completeCoverage: result.completeCoverage, sourceHash: result.sourceHash })
     } catch (error) {
-      evidence.push({ name, outcome: 'failed', calls: count - before, error: error.message })
+      evidence.push({ name, outcome: 'failed', calls: count - before, error: error instanceof Error ? error.message : String(error) })
       await writeFile(resolve(output, name + '.failure.json'), JSON.stringify(evidence.at(-1), null, 2))
       throw error
     }

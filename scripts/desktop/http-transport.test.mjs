@@ -15,7 +15,7 @@ function fixture(fetch = async () => new Response('data: 中文\n\n')) {
   const clear = installHttpTransport({ window, ipcMain: { handle: (key, value) => handlers.set(key, value) },
     origin: 'http://localhost:17831', fetch: (...args) => { calls.push(args); return fetch(...args) } })
   const options = { id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', url: 'https://relay.example/v1/chat/completions', method: 'POST', headers: { authorization: 'Bearer synthetic-only', cookie: 'session=never-forward', origin: 'forged', 'content-type': 'application/json' }, body: Buffer.from('{}').toString('base64') }
-  return { clear, calls, event, contents, options, call: (/** @type {string} */ name, /** @type {{id:string}} */ value, /** @type {import("./http-transport.mjs").Caller} */ caller = event) => handlers.get('client-http:' + name)(caller, value) }
+  return { clear, calls, event, contents, options, call: (/** @type {string} */ name, /** @type {{id:string} & Partial<import("./http-transport.mjs").OpenOptions>} */ value, /** @type {import("./http-transport.mjs").Caller} */ caller = event) => handlers.get('client-http:' + name)(caller, value) }
 }
 test('trusted requests preserve explicit payload and status without cookies, redirect or replay', async () => {
   const f = fixture(async () => new Response('quota', { status: 429, headers: { 'retry-after': '5', 'set-cookie': 'no' } }))
@@ -91,6 +91,7 @@ test('chunked large body sends exactly one complete POST with verified SHA-256 a
   const body = Buffer.alloc(4 * 1024 * 1024 + 17, 0x5a)
   const hash = createHash('sha256').update(body).digest('hex')
   const chunkSize = 4 * 1024 * 1024
+  /** @param {number} index @param {number} total @param {Buffer} data */
   const send = async (index, total, data, digest = hash, url = f.options.url, method = f.options.method) =>
     f.call('openChunked', { ...f.options, chunkIndex: String(index), totalChunks: String(total), bodySha256: digest,
       body: data.toString('base64'), url, method })
@@ -104,6 +105,7 @@ test('chunked large body sends exactly one complete POST with verified SHA-256 a
     assert.equal(second.status, 200)
     assert.equal(f.calls.length, 1)
     const [, init] = f.calls[0]
+    assert.ok(Buffer.isBuffer(init.body))
     assert.equal(Buffer.compare(init.body, body), 0)
     assert.equal(init.method, 'POST')
     assert.equal(Buffer.from((await f.call('read', f.options)).data, 'base64').toString(), 'data: 中文\n\n')
@@ -114,6 +116,7 @@ test('incomplete sequence, duplicate index, wrong hash, inconsistent url or canc
   const hash = createHash('sha256').update(body).digest('hex')
   const make = () => fixture()
   const base = { chunkIndex: '0', totalChunks: '2', bodySha256: hash, body: body.subarray(0, 4 * 1024 * 1024).toString('base64') }
+  /** @type {Array<[string, (f: ReturnType<typeof fixture>) => Promise<void>]>} */
   const cases = [
     ['incomplete', async f => { await f.call('openChunked', { ...f.options, ...base }); assert.equal(f.calls.length, 0) }],
     ['duplicate', async f => { await f.call('openChunked', { ...f.options, ...base }); await assert.rejects(f.call('openChunked', { ...f.options, ...base }), /Inconsistent|chunk/) }],
@@ -133,6 +136,7 @@ test('legacy single open still accepts bodies above the old 32MiB cap as one com
     const meta = await f.call('open', { ...f.options, body: body.toString('base64') })
     assert.equal(meta.status, 200)
     assert.equal(f.calls.length, 1)
+    assert.ok(Buffer.isBuffer(f.calls[0][1].body))
     assert.equal(Buffer.compare(f.calls[0][1].body, body), 0)
   } finally { f.clear() }
 })

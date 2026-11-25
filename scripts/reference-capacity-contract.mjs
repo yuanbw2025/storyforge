@@ -1,4 +1,6 @@
-/** Capacity evaluation reuses production batching with original fixtures only; it has no DB/write authority. */
+/** @typedef {{entryId?:string,boundary?:string,adoptAllowed?:boolean,adoptionTargets?:string[],caller?:string,contract?:string,transport?:string}} OfflineCapacityEntry */
+/** Capacity evaluation reuses production batching with original fixtures only; it has no DB/write authority.
+ * @param {{offlineEvaluations?:OfflineCapacityEntry[]}} registry */
 export function assertOfflineReferenceCapacityEntry(registry) {
   const entry = registry.offlineEvaluations?.find(row => row.entryId === 'eval.reference.service-capacity')
   if (!entry || entry.boundary !== 'eval-only' || entry.adoptAllowed !== false || entry.adoptionTargets?.length

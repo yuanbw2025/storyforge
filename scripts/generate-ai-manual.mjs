@@ -152,7 +152,7 @@ function extractSeeds() {
 // ── ③ CONTEXT_SOURCES ──
 function extractContextSources() {
   const captures = new Map()
-  visit(parseSource('src/lib/registry/context-sources.ts'), node => {
+  visit(parseSource('src/lib/registry/context-sources.ts'), (/** @type {ts.Node} */ node) => {
     if (!ts.isObjectLiteralExpression(node)) return
     const key = stringValue(objectProperty(node, 'key')?.initializer)
     const capability = objectProperty(node, 'fullCapture')?.initializer
