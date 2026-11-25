@@ -2,6 +2,7 @@ import { requireFixedBudgetValueV1 } from '../finite-budget'
 import { db } from '../../db/schema'
 import type { AIRequestSettingsV1 } from '../../ai/client'
 import type {
+  AIConfig,
   AgentRunContractV1,
   AgentRunEventTypeV1,
   AgentRunRecord,
@@ -77,6 +78,7 @@ export interface RunDurableConsistencyAuditInputV1 {
   mode: ExplicitConsistencyModeV1
   provider?: string
   model?: string
+  modelConfig?: AIConfig
   requestSettings?: AIRequestSettingsV1
   budget: AgentTeamBudgetTracker
   call: Parameters<typeof runConsistencyAgent>[0]['call']
@@ -423,6 +425,7 @@ async function executeDurableConsistencyAuditV1(
       mode: input.mode,
       provider: input.provider as Parameters<typeof runConsistencyAgent>[0]['provider'],
       model: input.model,
+      modelConfig: input.modelConfig,
       budget: input.budget,
       call: input.call,
       trace: {
