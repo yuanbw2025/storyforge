@@ -200,8 +200,8 @@ function manualDraft(group: WorldGroup & { id: number }): string {
   ].join('\n')
 }
 
-/** B34：装配输入预算跟随绑定连接的已证实容量（预留本阶段输出），固定值仅作
- * 未知/保守容量下限；绝不无限、也不删除完整性门。 */
+/** B34：装配预算跟随实际生成路由的已证实容量并预留输出。
+ * 仅未知容量使用旧缺省；已证实的小窗口也不能被缺省放大。 */
 export const WORLDVIEW_EXPAND_DEFAULT_INPUT_TOKENS_V1 = 32_000
 
 export async function worldviewExpandInputBudgetV1(input: {
@@ -212,11 +212,11 @@ export async function worldviewExpandInputBudgetV1(input: {
   if (!input.aiConfig) return WORLDVIEW_EXPAND_DEFAULT_INPUT_TOKENS_V1
   try {
     const resolved = resolveRequestConfig(input.aiConfig, {
-      category: 'world-origin.worldview-expand', projectId: input.projectId,
+      category: 'world-group.expand', projectId: input.projectId,
     }).config
     const prepared = await prepareModelCapacityV1(resolved)
     const value = evidencedInputBudgetV1({ config: prepared, outputReservation: input.outputReservation })
-    if (value != null) return Math.max(WORLDVIEW_EXPAND_DEFAULT_INPUT_TOKENS_V1, value)
+    if (value != null && prepared.modelCapacity?.confidence !== 'fallback') return value
   } catch {
     // 容量未证实（离线/未知模型）时退回缺省下限。
   }
