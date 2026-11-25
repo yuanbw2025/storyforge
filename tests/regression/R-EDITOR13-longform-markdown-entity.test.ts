@@ -145,7 +145,7 @@ describe('EDITOR13 · CM主机实体装饰与@补全接缝', () => {
   })
 
   it('⑤ @字符输入后decorator更新：插入含实体名的文本后出现data-entity-id标记', async () => {
-    const { scope, chapter } = await fixture('<p>欢迎来到长安城</p>')
+    const { scope, chapter } = await fixture('long', '<p>欢迎来到长安城</p>')
     const host = document.createElement('div')
     document.body.append(host)
     const session = new LongformMarkdownSessionV1({

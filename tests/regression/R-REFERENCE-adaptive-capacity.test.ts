@@ -28,7 +28,7 @@ describe('拆书按实际服务容量完整处理', () => {
     expect(result.length).toBeGreaterThan(1)
     expect(result.map(row => row.selection.part).join('')).toBe(source)
     expect(result.map(row => JSON.parse(row.raw).evidence).join('')).toBe(source)
-    expect(result.at(-1)!.selection.end).toBe(source.length)
+    expect(result[result.length - 1]!.selection.end).toBe(source.length)
     expect(result.some(row => /[\uD800-\uDBFF]$/.test(row.selection.part))).toBe(false)
   })
 
@@ -76,7 +76,7 @@ describe('拆书按实际服务容量完整处理', () => {
       invoke: async (_messages, range) => ({ raw: JSON.stringify({ evidence: range.part }) }),
       onCheckpoint: async completed => { progress = completed; if (completed.length === 2) throw stop },
     })).rejects.toBe(stop)
-    const offset = progress.at(-1)!.selection.end
+    const offset = progress[progress.length - 1]!.selection.end
     const result = await runAdaptiveReferenceRequestsV1({ source, completed: progress, inputLimit: 110, messages,
       invoke: async (_messages, range) => { expect(range.start).toBeGreaterThanOrEqual(offset); return { raw: JSON.stringify({ evidence: range.part }) } },
     })

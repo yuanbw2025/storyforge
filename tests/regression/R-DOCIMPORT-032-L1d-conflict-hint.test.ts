@@ -12,7 +12,7 @@ import ImportConfirmModal from '../../src/components/system/import/ImportConfirm
 /** 032-L1-d：同名冲突只读提示。
  * 复用既有 dedup 检测，不做任何写入/adopt/DB；modal 只在同名时渲染区块。 */
 
-globalThis.IS_REACT_ACT_ENVIRONMENT = true
+Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
 const mounted: Array<{ host: HTMLDivElement; root: ReturnType<typeof createRoot> }> = []
 async function mount(element: React.ReactElement) {
   const host = document.createElement('div'); document.body.append(host)
@@ -143,7 +143,7 @@ describe('032-L1-d ImportConfirmModal conflict hint rendering', () => {
   })
 
   it('still offers both confirm targets so nothing blocks the existing adopt chain', async () => {
-    const onConfirm = (vi.fn() as unknown) as Props['onConfirm']
+    const onConfirm = (vi.fn() as unknown) as React.ComponentProps<typeof ImportConfirmModal>['onConfirm']
     const host = await mount(createElement(ImportConfirmModal, {
       ...baseProps,
       onConfirm,

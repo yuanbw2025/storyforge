@@ -13,7 +13,7 @@ import ChapterEditor from '../../src/components/editor/ChapterEditor'
 import { useChapterStore } from '../../src/stores/chapter'
 import { useOutlineStore } from '../../src/stores/outline'
 
-globalThis.IS_REACT_ACT_ENVIRONMENT = true
+Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
 
 /** 在真实 ChapterEditor 里按文案点模式按钮；用于覆盖实际生命周期而非仅会话层。 */
 async function clickModeButton(host: HTMLElement, label: string) {

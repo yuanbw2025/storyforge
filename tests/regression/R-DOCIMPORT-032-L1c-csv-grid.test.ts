@@ -31,7 +31,7 @@ vi.mock('../../src/stores/import-session', () => ({
   useImportSessionStore: { getState: () => ({ findReusableCompleted: async () => null, findUnfinished: async () => null, loadBlob: async () => null }) },
 }))
 
-globalThis.IS_REACT_ACT_ENVIRONMENT = true
+Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
 const mounted: Array<{ host: HTMLDivElement; root: ReturnType<typeof createRoot> }> = []
 async function mount(element: React.ReactElement) {
   const host = document.createElement('div'); document.body.append(host)
@@ -180,7 +180,7 @@ describe('032-L1-c preparation hook csvGrid wiring', () => {
         createElement('span', { 'data-testid': 'blocked' }, String(!!prep.textLayerBlocked))
       )
     }
-    const _host = await mount(createElement(Harness))
+    await mount(createElement(Harness))
     await act(async () => {
       await prep!.handleFile({ target: { files: [new File([' ', '\t'], 'scan.csv')], value: '' } } as unknown as React.ChangeEvent<HTMLInputElement>)
     })

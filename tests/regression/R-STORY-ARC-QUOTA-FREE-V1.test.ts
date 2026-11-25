@@ -74,10 +74,9 @@ describe('B20a · 故事线编排派发不再带固定 10k 输出配额', () => 
       projectId: project.id!,
       scope,
       worldGroupId: null,
-      kind: 'main',
-      mutation: { operation: 'create' },
+      mutationRequest: { operation: 'create' },
       authorRequest: '编排主线故事线',
-      config,
+      configOverride: config,
     })
     await runStoryArcCreativeReliabilityV1({
       prepared,
@@ -106,10 +105,9 @@ describe('B20a · 故事线编排派发不再带固定 10k 输出配额', () => 
       projectId: project.id!,
       scope,
       worldGroupId: null,
-      kind: 'main',
-      mutation: { operation: 'create' },
+      mutationRequest: { operation: 'create' },
       authorRequest: '编排主线故事线',
-      config,
+      configOverride: config,
       generationOverrides: { maxTokens: 15_000 },
     })
     await runStoryArcCreativeReliabilityV1({

@@ -27,7 +27,7 @@ vi.mock('../../src/components/editor/FloatingToolbar', async importOriginal => {
 })
 import type { Chapter } from '../../src/lib/types'
 
-globalThis.IS_REACT_ACT_ENVIRONMENT = true
+Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
 
 async function fixture(kind: 'long' | 'short' = 'long', content = '<p>第一章正文足够长可以选区预演</p>') {
   const made = kind === 'short'

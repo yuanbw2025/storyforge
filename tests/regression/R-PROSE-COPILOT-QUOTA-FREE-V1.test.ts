@@ -24,11 +24,11 @@ async function seedChapter() {
   const scope = created.scope
   const now = Date.now()
   const volumeId = await db.outlineNodes.add(stampNewRecord(scope, 'outlineNodes', {
-    parentId: null, type: 'volume', title: '第一卷', summary: '守灯人寻找潮汐钟。',
+    projectId: scope.projectId, parentId: null, type: 'volume', title: '第一卷', summary: '守灯人寻找潮汐钟。',
     order: 0, worldGroupId: null, createdAt: now, updatedAt: now,
   }, { owner: 'work' })) as number
-  const _chapterId = await db.outlineNodes.add(stampNewRecord(scope, 'outlineNodes', {
-    parentId: volumeId, type: 'chapter', title: '第一章：海床之光',
+  await db.outlineNodes.add(stampNewRecord(scope, 'outlineNodes', {
+    projectId: scope.projectId, parentId: volumeId, type: 'chapter', title: '第一章：海床之光',
     summary: '退潮后守灯人第一次看见浮空城影子。', order: 0, worldGroupId: null,
     createdAt: now, updatedAt: now,
   }, { owner: 'work' })) as number

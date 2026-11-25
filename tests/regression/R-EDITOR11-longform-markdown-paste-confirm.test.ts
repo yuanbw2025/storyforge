@@ -14,7 +14,7 @@ import { useOutlineStore } from '../../src/stores/outline'
 import ChapterEditor from '../../src/components/editor/ChapterEditor'
 import type { AuthoringPasteDraftV1 } from '../../src/lib/editor/authoring-document-adapter'
 
-globalThis.IS_REACT_ACT_ENVIRONMENT = true
+Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
 
 const LARGE = '大段粘贴内容'.repeat(4000) // 24000 字符，超过 10000 阈值
 

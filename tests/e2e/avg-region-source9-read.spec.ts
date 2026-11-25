@@ -111,7 +111,7 @@ test('actual Source9 restores and re-proves its two-input composition, plays a R
     let writes = 0
     for (const name of ['add', 'put', 'delete', 'clear'] as const) {
       const original = saved[name]
-      prototype[name] = function (...args: any[]) { writes++; return Reflect.apply(original, this, args) } as typeof original
+      Object.assign(prototype, { [name]: function (this: IDBObjectStore, ...args: unknown[]) { writes++; return Reflect.apply(original, this, args) } })
     }
     let hash = '', oldSourceRefused = false
     try {

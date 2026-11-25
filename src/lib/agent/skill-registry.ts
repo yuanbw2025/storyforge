@@ -1403,7 +1403,7 @@ export const AGENT_SKILLS = [
     } },
     contextCompression: compressionPolicy(['extensionRecords']), maxOutputTokens: 8000,
     writeTargets: [{ table: 'extensionRecords', fields: ['payload'], adoptionExtension: 'extension-record-lifecycle' }],
-    lastVerifiedAt: '2026-10-08', regressionTests: ['R-EXTENSION1-durable-ai'],
+    lastVerifiedAt: '2026-11-25', regressionTests: ['R-EXTENSION1-durable-ai'],
   },
   {
     version: 1,
@@ -1491,7 +1491,7 @@ export const AGENT_SKILLS = [
       table: 'worldviews',
       fields: WORLDVIEW_GENERATABLE_FIELD_SPECS.map(spec => spec.field),
     }],
-    lastVerifiedAt: '2026-10-08',
+    lastVerifiedAt: '2026-11-25',
     regressionTests: [
       'R-WE1-worldview-generatable-contract',
       'R-HARNESS32-worldview-field-agent',
@@ -1545,7 +1545,7 @@ export const AGENT_SKILLS = [
     },
     maxOutputTokens: 2_000,
     writeTargets: [],
-    lastVerifiedAt: '2026-10-08',
+    lastVerifiedAt: '2026-11-25',
     regressionTests: ['R-MW1-world-link-governance'],
   },
   {
@@ -1828,7 +1828,7 @@ export const AGENT_SKILLS = [
       table: 'storyCores',
       fields: STORY_CORE_GENERATABLE_FIELD_SPECS.map(spec => spec.field),
     }],
-    lastVerifiedAt: '2026-10-08',
+    lastVerifiedAt: '2026-11-25',
     regressionTests: [
       'R-HARNESS31-story-core-agent',
       'R-HARNESS31-story-core-panel-ui',
@@ -2094,7 +2094,7 @@ export const AGENT_SKILLS = [
         'statusProducerContractHash', 'statusProducerCandidateHash',
       ],
     }],
-    lastVerifiedAt: '2026-10-08',
+    lastVerifiedAt: '2026-11-25',
     regressionTests: ['R-CHAR1-character-gateway-contract', 'R-CHAR1-character-lifecycle-ui'],
   },
   {
@@ -2325,7 +2325,7 @@ export const AGENT_SKILLS = [
         'lastAlignedHash', 'producerRunId', 'producerCandidateHash',
       ],
     }],
-    lastVerifiedAt: '2026-10-08',
+    lastVerifiedAt: '2026-11-25',
     regressionTests: [
       'R-HARNESS30-story-arc-agent',
       'R-HARNESS30-story-arc-panel-ui',
@@ -2885,7 +2885,7 @@ export const AGENT_SKILLS = [
     contextGateway: OUTLINE_CONTEXT_GATEWAY_POLICY,
     maxOutputTokens: 12_000,
     writeTargets: [{ table: 'outlineNodes', fields: ['parentId', 'type', 'title', 'summary', 'order'] }],
-    lastVerifiedAt: '2026-10-09',
+    lastVerifiedAt: '2026-11-25',
     regressionTests: ['R-WEH0-skill-runtime-contract', 'R-AGENT1-chat-copilot-outline', 'R-HARNESS11-outline-batch-durable', 'R-HARNESS16-semantic-context-compression', 'R-HARNESS18-execution-version-freshness'],
   },
   {
@@ -2906,7 +2906,7 @@ export const AGENT_SKILLS = [
     contextGateway: OUTLINE_CONTEXT_GATEWAY_POLICY,
     maxOutputTokens: 8_000,
     writeTargets: [{ table: 'outlineNodes', fields: ['parentId', 'type', 'title', 'summary', 'order'] }],
-    lastVerifiedAt: '2026-10-09',
+    lastVerifiedAt: '2026-11-25',
     regressionTests: ['R-WEH0-skill-runtime-contract', 'R-HARNESS14-workflow-classifier', 'R-AGENT1-chat-copilot-outline', 'R-HARNESS16-semantic-context-compression', 'R-HARNESS18-execution-version-freshness'],
   },
   {
@@ -2927,7 +2927,7 @@ export const AGENT_SKILLS = [
     contextGateway: OUTLINE_CONTEXT_GATEWAY_POLICY,
     maxOutputTokens: 12_000,
     writeTargets: [{ table: 'outlineNodes', fields: ['parentId', 'type', 'title', 'summary', 'order'] }],
-    lastVerifiedAt: '2026-10-09',
+    lastVerifiedAt: '2026-11-25',
     regressionTests: ['R-WEH0-skill-runtime-contract', 'R-HARNESS14-workflow-classifier', 'R-AGENT1-chat-copilot-outline', 'R-HARNESS16-semantic-context-compression', 'R-HARNESS18-execution-version-freshness'],
   },
   {
@@ -2974,7 +2974,7 @@ export const AGENT_SKILLS = [
         'lastUsedSummary',
       ],
     }],
-    lastVerifiedAt: '2026-10-09',
+    lastVerifiedAt: '2026-11-25',
     regressionTests: [
       'R-HARNESS8-detailed-outline-generation-durable',
       'R-HARNESS37-detailed-outline-entry',
@@ -3279,7 +3279,7 @@ export const AGENT_SKILLS = [
     contextGateway: { ...PROSE_CONTEXT_GATEWAY_POLICY, requiredWriteTargets: [] },
     maxOutputTokens: 3_000,
     writeTargets: [],
-    lastVerifiedAt: '2026-10-09',
+    lastVerifiedAt: '2026-11-25',
     regressionTests: ['R-WEH0-skill-runtime-contract', 'R-HARNESS19-prose-semantic-review'],
   },
   {
@@ -3363,7 +3363,7 @@ export const AGENT_SKILLS = [
     contextGateway: { ...PROSE_CONTEXT_GATEWAY_POLICY, requiredWriteTargets: [] },
     maxOutputTokens: 16_000,
     writeTargets: [],
-    lastVerifiedAt: '2026-10-09',
+    lastVerifiedAt: '2026-11-25',
     regressionTests: ['R-WEH0-skill-runtime-contract', 'R-HARNESS19-prose-semantic-review'],
   },
   {
@@ -3451,7 +3451,7 @@ export const AGENT_SKILLS = [
       { table: 'storylineCrossings', fields: ['arcIdA', 'arcIdB', 'chapterId', 'chapterTitle', 'note', 'evidenceQuote'] },
       { table: 'storyArcs', fields: ['name', 'type', 'description', 'stages'] },
     ],
-    lastVerifiedAt: '2026-10-09',
+    lastVerifiedAt: '2026-11-25',
     regressionTests: ['R-AGENT5-chapter-organization', 'R-HARNESS20-chapter-post-adoption-durable', 'R-PROGRESS1-post-adoption-policy'],
   },
   {
@@ -5123,7 +5123,7 @@ export const AGENT_SKILLS = [
       fields: ['userIntentSummary'],
       adoptionExtension: 'product-production-briefs',
     }],
-    lastVerifiedAt: '2026-10-06',
+    lastVerifiedAt: '2026-11-25',
     regressionTests: ['R-PRODUCTPROD1B-consultation'],
   },
   {
@@ -5144,7 +5144,7 @@ export const AGENT_SKILLS = [
     contextGateway: PRODUCT_PRODUCTION_WORLD_GATEWAY_POLICY,
     maxOutputTokens: 8_000,
     writeTargets: [],
-    lastVerifiedAt: '2026-10-08',
+    lastVerifiedAt: '2026-11-25',
     regressionTests: ['R-TTRPG3M-campaign-proposal-harness'],
   },
   {
@@ -5169,7 +5169,7 @@ export const AGENT_SKILLS = [
       fields: ['briefJson'],
       adoptionExtension: 'product-production-briefs',
     }],
-    lastVerifiedAt: '2026-10-06',
+    lastVerifiedAt: '2026-11-25',
     regressionTests: ['R-PRODUCTPROD1B-consultation', 'R-PRODUCTPROD1B-commands'],
   },
   {
@@ -5190,7 +5190,7 @@ export const AGENT_SKILLS = [
     contextGateway: PRODUCT_PRODUCTION_WORLD_GATEWAY_POLICY,
     maxOutputTokens: 12_000,
     writeTargets: [{ table: 'productBuilds', fields: ['planJson'], adoptionExtension: 'product-production-builds' }],
-    lastVerifiedAt: '2026-10-06',
+    lastVerifiedAt: '2026-11-25',
     regressionTests: ['R-PRODUCTPROD1C-plan', 'R-PRODUCTPROD1D-scheduler'],
   },
   {
@@ -5261,7 +5261,7 @@ export const AGENT_SKILLS = [
     contextGateway: PRODUCT_PRODUCTION_WORLD_GATEWAY_POLICY,
     maxOutputTokens: 16_000,
     writeTargets: [{ table: 'productBuildArtifacts', fields: ['payloadJson'], adoptionExtension: 'product-production-artifacts' }],
-    lastVerifiedAt: '2026-10-06',
+    lastVerifiedAt: '2026-11-25',
     regressionTests: ['R-PRODUCTPROD1F-production-executor'],
   },
   {
@@ -5371,7 +5371,7 @@ export const AGENT_SKILLS = [
     ]),
     maxOutputTokens: 20_000,
     writeTargets: [{ table: 'productBuildArtifacts', fields: ['payloadJson'], adoptionExtension: 'product-production-artifacts' }],
-    lastVerifiedAt: '2026-10-10',
+    lastVerifiedAt: '2026-11-25',
     regressionTests: ['R-TEXTADV3-agent-team', 'R-TEXTADV3-production-artifacts'],
   },
   {
@@ -5438,7 +5438,7 @@ export const AGENT_SKILLS = [
     ]),
     maxOutputTokens: 24_000,
     writeTargets: [{ table: 'productBuildArtifacts', fields: ['payloadJson'], adoptionExtension: 'product-production-artifacts' }],
-    lastVerifiedAt: '2026-10-10',
+    lastVerifiedAt: '2026-11-25',
     regressionTests: ['R-TEXTADV3-agent-team', 'R-TEXTADV-quest-settlement', 'R-PRODUCTPROD1F-production-executor'],
   },
   {
@@ -5895,7 +5895,7 @@ export const AGENT_SKILLS = [
     contextGateway: PRODUCT_PRODUCTION_WORLD_GATEWAY_POLICY,
     maxOutputTokens: 8_000,
     writeTargets: [{ table: 'productBuildArtifacts', fields: ['metadataJson'], adoptionExtension: 'product-production-artifacts' }],
-    lastVerifiedAt: '2026-10-06',
+    lastVerifiedAt: '2026-11-25',
     regressionTests: ['R-PRODUCTPROD1F-production-executor'],
   },
   {
@@ -5916,7 +5916,7 @@ export const AGENT_SKILLS = [
     contextGateway: PRODUCT_PRODUCTION_WORLD_GATEWAY_POLICY,
     maxOutputTokens: 4_000,
     writeTargets: [{ table: 'productBuildArtifacts', fields: [], adoptionExtension: 'product-production-artifacts' }],
-    lastVerifiedAt: '2026-10-06',
+    lastVerifiedAt: '2026-11-25',
     regressionTests: ['R-PRODUCTPROD1E-media-adapters', 'R-PRODUCTPROD1F-production-executor'],
   },
   {
@@ -6071,7 +6071,7 @@ export const AGENT_SKILLS = [
     contextGateway: PRODUCT_PRODUCTION_WORLD_GATEWAY_POLICY,
     maxOutputTokens: 6_000,
     writeTargets: [{ table: 'productBuilds', fields: ['manifestJson', 'previewManifestJson'], adoptionExtension: 'product-production-builds' }],
-    lastVerifiedAt: '2026-10-06',
+    lastVerifiedAt: '2026-11-25',
     regressionTests: ['R-PRODUCTPROD1F-production-executor'],
   },
   {
@@ -6092,7 +6092,7 @@ export const AGENT_SKILLS = [
     contextGateway: PRODUCT_PRODUCTION_WORLD_GATEWAY_POLICY,
     maxOutputTokens: 6_000,
     writeTargets: [{ table: 'productBuilds', fields: ['qualityReportJson'], adoptionExtension: 'product-production-builds' }],
-    lastVerifiedAt: '2026-10-06',
+    lastVerifiedAt: '2026-11-25',
     regressionTests: ['R-PRODUCTPROD1F-production-executor'],
   },
   {
@@ -6112,7 +6112,7 @@ export const AGENT_SKILLS = [
     contextCompression: compressionPolicy(['product-production.evolution-base']),
     maxOutputTokens: 8_000,
     writeTargets: [{ table: 'productBuilds', fields: ['compatibilityJson'], adoptionExtension: 'product-production-builds' }],
-    lastVerifiedAt: '2026-10-06',
+    lastVerifiedAt: '2026-11-25',
     regressionTests: ['R-PRODUCTPROD1B-commands', 'R-PRODUCTPROD1D-scheduler', 'R-PRODUCTPROD1F-production-executor'],
   },
 ] as const satisfies readonly AgentSkillDefinitionV1[]

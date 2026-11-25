@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import HistoryTimelineEventCard from '../../src/components/history/HistoryTimelineEventCard'
 import type { Chapter, HistoricalTimelineEvent } from '../../src/lib/types'
 
-globalThis.IS_REACT_ACT_ENVIRONMENT = true
+Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
 
 const mounted: Array<{ host: HTMLDivElement; root: ReturnType<typeof createRoot> }> = []
 
@@ -135,9 +135,9 @@ describe('AUDIT-6 · 历史时间线事件卡', () => {
 
   it('展开态将字段、属性与章节变化转成精确 patch', async () => {
     const { host, props } = await mount({ expanded: true })
-    const title = host.querySelector('input[value="开元改制"]')!
-    const era = host.querySelector('select[aria-label="历史时期"]')!
-    const year = host.querySelector('input[aria-label="数字化年份"]')!
+    const title = host.querySelector<HTMLInputElement>('input[value="开元改制"]')!
+    const era = host.querySelector<HTMLSelectElement>('select[aria-label="历史时期"]')!
+    const year = host.querySelector<HTMLInputElement>('input[aria-label="数字化年份"]')!
     const description = host.querySelector('textarea')!
     const radios = Array.from(host.querySelectorAll('input[type="radio"]')) as HTMLInputElement[]
 

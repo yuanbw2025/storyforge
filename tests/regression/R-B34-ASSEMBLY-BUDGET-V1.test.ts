@@ -1,3 +1,4 @@
+import type { AIConfig } from '../../src/lib/types'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { getModelCapacityV1, modelInputBudgetV1, resetModelCapacityForTestsV1 } from '../../src/lib/ai/model-capacity'
 import { useAIConfigStore } from '../../src/stores/ai-config'
@@ -12,9 +13,9 @@ import {
   frozenWorldMapInputBudgetV1,
 } from '../../src/lib/agent/run/world-map-config-durable'
 
-const evidenced = { provider: 'deepseek', model: 'deepseek-v4-flash',
+const evidenced: AIConfig = { provider: 'deepseek', model: 'deepseek-v4-flash',
   baseUrl: 'https://api.deepseek.com/v1', apiKey: 'isolated-only', maxTokens: 8_000, temperature: 0 }
-const unknown = { provider: 'custom', model: 'unknown-conservative-model',
+const unknown: AIConfig = { provider: 'custom', model: 'unknown-conservative-model',
   baseUrl: 'https://isolated.invalid/v1', apiKey: 'isolated-only', contextWindow: 262_144,
   maxTokens: 8_000, temperature: 0 }
 

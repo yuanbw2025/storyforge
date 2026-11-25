@@ -19,7 +19,7 @@ function bytesOf(length: number): Uint8Array {
 
 describe('B20d · 完整 POST 传输门：桥内分片对应一个完整请求', () => {
   it('小于等于分片大小：保持单次 open 调用（旧桥路径字节一致）', async () => {
-    const native = { open: vi.fn(async () => ({ status: 200, headers: {} })) }
+    const native = { open: vi.fn(async (_input: Parameters<Parameters<typeof dispatchNativeBodyV1>[0]['open']>[0]) => ({ status: 200, headers: {} })) }
     const body = bytesOf(1024)
     await dispatchNativeBodyV1(native, options, body)
     expect(native.open).toHaveBeenCalledTimes(1)
@@ -28,7 +28,7 @@ describe('B20d · 完整 POST 传输门：桥内分片对应一个完整请求',
   })
 
   it('无分片能力或探针不支持的旧桥：即使大 body 也走原单次 open，不丢保护', async () => {
-    const native = { open: vi.fn(async () => ({ status: 200, headers: {} })) }
+    const native = { open: vi.fn(async (_input: Parameters<Parameters<typeof dispatchNativeBodyV1>[0]['open']>[0]) => ({ status: 200, headers: {} })) }
     const body = bytesOf(NATIVE_BODY_CHUNK_BYTES_V1 + 1)
     await dispatchNativeBodyV1(native, options, body)
     expect(native.open).toHaveBeenCalledTimes(1)
@@ -63,7 +63,7 @@ describe('B20d · 完整 POST 传输门：桥内分片对应一个完整请求',
 
   it('Capacitor 代理看似有方法但能力探针缺失时仍走旧桥（防误判）', async () => {
     const native = {
-      open: vi.fn(async () => ({ status: 200, headers: {} })),
+      open: vi.fn(async (_input: Parameters<Parameters<typeof dispatchNativeBodyV1>[0]['open']>[0]) => ({ status: 200, headers: {} })),
       openChunked: vi.fn(async () => { throw new Error('旧原生插件不存在此方法') }),
       // no getCapabilities: proxy may still expose a truthy openChunked stub
     }
@@ -77,7 +77,7 @@ describe('B20d · 完整 POST 传输门：桥内分片对应一个完整请求',
   it('取消/中止由调用方 AbortSignal 处理，不在此处吞错', async () => {
     const native = {
       getCapabilities: vi.fn(async () => ({ chunkedBodyVersion: 1 })),
-      open: vi.fn(async () => ({ status: 200, headers: {} })),
+      open: vi.fn(async (_input: Parameters<Parameters<typeof dispatchNativeBodyV1>[0]['open']>[0]) => ({ status: 200, headers: {} })),
       openChunked: vi.fn(async () => { throw new Error('bridge-refused') }),
     }
     await expect(dispatchNativeBodyV1(native, options, bytesOf(NATIVE_BODY_CHUNK_BYTES_V1 + 1))).rejects.toThrow('bridge-refused')
@@ -86,8 +86,8 @@ describe('B20d · 完整 POST 传输门：桥内分片对应一个完整请求',
   it('派发前或分片间中止：不发起任何 open/openChunked', async () => {
     const native = {
       getCapabilities: vi.fn(async () => ({ chunkedBodyVersion: 1 })),
-      open: vi.fn(async () => ({ status: 200, headers: {} })),
-      openChunked: vi.fn(async () => ({ status: 200, headers: {} })),
+      open: vi.fn(async (_input: Parameters<Parameters<typeof dispatchNativeBodyV1>[0]['open']>[0]) => ({ status: 200, headers: {} })),
+      openChunked: vi.fn(async (_input: Parameters<Parameters<typeof dispatchNativeBodyV1>[0]['open']>[0]) => ({ status: 200, headers: {} })),
     }
     const controller = new AbortController(); controller.abort()
     await expect(dispatchNativeBodyV1(native, options, bytesOf(1024), controller.signal)).rejects.toThrow()

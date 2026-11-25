@@ -53,7 +53,10 @@ it.each(['historical', 'development-v19'] as const)('preserves the exact retaine
   }
   const retainedInputs = legacy.requests.map((messages, index) => estimateChatActionRequestInputV1(
     messages.map((message, at) => ({...message, ...(at === 0 ? {content: prompts[index]} : {})})) as ChatMessage[]))
-  expect(retainedInputs.reduce((sum, tokens) => sum + tokens, 0)).toBeLessThanOrEqual(generated.snapshot.contract.budget.maxInputTokens)
+  const inputBudget = generated.snapshot.contract.budget.maxInputTokens
+  expect(inputBudget).not.toBeNull()
+  if (inputBudget === null) throw new Error('Expected this historical fixture to keep its finite input budget')
+  expect(retainedInputs.reduce((sum, tokens) => sum + tokens, 0)).toBeLessThanOrEqual(inputBudget)
   expect(generated.snapshot.contract.budget).toMatchObject({maxModelCalls: 2, maxInputTokens: 40000, maxAttemptsPerStep: 1})
   expect(chatInquiryEvidenceVersionForContractV1(generated.snapshot.contract)).toBe(4)
   expect(await readProductRuntimeState(f.sessionId)).toEqual(before)

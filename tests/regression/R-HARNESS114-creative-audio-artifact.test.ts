@@ -38,7 +38,7 @@ describe('R-HARNESS114 explicit audio candidate reference contract', () => {
     input.issues.push({ ...issue(true), code: 'final-blocker' }); input.status = 'blocked'
     const restored = parseCreativeAudioArtifactV1(JSON.parse(JSON.stringify(input)))
     expect(restored).toEqual(input)
-    expect(restored.issues.at(-1)?.code).toBe('final-blocker')
+    expect(restored.issues[restored.issues.length - 1]?.code).toBe('final-blocker')
     expect(restored.adoptionAllowed).toBe(false); expect(restored.automaticRetryAllowed).toBe(false)
     expect(() => parseCreativeAudioArtifactV1({ ...input, status: 'usable-with-warnings' })).toThrow('不能有 blocking')
   })

@@ -33,7 +33,7 @@ vi.mock('../../src/stores/import-session', () => ({
   }),
 }))
 
-globalThis.IS_REACT_ACT_ENVIRONMENT = true
+Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
 const mounted: Array<{ host: HTMLDivElement; root: ReturnType<typeof createRoot> }> = []
 async function mount(element: React.ReactElement) {
   const host = document.createElement('div'); document.body.append(host)

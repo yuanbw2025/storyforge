@@ -4,7 +4,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import FailureFeedbackPanel from '../../src/components/shared/FailureFeedbackPanel'
 import { recordRuntimeDiagnosticError, resetRuntimeDiagnostics } from '../../src/lib/diagnostics/runtime-errors'
 
-globalThis.IS_REACT_ACT_ENVIRONMENT = true
+Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
 let root: Root
 let container: HTMLDivElement
 const locks = Object.getOwnPropertyDescriptor(navigator, 'locks')
