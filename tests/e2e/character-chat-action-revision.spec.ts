@@ -11,8 +11,8 @@ for (const rejectRevision of [false, true]) test(`explicitly revises rejected co
   await page.addInitScript(() => {
     localStorage.setItem('storyforge_guide_completed', 'isolated-revision')
   })
-  registerBrowserFixtureAIConfigV1(page, { provider: 'openai', baseUrl: 'https://chat-revision.invalid/v1', model: 'test', maxTokens: 4000, apiKey: 'isolated-fixture-key' })
-  await page.route('https://chat-revision.invalid/**', async route => {
+  registerBrowserFixtureAIConfigV1(page, { provider: 'custom', baseUrl: 'https://chat-revision.invalid/v1', model: 'test', maxTokens: 4000, apiKey: 'isolated-fixture-key' }, { serviceContextWindow: 64000 })
+  await page.route('https://chat-revision.invalid/v1/chat/completions', async route => {
           if (await fulfillChatActionChoiceFixture(route)) return
     calls++
     const prompt = route.request().postDataJSON().messages.map((m: {content: string}) => m.content).join('\n')

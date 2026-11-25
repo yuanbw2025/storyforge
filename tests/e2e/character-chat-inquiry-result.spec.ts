@@ -10,10 +10,10 @@ for (const {privateAnswer, splitQuestion, playerInterjection} of inquiryCases) t
   await page.addInitScript(() => {
     localStorage.setItem('storyforge_guide_completed', 'e2e')
   })
-  registerBrowserFixtureAIConfigV1(page, { provider: 'openai', baseUrl: 'https://chat-inquiry.invalid/v1', model: 'test', maxTokens: 6000, apiKey: 'isolated-test-key' })
+  registerBrowserFixtureAIConfigV1(page, { provider: 'custom', baseUrl: 'https://chat-inquiry.invalid/v1', model: 'test', maxTokens: 6000, apiKey: 'isolated-test-key' }, { serviceContextWindow: 64000 })
   const calls: string[] = []; let actions = 0, totalCalls = 0, sessionId = 0, proposal: ChatSituationDraftV1
   const followup = '叶岑点点头：“我记下了，接下来会核对具体物件。你可以先做自己的事。”'
-  await page.route('https://chat-inquiry.invalid/**', async route => {
+  await page.route('https://chat-inquiry.invalid/v1/chat/completions', async route => {
     totalCalls++; if (await fulfillChatActionChoiceFixture(route)) return
     const messages = route.request().postDataJSON().messages as Array<{content: string}>, prompt = messages.map(m => m.content).join('\n')
     const actionReview = prompt.includes('本次持久化行动候选'), situationReview = prompt.includes('本次持久化情境候选')

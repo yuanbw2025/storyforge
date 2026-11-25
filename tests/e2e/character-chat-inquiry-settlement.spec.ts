@@ -14,7 +14,7 @@ for (const {width, rejectSecond} of [{width: 390, rejectSecond: false}, {width: 
     await page.addInitScript(() => {
       localStorage.setItem('storyforge_guide_completed', 'isolated-inquiry-settlement')
     })
-    registerBrowserFixtureAIConfigV1(page, { provider: 'openai', baseUrl: 'https://inquiry-settlement.invalid/v1', model: 'test', maxTokens: 6000, apiKey: 'isolated-fixture-key' })
+    registerBrowserFixtureAIConfigV1(page, { provider: 'custom', baseUrl: 'https://inquiry-settlement.invalid/v1', model: 'test', maxTokens: 6000, apiKey: 'isolated-fixture-key' }, { serviceContextWindow: 64000 })
     let sessionId = 0, actionCount = 0, answerCount = 0, totalCalls = 0, proposal: ChatSituationDraftV1
     const calls: string[] = []
     const read = () => page.evaluate(async id => {
@@ -22,7 +22,7 @@ for (const {width, rejectSecond} of [{width: 390, rejectSecond: false}, {width: 
       const {db} = await load('/storyforge/src/lib/db/schema.ts')
       return {state: await api.readProductRuntimeState(id), runs: await db.agentRuns.where('productRuntimeSessionId').equals(id).toArray()}
     }, sessionId)
-    await page.route('https://inquiry-settlement.invalid/**', async route => {
+    await page.route('https://inquiry-settlement.invalid/v1/chat/completions', async route => {
       totalCalls++; if (await fulfillChatActionChoiceFixture(route)) return
       const messages = route.request().postDataJSON().messages as Array<{content: string}>, prompt = messages.map(m => m.content).join('\n')
       const actionReview = prompt.includes('本次持久化行动候选'), situationReview = prompt.includes('本次持久化情境候选')

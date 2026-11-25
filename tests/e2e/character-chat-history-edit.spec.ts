@@ -31,8 +31,8 @@ test('editing a character message creates a recoverable draft branch and reconci
   await page.addInitScript(() => {
     localStorage.setItem('storyforge_guide_completed', 'e2e')
   })
-  registerBrowserFixtureAIConfigV1(page, { provider: 'openai', baseUrl: 'https://chat-edit.invalid/v1', model: 'test', maxTokens: 6000, apiKey: 'isolated-test-key' })
-  await page.route('https://chat-edit.invalid/**', async route => {
+  registerBrowserFixtureAIConfigV1(page, { provider: 'custom', baseUrl: 'https://chat-edit.invalid/v1', model: 'test', maxTokens: 6000, apiKey: 'isolated-test-key' }, { serviceContextWindow: 64000 })
+  await page.route('https://chat-edit.invalid/v1/chat/completions', async route => {
           if (await fulfillChatActionChoiceFixture(route)) return
     const prompt = route.request().postDataJSON().messages.map((m: {content: string}) => m.content).join('\n'), review = prompt.includes('本次持久化行动候选')
     let output: unknown

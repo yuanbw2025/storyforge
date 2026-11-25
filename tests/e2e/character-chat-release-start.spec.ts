@@ -7,9 +7,9 @@ for (const width of [390, 1440]) for (const limit of [1, 2]) test(`release detai
   await page.addInitScript(() => {
     localStorage.setItem('storyforge_guide_completed', 'e2e')
   })
-  registerBrowserFixtureAIConfigV1(page, { provider: 'openai', model: 'test', baseUrl: 'https://chat-entry.invalid/v1', apiKey: 'isolated-test-key' })
+  registerBrowserFixtureAIConfigV1(page, { provider: 'custom', model: 'test', baseUrl: 'https://chat-entry.invalid/v1', apiKey: 'isolated-test-key' }, { serviceContextWindow: 64000 })
   const calls: string[] = []
-  await page.route('https://chat-entry.invalid/**', async route => {
+  await page.route('https://chat-entry.invalid/v1/chat/completions', async route => {
     if (await fulfillChatActionChoiceFixture(route)) {calls.push('choice'); return}
     const prompt = route.request().postDataJSON().messages.map((m: {content: string}) => m.content).join('\n')
     const review = prompt.includes('本次持久化行动候选')
