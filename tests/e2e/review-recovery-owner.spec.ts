@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { installBrowserServiceCapacityFixtureV1 } from './helpers/browser-ai-config'
 
 test('真实审校组件切章即隐藏原章候选，返回可只读恢复，两个原稿和运行证据均不变', async ({ page, context, baseURL }) => {
   if (!baseURL) throw new Error('isolated origin required')
@@ -9,6 +10,7 @@ test('真实审校组件切章即隐藏原章候选，返回可只读恢复，�
     if (['http:', 'https:'].includes(url.protocol) && url.origin !== origin) { externalRequests++; return route.abort() }
     return route.continue()
   })
+  await installBrowserServiceCapacityFixtureV1(page, { provider: 'ollama', baseUrl: 'https://review-owner.invalid/v1', model: 'isolated-review' }, 128000)
   await page.goto('./world/worlds')
   // The frozen server compiles lazy bootstrap modules on its first navigation.
   await page.waitForLoadState('networkidle')

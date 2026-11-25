@@ -4,6 +4,7 @@
  */
 import { createHash } from 'node:crypto'
 import { expect, test, type Browser, type Page } from '@playwright/test'
+import { installBrowserServiceCapacityFixtureV1 } from './helpers/browser-ai-config'
 import { openLongformLeaf } from './helpers/longform-navigation'
 
 interface FamilySeed { projectId: number; sessionId: number; title: string; rawHex: string; chunkTexts: string[] }
@@ -169,6 +170,7 @@ test('013 actual project deletion UI → independent tab retained Session refuse
         return result
       } })
     })
+    await targetCard.getByText('更多操作', { exact: true }).click()
     await targetCard.getByRole('button', { name: '删除作品', exact: true }).click()
     await page.getByRole('dialog', { name: '危险操作:删除项目', exact: true }).getByRole('button', { name: '继续', exact: true }).click()
     await page.getByRole('dialog', { name: /^是否立即下载备份/ }).getByRole('button', { name: '已备份，继续', exact: true }).click()
@@ -261,6 +263,7 @@ test('022 browser restores the exact paid candidate and waits for a visible auth
   const page = await context.newPage()
   try {
     await page.goto('./')
+    await installBrowserServiceCapacityFixtureV1(page, { provider: 'custom', baseUrl: 'https://quality022.invalid/v1', model: 'synthetic-import-model' }, 131072)
     const [source] = await seed(page, ['QUALITY022 作者确认'])
     if (!source) throw new Error('missing isolated import seed')
     await page.goto(`./workspace/${source.projectId}`)
