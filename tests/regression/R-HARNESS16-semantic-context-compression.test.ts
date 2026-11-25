@@ -347,6 +347,8 @@ describe('R-HARNESS16 · 语义压缩、锚点保真与单来源回退', () => {
     const projectId = (await seedCurrentWorkspace('Semantic compression')).scope.projectId
     const content = sourceText(1_100)
     const inputBudgetTokens = 1_400
+    // manualText now takes the request budget. Use that same budget for the
+    // mock's anchors instead of scaling the source down to 10% of the request.
     const anchors = extractContextCompressionAnchorsV1({ content, targetTokens: inputBudgetTokens })
     const policy: AgentSkillContextCompressionPolicyV1 = {
       ...getAgentSkillV1('world-origin.worldview-field', 'world-origin').contextCompression,
@@ -363,7 +365,6 @@ describe('R-HARNESS16 · 语义压缩、锚点保真与单来源回退', () => {
       sourceKeys: ['manualText'],
       manualSourceText: content,
       inputBudgetTokens,
-      sourceBudgetScale: 0.1,
       sourceTransformer: compression.sourceTransformer,
     })
     expect(assembled.sourceEvidence?.[0]).toMatchObject({
@@ -383,7 +384,6 @@ describe('R-HARNESS16 · 语义压缩、锚点保真与单来源回退', () => {
       sourceKeys: ['manualText'],
       manualSourceText: content,
       inputBudgetTokens,
-      sourceBudgetScale: 0.1,
       sourceTransformer: async source => {
         const result = await forged.sourceTransformer(source)
         return result ? {
