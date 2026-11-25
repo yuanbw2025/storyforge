@@ -190,16 +190,17 @@ function contract(scope: WorkspaceScope, worldGroupId: number | null, node: Worl
 /**
  * B34：世界地图的四类登记来源都是 L2 非原子来源，固定装配预算会静默裁剪它们，
  * 而提示词只使用 assembled.text——地图证据可能在作者不知情的情况下丢失。
- * 这里改为显式完整性门：任一登记来源未完整进入即失败且不发起模型生成（与
- * worldview-expand 的既有守卫同策略），不做静默截断。
+ * 这里改为显式完整性门：非空来源必须完整进入；登记装配器明确记录为空的来源
+ * 可以省略。无证据的遗漏或截断仍失败且不发起模型生成，不做静默截断。
  */
 export function assertWorldMapContextCompleteV1(input: {
   included: readonly string[]
   trimmed: readonly string[]
-  sourceEvidence?: ReadonlyArray<{ key: string; delivery?: string }>
+  sourceEvidence?: ReadonlyArray<{ key: string; delivery?: string; status?: string; originalCharacters?: number }>
 }): void {
   const incomplete = WORLD_MAP_CONTEXT_SOURCE_KEYS_V1.filter(key => (
-    !input.included.includes(key)
+    (!input.included.includes(key) && !input.sourceEvidence?.some(source => source.key === key
+      && source.status === 'omitted' && source.delivery === 'none' && source.originalCharacters === 0))
     || input.trimmed.includes(key)
     || input.sourceEvidence?.some(source => source.key === key && source.delivery === 'truncated')
   ))
