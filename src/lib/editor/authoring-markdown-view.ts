@@ -4,6 +4,7 @@ import { syntaxTree } from '@codemirror/language'
 import { Decoration, EditorView, ViewPlugin, WidgetType, keymap, type DecorationSet, type ViewUpdate } from '@codemirror/view'
 import { AuthoringDocumentAdapterV1, type AuthoringPasteDraftV1, type AuthoringSelectionSnapshotV1 } from './authoring-document-adapter'
 import { parseAuthoringHtmlV1 } from './authoring-html-blocks'
+import { findEditorEntityMatches, filterEditorEntityReferences, type EditorEntityReference } from './entity-reference'
 
 /** 投影给既有 FloatingToolbar 的选区快照（PM 坐标，不是 CM 源坐标）。 */
 export interface ToolbarSelectionProjectionV1 {
@@ -61,6 +62,11 @@ export class AuthoringMarkdownViewV1 {
   private pasteAbort?: AbortController
   /** 仅登记本会话由 mapSelection 签发的真实内部快照；key 用投影字段，禁止由 from/to 重建。 */
   private toolbarSelections = new Map<string, AuthoringSelectionSnapshotV1>()
+  /** 项目实体档案；装饰只读、@补全菜单使用，不写正文。 */
+  private readonly entityReferences: readonly EditorEntityReference[]
+  /** Lightweight DOM tooltip for entity hover info; managed in constructor. */
+  private popupEl: HTMLDivElement | null = null
+  /** 悬浮高亮状态：{ reference, x, y } */
   private readonly readProtected: () => ProtectedViewV1[]
   private readonly protectedField: StateField<{ rows: readonly ProtectedViewV1[]; decorations: DecorationSet }>
 
@@ -70,7 +76,10 @@ export class AuthoringMarkdownViewV1 {
     onRichText: () => void
     placeholder?: string
     onLargePaste?: (pending: { text: string; cancel: () => void; draft: Promise<AuthoringPasteDraftV1> }) => void
+    /** 项目实体档案，用于 CM 视图内只读悬浮与 @ 补全装饰。 */
+    entityReferences?: readonly EditorEntityReference[]
   }) {
+    this.entityReferences = input.entityReferences ?? []
     const report = (error: unknown) => input.onError(error instanceof Error ? error : new Error(String(error)))
     const readProtected = this.readProtected = (): ProtectedViewV1[] => {
       const current = adapter.getEnvelopes().filter(row => row.protected)
@@ -146,8 +155,57 @@ export class AuthoringMarkdownViewV1 {
         this.decorations = Decoration.set(decorations, true); this.atomic = Decoration.set(atomic, true)
       }
     }, { decorations: value => value.decorations, provide: plugin => EditorView.atomicRanges.of(view => view.plugin(plugin)?.atomic ?? Decoration.none) })
+        // Entity decoration & @ autocomplete (decorative only; reads from source text coordinates).
+    // Preview mode has invisible syntax chars so matching there is unreliable; skip in preview.
+    const entityRefs = this.entityReferences
+    const entityPlugin = ViewPlugin.fromClass(class {
+      decorations: DecorationSet = Decoration.none
+      constructor(view: EditorView) { this.build(view) }
+      build(view: EditorView) {
+        if (entityRefs.length === 0 || adapter.displayMode === 'preview'
+          || compositionEventActive() || view.compositionStarted || view.composing) {
+          this.decorations = Decoration.none; return
+        }
+        const docText = view.state.doc.toString()
+        const matches = findEditorEntityMatches(docText, entityRefs)
+        const result: Array<Range<Decoration>> = []
+        for (const m of matches) {
+          const line = view.state.doc.lineAt(m.from)
+          // Skip if not on its own line unless selected
+          if (line.from !== line.to && !view.state.selection.ranges.some(r => r.from <= m.from && r.to >= m.to)) continue
+          if (m.from < line.from || m.to > line.to) continue
+          result.push(Decoration.mark({
+            class: `sf-entity-ref sf-entity-ref-${m.reference.kind}`,
+            'data-entity-id': m.reference.id,
+          }).range(m.from, m.to))
+        }
+        this.decorations = Decoration.set(result, true)
+      }
+      update(update: ViewUpdate) {
+        if (update.docChanged || update.selectionSet || update.viewportChanged) this.build(update.view)
+      }
+    }, { decorations: v => v.decorations })
+
+    // cleanup popup on destroy
+    this.popupEl = document.createElement('div')
+    this.popupEl.className = 'sf-entity-popup'
+    this.popupEl.style.cssText = 'position:absolute;left:0;top:0;background:var(--bg-surface,#fff);border:1px solid var(--border,#ccc);border-radius:4px;padding:4px 8px;font-size:12px;color:var(--text-primary,#000);z-index:9999;pointer-events:none;max-width:280px;box-shadow:0 2px 8px rgba(0,0,0,.15);display:none'
+    input.parent.appendChild(this.popupEl)
+    const showPopup = (x: number, y: number, ref: EditorEntityReference | null) => {
+      if (!this.popupEl) return
+      this.popupEl.style.left = x + 'px'; this.popupEl.style.top = y + 'px'
+      if (ref) {
+        this.popupEl.textContent = '[' + ref.kindLabel + '] ' + ref.name
+        this.popupEl.style.display = 'block'
+      } else { this.popupEl.style.display = 'none' }
+    }
+    const entityQueryRegex = /(?:^|[\s，。！？；：、(（])@([^@\s，。！？；：、()（）]{0,20})$/
+    let entityMenuState: { query: string; from: number; to: number; x: number; y: number; filtered: EditorEntityReference[] } | null = null
+    let entityMenuIndex = 0
+    const getCMView = () => this.destroyed ? null : this.view
     adapter.attachViewExtensions([
-      this.protectedField, inlinePreview, keymap.of([...defaultKeymap, ...historyKeymap]), EditorView.lineWrapping,
+      this.protectedField, inlinePreview, entityPlugin, keymap.of([...defaultKeymap, ...historyKeymap]),
+      EditorView.lineWrapping,
       EditorView.contentAttributes.of({ 'aria-label': '正文 Markdown', 'data-placeholder': input.placeholder ?? '开始写作…', spellcheck: 'false' }),
       EditorState.transactionFilter.of(transaction => {
         if (transaction.docChanged) return transaction
@@ -156,9 +214,33 @@ export class AuthoringMarkdownViewV1 {
           || rows.some(row => range.from > row.from && range.from < row.to || range.to > row.from && range.to < row.to))) {
           report(new Error('请选择完整字符；旧格式块请使用富文本编辑。')); return []
         }
-        // Moving into hidden syntax reveals its whole grammar container in the
-        // same view update. No selection is interpreted through decoration DOM.
         return transaction
+      }),
+      EditorView.updateListener.of(update => {
+        if (update.docChanged) {
+          if (update.changes.empty) return
+          update.changes.iterChanges((_fromA, _toA, fromB, _toB, inserted) => {
+            if (!inserted.toString().endsWith('@')) return
+            const pos = fromB + inserted.length - 1
+            const before = update.state.sliceDoc(Math.max(0, pos - 40), pos)
+            const match = before.match(entityQueryRegex)
+            if (!match) return
+            const query = match[1] ?? ''
+            const coords = update.view.coordsAtPos(pos)
+            const filtered = filterEditorEntityReferences(entityRefs, query, 8)
+            entityMenuState = { query, from: pos - query.length - 1, to: pos, x: coords?.left ?? 0, y: (coords?.bottom ?? 0) + 6, filtered }
+            entityMenuIndex = 0
+            return true // stop after first match
+          })
+        }
+        if (update.selectionSet && !update.docChanged) {
+          if (entityMenuState) {
+            const s = update.view.state.selection
+            if (s.ranges.some(r => !r.empty || r.from !== entityMenuState!.to)) {
+              entityMenuState = null; entityMenuIndex = 0
+            }
+          }
+        }
       }),
       EditorView.domEventHandlers({
         paste: (event: ClipboardEvent) => {
@@ -169,8 +251,6 @@ export class AuthoringMarkdownViewV1 {
           this.pasteAbort?.abort()
           const controller = this.pasteAbort = new AbortController()
           const draft = this.preparePaste(text, controller.signal)
-          // The consumer renders pending/cancel/confirm. A rejected draft never
-          // dispatches to the editor; keep the supplied text available there.
           input.onLargePaste({ text, cancel: () => controller.abort(), draft })
           return true
         },
@@ -184,6 +264,67 @@ export class AuthoringMarkdownViewV1 {
           }
           this.compositionFrame = requestAnimationFrame(finish)
           return false
+        },
+        mouseover: (event: MouseEvent) => {
+          const target = event.target instanceof Element ? event.target.closest<HTMLElement>('[data-entity-id]') : null
+          if (!target) return false
+          const id = target.dataset.entityId
+          const reference = entityRefs.find(r => r.id === id)
+          if (!reference) return false
+          const cm = getCMView()
+          if (cm) showPopup(event.clientX, event.clientY + 6, reference)
+          return false
+        },
+        mouseout: (event: MouseEvent) => {
+          const related = event.relatedTarget
+          if (related instanceof Node && (event.currentTarget as HTMLElement).contains(related)) return false
+          const cm = getCMView()
+          if (cm) showPopup(0, 0, null)
+          return false
+        },
+        mousedown: () => {
+          // Close menu on any outside click; keep focus on CM
+          entityMenuState = null; entityMenuIndex = 0
+          return false
+        },
+        keydown: (event: KeyboardEvent) => {
+          if (!entityMenuState) return false
+          const items = entityMenuState.filtered
+          switch (event.key) {
+            case 'Escape':
+              entityMenuState = null; entityMenuIndex = 0
+              showPopup(0, 0, null); break
+            case 'Enter': {
+              if (items.length === 0) { entityMenuState = null; break }
+              const chosen = items[entityMenuIndex]
+              getCMView()?.dispatch({
+                changes: { from: entityMenuState.from, to: entityMenuState.to, insert: chosen.name },
+                selection: { anchor: entityMenuState.from + chosen.name.length },
+
+              })
+              entityMenuState = null; entityMenuIndex = 0; break
+            }
+            case 'ArrowUp': {
+              event.preventDefault()
+              entityMenuIndex = Math.max(0, entityMenuIndex - 1)
+              showPopup(entityMenuState.x, entityMenuState.y, null)
+              break
+            }
+            case 'ArrowDown': {
+              event.preventDefault()
+              entityMenuIndex = Math.min(items.length - 1, entityMenuIndex + 1)
+              showPopup(entityMenuState.x, entityMenuState.y, null)
+              break
+            }
+            default: return false
+          }
+          // Reposition after nav
+          const cm = getCMView()
+          if (cm && entityMenuState) {
+            const coords = cm.coordsAtPos(entityMenuState.from)
+            if (coords) entityMenuState = { ...entityMenuState, x: coords.left, y: coords.bottom + 6 }
+          }
+          return true
         },
       }),
       EditorView.updateListener.of(update => { if (update.selectionSet || update.docChanged) for (const listener of this.listeners) listener() }),
@@ -295,5 +436,6 @@ export class AuthoringMarkdownViewV1 {
   destroy() {
     this.destroyed = true; cancelAnimationFrame(this.compositionFrame); this.pasteAbort?.abort()
     this.listeners.clear(); this.widgets.clear(); this.toolbarSelections.clear(); this.view.destroy(); this.adapter.detachViewExtensions()
+    this.popupEl?.remove(); this.popupEl = null
   }
 }

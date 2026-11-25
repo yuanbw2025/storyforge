@@ -2,6 +2,7 @@ import type { Project, Work, WorkspaceScope } from '../types'
 import type { AuthoringDocumentIdentityV1, AuthoringPasteDraftV1 } from './authoring-document-adapter'
 import { AuthoringDocumentAdapterV1 } from './authoring-document-adapter'
 import { AuthoringMarkdownViewV1, type ToolbarSelectionProjectionV1, type ToolbarReplacementTargetV1 } from './authoring-markdown-view'
+import type { EditorEntityReference } from './entity-reference'
 import { isLongformMarkdownAdmissionV1 } from '../authoring/longform-markdown-admission'
 
 export type LongformMarkdownEditorModeV1 = 'richtext' | 'source' | 'preview'
@@ -16,6 +17,8 @@ export interface LongformMarkdownSessionInputV1 {
   /** 大段粘贴预览确认：视图在拦截粘贴时回传待确认草稿与取消句柄。 */
   onLargePaste?: (pending: { text: string; cancel: () => void; draft: Promise<AuthoringPasteDraftV1> }) => void
   placeholder?: string
+  /** 项目实体档案，用于视图内只读悬浮与 @ 补全装饰；不写进入正文。 */
+  entityReferences?: readonly EditorEntityReference[]
 }
 
 /**
