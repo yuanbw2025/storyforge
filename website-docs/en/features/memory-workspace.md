@@ -1,5 +1,9 @@
 # Local memory workspace
 
+## November 25: chapter-diverse recall and source checks
+
+Longform recall interleaves the best fragment from each matching chapter before additional fragments from the same chapter, preventing one frequent chapter from occupying every slot. Later chapters win actual score ties without overriding real score differences. Nonmatches do not enter by recency alone; current/future-chapter, world-isolation and stale-source checks remain. This is bounded evidence selection, not sending the entire book on every call. Based on #600/#601.
+
 ## November 19: automatic local retrieval maintenance
 
 Longform context reads maintain keyword blocks and chapter/volume summaries for the current work without a manual indexing button. Independent embedding services are in collapsed advanced options. Only an enabled service receives the query and selected historical passages. Changed text, sources or connection credentials invalidate old vectors. This does not rewrite author prose or rebuild frozen-world/game-runtime sources from a live work. Based on [#478](https://github.com/yuanbw2025/storyforge/pull/478).

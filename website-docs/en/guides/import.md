@@ -1,5 +1,13 @@
 # Import existing fiction and references
 
+## November 25: text layers, CSV grids and same-name hints
+
+Check extraction status after upload. If no copyable text is found, retain the original and unfinished session without chunking/model parsing; provide copyable text or enter it manually. This adds neither automatic OCR nor XLSX support. CSV provides a read-only row/column summary and first-ten-row preview using comma/quote/newline structure. Ragged rows/quote errors are reported without rewriting cells. Based on #617/#619/#624.
+
+Pre-start confirmation can flag existing chapter titles; character names are checked in chunk review after candidates exist. Codex candidates match within the same category/world group. Select a target group in multiworld work; unresolved targets are not guessed. Hints support review; existing confirm/cancel/dedup/write rules remain without silent overwrite/deletion. Based on #628/#633/#637/#644/#648.
+
+Parsing input follows evidenced connection capacity and full-request admission. The old 100k reference remains for unknown capacity rather than a universal ceiling. Requests exceeding real capacity may still reject before dispatch while retaining originals/frozen ranges. Based on #625/#629.
+
 ## November 23: full-source entry extraction
 
 Longform setting-to-entry extraction uses recoverable V2 runs: send complete source first, splitting frozen paragraph units only on actual capacity/incomplete-output evidence. A root aggregates only genuinely dispatched, verifiable sources. Field conflicts, cross-run or forged sources block progress; established Canon is not automatically overwritten.

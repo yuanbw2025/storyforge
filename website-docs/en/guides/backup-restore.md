@@ -1,5 +1,9 @@
 # Saving, backup, and recovery
 
+## November 25: large revision-draft recovery
+
+Checkpoints may reference complete artifacts for large whole-chapter revisions; small drafts and historical tasks retain inline forms. Recovery verifies run registration, full hash and byte length. Missing, clipped or replaced artifacts fail explicitly instead of returning partial prose. Complete backup/import retains reference evidence through registered lifecycles; formats remain database v16/backup v20. Preserve backups/candidates/errors rather than editing hashes or clearing data. Based on #621/#622; #662 aligns a validation matrix, not another format upgrade.
+
 ## November 23: long-run and complete JSON round trips
 
 Mainline removes default 32 MiB run/checkpoint content envelopes and the default single-record JSON-file read cap so valid complete originals survive consistent write/recovery/backup paths. Explicit caller resume limits remain checked. Formats stay database v16/backup v20 without a new migration. Non-string resume content and invalid identity/reference/hash are rejected; damaged imports remain atomic. Based on #572.

@@ -1,5 +1,13 @@
 # Longform: outlines, scene beats, and prose
 
+## November 25: three editing modes and prose length
+
+Independent longform chapters offer Rich text, Live preview and Markdown source. New empty chapters default to preview; existing nonempty chapters retain rich text. Short fiction, world narratives and unresolved ownership do not admit this switch. Source and preview share undo history; switching to rich text first saves the draft and starts a new undo segment. If saving fails, retain the draft and resolve the message before switching. Headings support levels one through six.
+
+Large pastes show a character count and Confirm/Cancel paste. Confirmation enters the existing draft/save flow; cancellation, chapter changes or leaving do not leave a partial paste. Selection AI in Markdown still uses candidate review and explicit adoption; unsupported ranges reject previews. Externally committed prose synchronizes into the same session; resolve conflicts while retaining unsaved drafts. Based on #591/#603/#609/#612/#620; #616 supplies path evidence, not another feature.
+
+Generation/continuation use length controls and actual body/new-fragment counts. Revisions for unmet explicit intent must improve deviation; complete rounds and the best draft are recoverable. Unknown requests are not resent; edit and explicitly adopt. Prose copilots, whole-volume plans and outlines use actual connection capacity while retaining explicit author limits. Based on #592/#597/#602/#604. See [models](/en/getting-started/model-config) for budget semantics.
+
 ## November 13: saving, recovery and usage checks
 
 Before renaming an entity, review affected content for the initiating work and confirm explicitly. Switching works or editing the new name requires a fresh preview. Prose, state and undo records check the original work and stable identities instead of including another work’s chapters. Source: [#352](https://github.com/yuanbw2025/storyforge/pull/352).

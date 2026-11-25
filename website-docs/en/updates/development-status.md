@@ -1,5 +1,37 @@
 # Pending development and branch audit
 
+## November 25, 2026 · Merged scope and development requiring review
+
+The initial snapshot reviews successful baseline `77d1b1c7` through `71ecc33d`, then synchronizes test cleanup through `a6362b7e`. It enumerates **200 local branches and 46 worktrees (including detached)**: 37 heads outside main ancestry, nine worktrees with uncommitted status, including one with test caches only. Stable patches, net files, actual implementation and PRs were compared rather than counting commits as features.
+
+### Previously pending work now on main
+
+- Prose length/post-chapter V2 merged through #592/#595/#597/#598 and related work. The former prose worktree now has only three test-cache entries; its old 23 draft entries are not recounted as unfinished product work.
+- #525 exact comparison actually merged, including the frozen-baseline V2 display bridge. Retain original red automation-injection measurements separately from subsequent application-window/trusted-paste attribution; do not erase the historical failures or claim all-device acceptance.
+- 037 now includes headings, actual Markdown export, independent-longform mounting, node handoff, external synchronization, paste confirmation and selection AI. Deduplicate prototype branches against these slices rather than calling the editor entirely unmounted. Complete037, physical IME and full-scale performance acceptance remain unfinished.
+- #646 entity decoration/@ completion has a merge record. Static readback found `ChapterEditor` passes `entityReferences` into the session, but the session constructor does not forward it when creating the view. This production wiring requires maintainer review and is not documented as a fully available feature. This task records it without product changes or new acceptance claims.
+
+### Open PRs and local follow-ups
+
+- [#581](https://github.com/yuanbw2025/storyforge/pull/581), inspiration-template governance059-F, remains unmerged groundwork.
+- [#574](https://github.com/yuanbw2025/storyforge/pull/574) remains open, but main already fixes raw-response and remaining semantic-content paths, including #645. Deduplicate actual callers rather than interpreting open state as a wholly missing feature. This task does not close/merge it.
+- 032 imports now include text-layer detection, CSV preview and same-name hints. Complete OCR, XLSX and carrying originals in portable backups are not delivered here. Its source branch has 14 outside-main commits but zero net files; review this alongside the three uncommitted files below rather than declaring 14 features.
+- Complete cover runner/UI, power-interaction contracts, candidate-target policy, history import writer and private-art production retain their unfinished scope. Validation variants, equivalent old patches and zero-net chat planning are not extra features.
+
+| Branch with uncommitted status | Observation | Deduplication |
+| --- | --- | --- |
+| `fix/bug032-multiformat-import-DSH-20261124` | Three import panel/confirmation/dedup files | Uncommitted observations; main slices merged separately, not adopted for the author |
+| `fix/world-capacity-bound-route-20261125` | Three test-result caches | No new uncommitted product implementation |
+| `fix/bug-audit-20261117` | Six feedback/attachment/test entries | Unchanged; old source deduplicated |
+| `fix/codex-extraction-frontier-053-20261119` | Nine old extraction UI/contract/test entries | Deduplicate merged V2; retain remnants |
+| `feat/codex-extraction-budget-v2-b01-20261121` | 31 budget/contract/manual entries | Old remnants; deduplicate against #567 and merged scope |
+| `fix/client-release-4.0.8-20261117` | Five old release files | Not a new release/unpublished-version claim |
+| `feat/community-works-library-20261029` | Two temporary/connection metadata entries | Private contents, not features |
+| `feat/luniang-3d-20261118` | 6,308 art/project/documentation status entries | Unchanged; counts are not work acceptance |
+| `fix/bug051-markdown-reader-naturalpanel-DSH-20261124` | Worktree retains 30 history/backup/contract changes | Reader evidence #626/#640 merged; old dirty work not automatically adopted |
+
+This task does not commit, push, merge or clean this development. Private evidence retains worktree paths, commits and differences. Real-model whole-volume quality, real-device large-request transport, long-running interaction and commercial results require their own acceptance evidence.
+
 ## November 23, 2026 · Capacity fixes and follow-up work
 
 Review from successful baseline `cafb4359` through `e91a0955` initially enumerated **138 branches, 36 worktrees (including detached), and 8 with uncommitted status**; 36 heads are outside main ancestry. Stable patches/net files were compared rather than equating commit counts with features.

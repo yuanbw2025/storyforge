@@ -1,9 +1,13 @@
 ---
 productId: authoring.nodes
 status: preview
-lastVerified: 2026-11-13
+lastVerified: 2026-11-25
 ---
 # Node authoring
+
+## November 25: open a chapter from a prose node
+
+In independent longform, a node adopted as formal prose or carrying one verified chapter binding offers Open in prose editor for the same work. Save current input and verify the target chapter first. Dangling, cross-work or ambiguous bindings reject navigation rather than guessing, generating or adopting again. See [writing](/en/features/longform/writing) for Markdown admission and controls. Nodes and step mode retain shared formal prose, candidates and recovery evidence. Based on #599.
 
 ## November 13: saving, recovery and usage checks
 
@@ -12,7 +16,7 @@ Domain candidates in nodes still require explicit author adoption; reload/interr
 
 > Preview. Full cross-mode interoperability and real user paths are still being validated.
 
-See the [longform quality trial](/en/updates/development-status) for development-branch whole-chapter review, independent scoped revision, and downstream continuation after adoption. These changes are unmerged and undeployed, and are not included in existing downloads.
+See [writing](/en/features/longform/writing) for whole-chapter review, independent scoped revision and downstream continuation after adoption; unfinished scope is in [development](/en/updates/development-status).
 
 Entry: Longform → Workbench → Node authoring (长篇 → 长篇工作台 → 节点创作). Nodes place inputs, generation steps, and intermediate results on a canvas for inspection and composition.
 

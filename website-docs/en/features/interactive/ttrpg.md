@@ -1,9 +1,13 @@
 ---
 productId: upper.ttrpg
 status: preview
-lastVerified: 2026-11-23
+lastVerified: 2026-11-25
 ---
 # TTRPGs and AI game mastering
+
+## November 25: complete semantic intent and clarification
+
+Open-TTRPG goals, methods, outcomes, target references, resources and assumptions retain tails beyond old text/count caps; clarification is no longer limited to 2,000 characters. Duplicate references, unknown fields, wrong types and invalid rules are still rejected. Full descriptions grant no execution authority: review candidates/permitted actions and explicitly confirm. Original-response, recovery and single-dispatch rules remain. Based on #645. PR #574 is still open but other commits cover parts of it, so open status is not a complete missing-feature list.
 
 ## November 23: full intent-candidate responses
 

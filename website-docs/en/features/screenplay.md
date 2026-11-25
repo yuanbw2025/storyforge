@@ -1,9 +1,13 @@
 ---
 productId: independent.screenplay
 status: released
-lastVerified: 2026-11-23
+lastVerified: 2026-11-25
 ---
 # Novel to screenplay
+
+## November 25: stage-source capacity
+
+Screenplay stages assemble original and confirmed material using evidenced input capacity of the bound connection instead of treating the old 48k reference as a ceiling. Unknown capacity retains a conservative reference; the full request still undergoes admission and explicit author limits are not enlarged. Stage output, scene structure, adoption and recovery retain their rules. Preserve sources/tasks before handling capacity errors rather than repeatedly resending. Based on #627/#630.
 
 ## November 23: writing first and expandable exports
 

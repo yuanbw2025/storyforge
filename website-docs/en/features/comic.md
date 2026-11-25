@@ -1,9 +1,15 @@
 ---
 productId: independent.comic
 status: released
-lastVerified: 2026-11-13
+lastVerified: 2026-11-25
 ---
 # Novel to comic
+
+## November 25: workspace-first layout and stage sources
+
+Comic library, source, planning, candidate, canvas, QA and version pages reduce repeated layers. Known short metadata share rows; narrative/unknown fields keep full width. Canvas/workspace precede production tools, and mobile places canvas before the page directory. Zoom, aspect ratio, hitboxes and existing save/image/adoption paths remain. Based on #586.
+
+Stage input follows evidenced capacity of the actual bound connection, with 48k retained as a conservative unknown-capacity reference rather than a universal ceiling. Full requests, author limits, page/panel structure, Skill output and adoption/recovery remain checked. Based on #630.
 
 ## November 19: long source titles
 

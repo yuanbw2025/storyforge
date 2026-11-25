@@ -1,5 +1,9 @@
 # Export, delivery, and sharing
 
+## November 25: actual Markdown export
+
+Longform Markdown export serializes actual chapter content, retaining headings, lists and prose. Safe formatting without an equivalent Markdown representation may remain as HTML fragments, with a file notice to use full project backup for complete-format recovery. Unsafe/unrepresentable legacy HTML explicitly rejects export without changing originals; use a TXT reading copy or full backup. Open exports and check tails, lists and key formatting. Markdown files do not replace complete recovery packages. Based on #593.
+
 First decide whether the goal is reading, further work in another tool, or future recovery of the entire project.
 
 | Product | Main delivery | Check before delivery |

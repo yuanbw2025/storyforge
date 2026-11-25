@@ -1,5 +1,9 @@
 # Longform: settings, characters, and story design
 
+## November 25: outline, story-core and inspiration capacity
+
+Outline, whole-volume planning, replanning, story-arc, story-core, inspiration and creative-rule copilots no longer automatically turn old small output forecasts into dispatch caps. Explicit author/template limits and existing Skill checks remain. Batch scene outlines persist chapter candidates individually; on recovery, verify completed chapters and continue unfinished ones without resending completed work. Longer plans do not establish whole-volume production or literary-quality acceptance. Based on #602/#604/#605/#606/#607/#611; see [usage](/en/guides/token-cost).
+
 ## November 23: complete plans and long candidates
 
 New Master plans, dependencies, long instructions and summaries no longer lose later material to old fixed-count limits. Missing-dependency, cycle, authorization and field checks remain. Complete returned long-prose candidates retain matching raw responses, author edits, reload recovery and adoption without former 120k/200k character caps. Larger length hints must remain reliably representable positive integers; they do not guarantee service output capability or literary quality. Historical finite budgets and independent review/revision settings retain their contracts. Based on #565/#569/#573.
