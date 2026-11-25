@@ -1,3 +1,4 @@
+import { installBrowserServiceCapacityFixtureV1 } from './helpers/browser-ai-config'
 import { expect, test, type Page } from '@playwright/test'
 import { createLongform } from './helpers/product-entry'
 
@@ -5,6 +6,7 @@ const original = '两人安静清点工具。'.repeat(650) + '\n\n未出现付�
 const quote = '未出现付款动作，却记为已收款。'
 async function setup(page: Page, small = false) {
   await page.addInitScript(({ small }) => localStorage.setItem('storyforge-ai-config', JSON.stringify({ provider: 'ollama', baseUrl: 'https://whole-review.invalid/v1', model: 'whole-review-test', maxTokens: small ? 500 : 4000, temperature: 0, contextWindow: small ? 1500 : 128000 })), { small })
+  await installBrowserServiceCapacityFixtureV1(page, { provider: 'ollama', baseUrl: 'https://whole-review.invalid/v1', model: 'whole-review-test' }, small ? 1500 : 128000)
   await createLongform(page, '全章评审实际路径')
   const target = await page.evaluate(async ({ original }) => {
     const imp = new Function('path', 'return import(path)') as (path: string) => Promise<any>
@@ -24,7 +26,7 @@ async function setup(page: Page, small = false) {
 
 test('全文请求覆盖4000字后的结尾，三个模式保存报告，刷新和改稿后历史标识正确', async ({ page }) => {
   const requests: any[] = []
-  await page.route('https://whole-review.invalid/**', route => {
+  await page.route('https://whole-review.invalid/v1/chat/completions', route => {
     requests.push(route.request().postDataJSON())
     const json = { summary: '付款过程需要核对，安静章节可以保留。', strengths: ['保留必要缓冲'], issues: [{ dimension: 'causality', confidence: 'uncertain', anchorId: 'p2', reason: '没描写付款却记录已收款。', suggestion: '核对收款过程，保留金额和签字人。' }] }
     return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ choices: [{ message: { content: JSON.stringify(json) }, finish_reason: 'stop' }] }) })
@@ -79,9 +81,9 @@ test('bounded Agnes review records the exact thinking toggle for all three modes
   const target = await setup(page)
   await page.evaluate(async () => {
     const { useAIConfigStore } = await (new Function('return import("/storyforge/src/stores/ai-config.ts")'))()
-    useAIConfigStore.setState({ config: { ...useAIConfigStore.getState().config, provider: 'agnes', model: 'agnes-2.5-flash', apiKey: 'isolated-test-token' } })
+    useAIConfigStore.setState({ config: { ...useAIConfigStore.getState().config, provider: 'agnes', baseUrl: 'https://apihub.agnes-ai.com/v1', model: 'agnes-2.5-flash', apiKey: 'isolated-test-token' } })
   })
-  await page.route('https://whole-review.invalid/**', route => {
+  await page.route('https://apihub.agnes-ai.com/v1/chat/completions', route => {
     const body = route.request().postDataJSON(); requests.push(body)
     expect(body.chat_template_kwargs).toEqual({ enable_thinking: false })
     expect(body.response_format).toEqual({ type: 'json_object' })
@@ -111,7 +113,7 @@ test('bounded Agnes review records the exact thinking toggle for all three modes
 
 test('假引文拒绝报告，保存原响应且不自动重发；原稿不改', async ({ page }) => {
   let calls = 0
-  await page.route('https://whole-review.invalid/**', route => {
+  await page.route('https://whole-review.invalid/v1/chat/completions', route => {
     calls++
     const json = { summary: '虚构意见', strengths: [], issues: [{ dimension: 'voice', confidence: 'suggestion', quote: '不存在的台词', start: null, end: null, reason: '猜测', suggestion: '不应采用' }] }
     return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ choices: [{ message: { content: JSON.stringify(json) }, finish_reason: 'stop' }] }) })
@@ -132,18 +134,18 @@ test('假引文拒绝报告，保存原响应且不自动重发；原稿不改',
 
 test('小窗口不能装入全章时零请求，不拿前段充当全文报告', async ({ page }) => {
   let calls = 0
-  await page.route('https://whole-review.invalid/**', route => { calls++; return route.abort() })
+  await page.route('https://whole-review.invalid/v1/chat/completions', route => { calls++; return route.abort() })
   await setup(page, true)
   await page.getByRole('button', { name: '审校', exact: true }).click()
   await page.getByRole('button', { name: '开始检测', exact: true }).click()
-  await expect(page.getByText(/上下文窗口不足|评审响应未完成/)).toBeVisible()
+  await expect(page.getByText(/上下文窗口不足|评审响应未完成|mandatory-selection-exceeds-budget/)).toBeVisible()
   expect(calls).toBe(0)
   await expect(page.getByTestId('whole-chapter-quality-report')).toHaveCount(0)
 })
 
 test('提供商503只发送一次，失败不能生成有效报告', async ({ page }) => {
   let calls = 0
-  await page.route('https://whole-review.invalid/**', route => { calls++; return route.fulfill({ status: 503, body: '暂时不可用' }) })
+  await page.route('https://whole-review.invalid/v1/chat/completions', route => { calls++; return route.fulfill({ status: 503, body: '暂时不可用' }) })
   const target = await setup(page)
   await page.getByRole('button', { name: '审校', exact: true }).click()
   await page.getByRole('button', { name: '开始检测', exact: true }).click()
@@ -160,7 +162,7 @@ test('提供商503只发送一次，失败不能生成有效报告', async ({ pa
 
 test('评审中关闭面板停止请求，刷新无有效报告也不自动重发', async ({ page }) => {
   let calls = 0
-  await page.route('https://whole-review.invalid/**', async route => {
+  await page.route('https://whole-review.invalid/v1/chat/completions', async route => {
     calls++
     await new Promise(resolve => setTimeout(resolve, 1500))
     await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ choices: [{ message: { content: JSON.stringify({ summary: '晚到结果', strengths: [], issues: [] }) }, finish_reason: 'stop' }] }) }).catch(() => undefined)
@@ -185,7 +187,7 @@ test('评审中关闭面板停止请求，刷新无有效报告也不自动重�
 
 test('一致性专审读取本章计划，支持章内证据并在刷新后保留原稿与报告', async ({ page }) => {
   const requests: any[] = []
-  await page.route('https://whole-review.invalid/**', route => {
+  await page.route('https://whole-review.invalid/v1/chat/completions', route => {
     requests.push(route.request().postDataJSON())
     const findings = [{ category: '付款依据', severity: 'hard', anchorId: 'p2', quote: '模型改抄的附注不能替代原文',
       evidence: [{ sourceType: 'chapter', sourceId: 0, anchorId: 'p1-1' }],
@@ -235,7 +237,7 @@ test('一致性专审读取本章计划，支持章内证据并在刷新后保�
 
 test('一致性无效引文显示失败而不是空报告，不自动重发或改稿', async ({ page }) => {
   let calls = 0
-  await page.route('https://whole-review.invalid/**', route => {
+  await page.route('https://whole-review.invalid/v1/chat/completions', route => {
     calls++
     const findings = [{ category: '虚构', severity: 'hard', quote: '这句不在正文里', evidence: [], reason: '不能丢弃后显示无问题' }]
     return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ choices: [{ message: { content: JSON.stringify({ findings }) }, finish_reason: 'stop' }] }) })
@@ -256,7 +258,7 @@ test('一致性无效引文显示失败而不是空报告，不自动重发或�
 
 test('一致性专审503单次停止，不在durable预算外重发', async ({ page }) => {
   let calls = 0
-  await page.route('https://whole-review.invalid/**', route => { calls++; return route.fulfill({ status: 503, body: '专审暂时不可用' }) })
+  await page.route('https://whole-review.invalid/v1/chat/completions', route => { calls++; return route.fulfill({ status: 503, body: '专审暂时不可用' }) })
   await setup(page)
   await page.getByRole('button', { name: '一致性', exact: true }).click()
   await page.getByRole('button', { name: 'Deep Audit · 因果/动机/伏笔', exact: true }).click()
@@ -269,7 +271,7 @@ test('一致性专审503单次停止，不在durable预算外重发', async ({ p
 
 test('一致性专审被截断时即使收到有效空JSON也不认证无问题', async ({ page }) => {
   let calls = 0
-  await page.route('https://whole-review.invalid/**', route => {
+  await page.route('https://whole-review.invalid/v1/chat/completions', route => {
     calls++
     return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ choices: [{ message: { content: '{"findings":[]}' }, finish_reason: 'length' }] }) })
   })
@@ -284,7 +286,7 @@ test('一致性专审被截断时即使收到有效空JSON也不认证无问题'
 
 test('一致性JSON审计中关闭面板会停止等待，刷新不生成报告或自动重发', async ({ page }) => {
   let calls = 0
-  await page.route('https://whole-review.invalid/**', async route => {
+  await page.route('https://whole-review.invalid/v1/chat/completions', async route => {
     calls++
     await new Promise(resolve => setTimeout(resolve, 1500))
     await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ choices: [{ message: { content: '{"findings":[]}' }, finish_reason: 'stop' }] }) }).catch(() => undefined)
