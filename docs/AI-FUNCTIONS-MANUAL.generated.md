@@ -432,9 +432,9 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 | `chapter.content` | `src/lib/generation/chapter-generation-node.ts:44`<br/>`src/lib/generation/chapter-generation-node.ts:47` |
 | `chapter.continue` | `src/lib/generation/chapter-generation-node.ts:45`<br/>`src/lib/generation/chapter-generation-node.ts:48` |
 | `chapter.continuity` | `src/lib/node-authoring/domain-execution.ts:796`<br/>`src/lib/node-authoring/domain-execution.ts:855` |
-| `chapter.deai` | `src/components/editor/ChapterEditor.tsx:1924` |
-| `chapter.expand` | `src/components/editor/ChapterEditor.tsx:1902` |
-| `chapter.polish` | `src/components/editor/ChapterEditor.tsx:1892` |
+| `chapter.deai` | `src/components/editor/ChapterEditor.tsx:1928` |
+| `chapter.expand` | `src/components/editor/ChapterEditor.tsx:1906` |
+| `chapter.polish` | `src/components/editor/ChapterEditor.tsx:1896` |
 | `chapter.toolbar` | `src/lib/agent/run/selection-edit-durable.ts:567` |
 | `cultivation.progress` | `src/lib/agent/run/cultivation-progress-extraction-durable.ts:559` |
 | `detail.chapter-planning` | `src/lib/node-authoring/domain-execution.ts:660` |
@@ -597,4 +597,4 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 
 ---
 
-生成时间基准:commit `f5499106f`
+生成时间基准:commit `bf587f656`
