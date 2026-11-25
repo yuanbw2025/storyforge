@@ -1,3 +1,4 @@
+import { installBrowserServiceCapacityFixtureV1 } from './helpers/browser-ai-config'
 import { createLongform } from './helpers/product-entry'
 import { createWorld } from './helpers/product-entry'
 import { fillShortFields } from './helpers/shortform-navigation'
@@ -79,10 +80,10 @@ test('短篇小说使用独立创作基座，世界页不暴露可变作品改�
     chapterCount: 4,
   }, null, 2))
   await page.getByRole('button', { name: '校验并确认本步', exact: true }).click()
-  await expect(page.locator('.short-stage-heading').getByRole('heading', { name: '故事设计', exact: true })).toBeVisible()
+  await expect(page).toHaveURL(/short\/story\?project=\d+$/)
   await page.reload()
   await expect(page.getByTestId('short-novel-studio')).toBeVisible()
-  await expect(page.locator('.short-stage-heading').getByRole('heading', { name: '故事设计', exact: true })).toBeVisible()
+  await expect(page).toHaveURL(/short\/story\?project=\d+$/)
 
   await fillShortFields(page, JSON.stringify({
     version: 1,
@@ -97,7 +98,7 @@ test('短篇小说使用独立创作基座，世界页不暴露可变作品改�
     thematicQuestion: '保护是否可以建立在长期隐瞒之上',
   }, null, 2))
   await page.getByRole('button', { name: '校验并确认本步', exact: true }).click()
-  await expect(page.locator('.short-stage-heading').getByRole('heading', { name: '章节卡', exact: true })).toBeVisible()
+  await expect(page).toHaveURL(/short\/chapters\?project=\d+$/)
 
   const shortPlan = ['封站', '录音', '代价', '天亮'].map((title, order) => ({
     stableKey: `chapter-${order + 1}`,
@@ -113,11 +114,11 @@ test('短篇小说使用独立创作基座，世界页不暴露可变作品改�
   }))
   await fillShortFields(page, JSON.stringify(shortPlan, null, 2))
   await page.getByRole('button', { name: '校验并确认本步', exact: true }).click()
-  await expect(page.locator('.short-stage-heading').getByRole('heading', { name: '正文', exact: true })).toBeVisible()
+  await expect(page).toHaveURL(/short\/editor\?project=\d+$/)
 
   const chapterBodies = shortPlan.map((chapter, index) => `${chapter.title}。${`暴雨拍打旧站窗户，林岚在真相与亲情之间作出第${index + 1}次选择。`.repeat(105)}`)
   for (const [index, chapter] of shortPlan.entries()) {
-    await page.locator('.short-chapter-run button').filter({ hasText: chapter.title }).click()
+    await page.getByLabel('生成候选的章节', {exact:true}).selectOption(chapter.stableKey)
     await expect(page.locator('.short-embedded [data-impact-target="true"]')).toContainText(chapter.title)
     const editor = page.locator('.short-embedded').last().locator('.tiptap-editor')
     await editor.fill(chapterBodies[index])
@@ -127,7 +128,7 @@ test('短篇小说使用独立创作基座，世界页不暴露可变作品改�
   }
 
   await page.getByRole('navigation', {name:'短篇页面导航'}).getByText('全篇审校', {exact:true}).click()
-  await expect(page.locator('.short-stage-heading').getByRole('heading', { name: '全篇审校', exact: true })).toBeVisible()
+  await expect(page).toHaveURL(/short\/review\?project=\d+$/)
   await fillShortFields(page, JSON.stringify({
     version: 1,
     summary: '人物目标、事故因果、视角与结尾承诺已逐章核对。',
@@ -182,13 +183,13 @@ test('产品综合首页可从零创建世界引擎并分配稳定编号', async
   await createWorld(page, '潮汐之后', '海平面吞没大陆后的漂浮聚落。')
 
   await expect(page.getByRole('heading', { name: '世界引擎', exact: true })).toBeVisible()
-  await expect(page.locator('.lf-library-grid').getByRole('heading', { name: '潮汐之后', exact: true })).toBeVisible()
+  await expect(page.locator('.lf-library-books').getByRole('heading', { name: '潮汐之后', exact: true })).toBeVisible()
   await expect(page.locator('.lf-library-grid article').first()).toContainText(/W-[A-Z0-9]+-[A-Z0-9]+ · 尚未发布/)
   await expect(page.getByRole('button',{name:'编辑世界',exact:true})).toBeVisible()
 
   await page.goto('./')
   await createWorld(page, '群星港', '')
-  await expect(page.locator('.lf-library-grid').getByRole('heading', { name: '群星港', exact: true })).toBeVisible()
+  await expect(page.locator('.lf-library-books').getByRole('heading', { name: '群星港', exact: true })).toBeVisible()
 
   await page.goto('./')
   await page.goto('./world/worlds')
@@ -196,7 +197,7 @@ test('产品综合首页可从零创建世界引擎并分配稳定编号', async
   await expect(tidalWorld).toHaveCount(1)
   await tidalWorld.getByRole('button',{name:'编辑世界',exact:true}).click()
   await openWorldSection(page,'worlds')
-  await expect(page.locator('.lf-library-grid').getByRole('heading', { name: '潮汐之后', exact: true })).toBeVisible()
+  await expect(page.locator('.lf-library-books').getByRole('heading', { name: '潮汐之后', exact: true })).toBeVisible()
 
   await page.getByLabel('搜索本地世界').fill('潮汐之后')
   await expect(page.locator('.lf-library-grid article')).toHaveCount(1)
@@ -218,7 +219,7 @@ test('独立长篇保持独立，并可由作者显式派生且封存为世界 v
   await page.getByRole('button',{name:'打开世界',exact:true}).click()
   await openWorldSection(page,'worlds')
   await expect(page.getByRole('heading', { name: '我的世界', exact: true })).toBeVisible()
-  await expect(page.locator('.lf-library-grid').getByRole('heading', { name: '分步骤世界基线 · 世界', exact: true })).toBeVisible()
+  await expect(page.locator('.lf-library-books').getByRole('heading', { name: '分步骤世界基线 · 世界', exact: true })).toBeVisible()
   await expect(page.locator('.lf-library-grid article').first()).toContainText(/W-[A-Z0-9]+-[A-Z0-9]+ · 已发布 v1/)
   await expect(page.getByRole('navigation', { name: '世界页面导航' }).getByRole('button', { name: '世界设定', exact: true })).toBeVisible()
   const identities = await page.evaluate(async () => {
@@ -353,7 +354,7 @@ test('世界引擎可生成并预检本地世界分享包，再导入为新编�
   await page.getByRole('button', { name: '确认导入纯语义世界', exact: true }).click()
   await expect(page).toHaveURL(/world\/basics\?project=/)
   await page.getByRole('navigation',{name:'世界页面导航'}).getByRole('button',{name:'我的世界',exact:true}).click()
-  await expect(page.locator('.lf-library-grid').getByRole('heading', { name: '分享包测试世界', exact: true })).toHaveCount(2)
+  await expect(page.locator('.lf-library-books').getByRole('heading', { name: '分享包测试世界', exact: true })).toHaveCount(2)
   await expect(page.locator('.lf-library-grid article')).toHaveCount(2)
   // The library has no active-world header; read the two rendered entries
   // instead of racing the outgoing world's heading during navigation.
@@ -409,9 +410,7 @@ async function expectInputValue(page: Page, value: string) {
   )).toBe(true)
 }
 
-async function expectNumericInputValue(locator: ReturnType<Page['getByPlaceholder']>, expected: number) {
-  await expect.poll(async () => Number((await locator.inputValue()).replace(/,/g, ''))).toBe(expected)
-}
+
 
 async function createBookWithSavedChapter(page: Page, projectName: string, chapterText: string) {
   await openCleanHome(page)
@@ -534,7 +533,7 @@ test('领域角色节点可生成候选、人工确认并写入角色主档', as
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({
-        choices: [{ message: { content: JSON.stringify(candidate) } }],
+        choices: [{ message: { content: JSON.stringify(candidate) } , finish_reason: 'stop' }],
         usage: { prompt_tokens: 12, completion_tokens: 24, total_tokens: 36 },
       }),
     })
@@ -616,10 +615,9 @@ test('人文知识主入口可保存拆分概述，并安全关联与断开城�
   await expect(page.getByText('雁门关', { exact: true })).toBeVisible()
 
   await openWorkspaceLeaf(page, '人文环境')
-  await expect(page.getByRole('heading', { name: '🏛️ 人文环境与社会' })).toBeVisible()
-  await expect(page.getByRole('button', { name: /打开正式历史年表/ })).toBeVisible()
-  await page.getByRole('button', { name: /打开正式历史年表/ }).click()
-  await expect(page.getByRole('heading', { name: '📜 历史年表与时间线' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '🧬 种族与民族' })).toBeVisible()
+  await openWorkspaceLeaf(page, '历史年表')
+  await expect(page.getByRole('heading', { name: '📜 历史时间轴' })).toBeVisible()
   await openWorkspaceLeaf(page, '人文环境')
   await page.getByRole('button', { name: /政治制度/ }).click()
   await page.getByText('政体、官制、法律、军事、外交、权力主体与阶层结构').last().click()
@@ -660,6 +658,7 @@ test('建卷建章、保存正文、刷新恢复并导出正文与隐私诊断',
 
   await page.reload()
   await openWorkspaceLeaf(page, '章节')
+  await page.getByRole('group', { name: '编辑模式', exact: true }).getByRole('button', { name: '富文本', exact: true }).click()
   await expect(page.locator('.tiptap-editor')).toContainText(chapterText)
 
   await openWorkspaceLeaf(page, '数据管理')
@@ -704,6 +703,7 @@ test('局部改写只读取冻结选区，刷新恢复候选并在作者确认�
       contextWindow: 100000,
     }))
   })
+  await installBrowserServiceCapacityFixtureV1(page, { provider: 'ollama', baseUrl: 'http://localhost:1234/v1', model: 'selection-edit-e2e' }, 100000)
   await page.route('http://localhost:1234/v1/chat/completions', async route => {
     selectionEditCalls += 1
     const request = route.request().postDataJSON() as { messages?: Array<{ content?: string }> }
@@ -715,14 +715,16 @@ test('局部改写只读取冻结选区，刷新恢复候选并在作者确认�
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({
-        choices: [{ message: { content: replacementText } }],
+        choices: [{ message: { content: replacementText } , finish_reason: 'stop' }],
         usage: { prompt_tokens: 96, completion_tokens: 22, total_tokens: 118 },
       }),
     })
   })
 
   await createBookWithSavedChapter(page, 'E2E 局部改写闭环', sourceText)
+  await page.getByRole('group', { name: '编辑模式', exact: true }).getByRole('button', { name: '富文本', exact: true }).click()
   const editor = page.locator('.tiptap-editor')
+  await editor.scrollIntoViewIfNeeded()
   await editor.evaluate((element, text) => {
     const node = element.querySelector('p')?.firstChild
     if (!node) throw new Error('正文缺少可选文本节点')
@@ -784,6 +786,7 @@ test('整理本章只调用一次模型，刷新恢复候选并在确认后写�
       contextWindow: 100000,
     }))
   })
+  await installBrowserServiceCapacityFixtureV1(page, { provider: 'ollama', baseUrl: 'http://localhost:1234/v1', model: 'chapter-organization-e2e' }, 100000)
   await page.route('http://localhost:1234/v1/chat/completions', async route => {
     organizationCalls += 1
     await route.fulfill({
@@ -807,7 +810,7 @@ test('整理本章只调用一次模型，刷新恢复候选并在确认后写�
               foreshadowUpdates: [],
             }),
           },
-        }],
+        finish_reason: 'stop' }],
         usage: { prompt_tokens: 180, completion_tokens: 60, total_tokens: 240 },
       }),
     })
@@ -860,13 +863,14 @@ test('一致性 Agent 显式单次检测，刷新恢复只读报告且不写业�
       contextWindow: 100000,
     }))
   })
+  await installBrowserServiceCapacityFixtureV1(page, { provider: 'ollama', baseUrl: 'http://localhost:1234/v1', model: 'consistency-agent-e2e' }, 100000)
   await page.route('http://localhost:1234/v1/chat/completions', async route => {
     consistencyCalls += 1
     const request = route.request().postDataJSON()
     expect(request.stream).toBe(false)
     expect(request.response_format).toEqual({ type: 'json_object' })
     expect(request.temperature).toBe(0)
-    expect(request.max_tokens).toBe(16_000)
+    expect(request.max_tokens).toBe(2_048)
     const content = JSON.stringify({
       findings: [],
       cognitionReferences: [],
@@ -942,6 +946,7 @@ test('智能实体改名先预览，再原子同步正文与角色主档并可�
   await page.getByRole('button', { name: '创建快照并改名', exact: true }).click()
   const confirmRename = page.locator('div.fixed.inset-0').filter({ hasText: '确认将「顾临川」改为「沈照野」？' })
   await confirmRename.getByRole('button', { name: '创建快照并改名', exact: true }).click()
+  await page.getByRole('group', { name: '编辑模式', exact: true }).getByRole('button', { name: '富文本', exact: true }).click()
   await expect(page.locator('.tiptap-editor')).toContainText('沈照野踏入山门。沈照野望见远处灯火。')
   await expect(page.getByRole('combobox', { name: '选择稳定实体' }).locator('option')).toContainText([
     '选择角色、地点或词条',
@@ -972,6 +977,7 @@ test('对照润色沉淀有界样本，并完成文风画像与互动校准闭�
       contextWindow: 100000,
     }))
   })
+  await installBrowserServiceCapacityFixtureV1(page, { provider: 'ollama', baseUrl: 'http://localhost:1234/v1', model: 'style-e2e' }, 100000)
   await page.route('http://localhost:1234/v1/chat/completions', async route => {
     const body = route.request().postDataJSON() as {
       messages?: Array<{ role: string; content: string }>
@@ -993,7 +999,7 @@ test('对照润色沉淀有界样本，并完成文风画像与互动校准闭�
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({
-        choices: [{ message: { content } }],
+        choices: [{ message: { content } , finish_reason: 'stop' }],
         usage: { prompt_tokens: 120, completion_tokens: 40, total_tokens: 160 },
       }),
     })
@@ -1115,6 +1121,7 @@ test('完整 JSON 导出后可重新导入且正文不丢', async ({ page }) => 
   await expect(page).toHaveURL(/\/storyforge\/workspace\/\d+$/)
   await expect(page.locator('[data-workspace-ready=longform]')).toBeVisible()
   await openWorkspaceLeaf(page, '章节')
+  await page.getByRole('group', { name: '编辑模式', exact: true }).getByRole('button', { name: '富文本', exact: true }).click()
   await expect(page.locator('.tiptap-editor')).toContainText(chapterText)
 })
 
@@ -1135,7 +1142,7 @@ test('手动快照可恢复为新项目且不覆盖原项目', async ({ page }) 
   await expect(page.getByRole('heading', { name: /天地为炉/ })).toBeVisible()
   await page.goto('./')
   await page.goto('./long')
-  const library = page.locator('.lf-library-grid')
+  const library = page.locator('.lf-library-books')
   await expect(library.locator('article')).toHaveCount(2)
   await expect(library.locator('article').filter({ hasText: projectName })).toHaveCount(2)
   await expect(library.getByText(projectName, { exact: true })).toHaveCount(2)
@@ -1154,8 +1161,9 @@ test('删除项目经过双重安全门且不影响其它项目', async ({ page 
   await page.goto('./')
 
   await page.goto('./long')
-  const library = page.locator('.lf-library-grid')
+  const library = page.locator('.lf-library-books')
   const deletedRow = library.locator('article').filter({ hasText: deletedProject })
+  await deletedRow.getByLabel(`更多操作：${deletedProject}`, {exact:true}).click()
   await deletedRow.getByRole('button', { name: '删除作品', exact: true }).click()
   await expect(deletedRow.getByText(deletedProject, {exact:true})).toBeVisible()
   await expect(page.getByRole('heading', { name: '危险操作:删除项目' })).toBeVisible()
@@ -1177,8 +1185,9 @@ test('取消删除安全门后项目与正文都保留', async ({ page }) => {
   await page.goto('./')
 
   await page.goto('./long')
-  const library = page.locator('.lf-library-grid')
+  const library = page.locator('.lf-library-books')
   const projectRow = library.locator('article').filter({ hasText: projectName })
+  await projectRow.getByLabel(`更多操作：${projectName}`, {exact:true}).click()
   await projectRow.getByRole('button', { name: '删除作品', exact: true }).click()
   await expect(page.getByRole('heading', { name: '危险操作:删除项目' })).toBeVisible()
   await page.getByRole('button', { name: '取消', exact: true }).click()
@@ -1186,22 +1195,21 @@ test('取消删除安全门后项目与正文都保留', async ({ page }) => {
   await expect(library.getByText(projectName, { exact: true })).toBeVisible()
   await projectRow.getByRole('button', {name:'进入长篇工作台',exact:true}).click()
   await openWorkspaceLeaf(page, '章节')
+  await page.getByRole('group', { name: '编辑模式', exact: true }).getByRole('button', { name: '富文本', exact: true }).click()
   await expect(page.locator('.tiptap-editor')).toContainText(chapterText)
 })
 
-test('上下文窗口、四类通用任务与主 Agent 角色模型路由跨模块和刷新保留', async ({ page }) => {
+test('隐藏手动容量覆盖，四类通用任务与主 Agent 角色模型路由跨模块和刷新保留', async ({ page }) => {
   await openCleanHome(page)
   await createProject(page, 'E2E AI 配置持久化')
   await openWorkspaceLeaf(page, '设置')
 
   const contextWindow = page.getByPlaceholder('本地/自定义模型请按实际填写，如 131072；留空 = 用内置预设')
-  await contextWindow.fill('2,100,000')
-  await expect(page.getByText('2,100,000 token', { exact: false })).toBeVisible()
-  await expect(page.getByText('已自动保存到当前配置', { exact: true })).toBeVisible()
+  await expect(contextWindow).toHaveCount(0)
 
   await openWorkspaceLeaf(page, '数据管理')
   await openWorkspaceLeaf(page, '设置')
-  await expectNumericInputValue(contextWindow, 2_100_000)
+  await expect(contextWindow).toHaveCount(0)
 
   await page.getByRole('button', { name: '＋ 保存当前为预设', exact: true }).click()
   const presetName = page.getByPlaceholder('预设名称，如「DeepSeek 主力」')
@@ -1237,7 +1245,7 @@ test('上下文窗口、四类通用任务与主 Agent 角色模型路由跨模�
 
   await page.reload()
   await openWorkspaceLeaf(page, '设置')
-  await expectNumericInputValue(contextWindow, 2_100_000)
+  await expect(contextWindow).toHaveCount(0)
   await expect(page.getByLabel('创作生成模型预设')).toHaveValue(await page.getByLabel('结构提取模型预设').inputValue())
   await expect(page.getByLabel('分析总结模型预设')).toHaveValue(await page.getByLabel('审查校验模型预设').inputValue())
   await expect(page.getByLabel('主 Agent 编排模型预设')).toHaveValue(await page.getByLabel('审查校验模型预设').inputValue())
@@ -1299,6 +1307,7 @@ test('主 Agent 调度世界领域任务，拒绝零写入并精确采纳可见�
       maxTokens: 0,
     }))
   })
+  await installBrowserServiceCapacityFixtureV1(page, { provider: 'ollama', baseUrl: 'http://localhost:1234/v1', model: 'chat-copilot-e2e' }, 64000)
   await page.route('http://localhost:1234/v1/chat/completions', async route => {
     const body = route.request().postDataJSON() as {
       messages?: Array<{ role: string; content: string }>
@@ -1328,7 +1337,7 @@ test('主 Agent 调度世界领域任务，拒绝零写入并精确采纳可见�
                 ? JSON.stringify(firstCandidate)
                 : JSON.stringify(secondCandidate),
           },
-        }],
+        finish_reason: 'stop' }],
         usage: { prompt_tokens: 120, completion_tokens: 30, total_tokens: 150 },
       }),
     })
@@ -1349,7 +1358,7 @@ test('主 Agent 调度世界领域任务，拒绝零写入并精确采纳可见�
   await expect(copilot.getByText(/均衡 · 资料 ≈[\d,]+ tokens/)).toBeVisible()
   await copilot.getByText('质量提示与运行详情', { exact: true }).click()
   await expect(copilot.getByText(/查看本次实际输入证据 · \d+ 个来源/)).toBeVisible()
-  await expect(copilot.getByText(/本轮团队预算约 [\d,]+ \/ 160,000 tokens · 2\/7 次调用 · Canon 打回 1\/1/)).toBeVisible()
+  await expect(copilot.getByText(/本轮团队预算约 [\d,]+ \/ 按服务容量 tokens · 2\/无应用额度上限 次调用 · Canon 打回 1\/1/)).toBeVisible()
 
   const formalWorldOriginBeforeReject = await page.evaluate(async () => {
     const importer = new Function('path', 'return import(path)') as (path: string) => Promise<any>
@@ -1405,6 +1414,7 @@ test('故事核心面板通过主 Agent 生成单字段候选，刷新恢复后�
       maxTokens: 0,
     }))
   })
+  await installBrowserServiceCapacityFixtureV1(page, { provider: 'ollama', baseUrl: 'http://localhost:1234/v1', model: 'story-core-copilot-e2e' }, 64000)
   await page.route('http://localhost:1234/v1/chat/completions', async route => {
     const body = route.request().postDataJSON() as {
       messages?: Array<{ role: string; content: string }>
@@ -1436,7 +1446,7 @@ test('故事核心面板通过主 Agent 生成单字段候选，刷新恢复后�
                 })
               : JSON.stringify(modelCandidate),
           },
-        }],
+        finish_reason: 'stop' }],
         usage: { prompt_tokens: 180, completion_tokens: 50, total_tokens: 230 },
       }),
     })
@@ -1490,6 +1500,7 @@ test('创作规则建议通过固定 Skill 刷新恢复，拒绝重生后编辑�
       maxTokens: 0,
     }))
   })
+  await installBrowserServiceCapacityFixtureV1(page, { provider: 'ollama', baseUrl: 'http://localhost:1234/v1', model: 'creative-rules-copilot-e2e' }, 64000)
   await page.route('http://localhost:1234/v1/chat/completions', async route => {
     const body = route.request().postDataJSON() as {
       messages?: Array<{ role: string; content: string }>
@@ -1503,7 +1514,7 @@ test('创作规则建议通过固定 Skill 刷新恢复，拒绝重生后编辑�
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({
-        choices: [{ message: { content: JSON.stringify(modelCandidate) } }],
+        choices: [{ message: { content: JSON.stringify(modelCandidate) } , finish_reason: 'stop' }],
         usage: { prompt_tokens: 160, completion_tokens: 45, total_tokens: 205 },
       }),
     })
@@ -1569,6 +1580,7 @@ test('神明与信仰面板一次生成结构化候选，刷新恢复后采纳�
       maxTokens: 0,
     }))
   })
+  await installBrowserServiceCapacityFixtureV1(page, { provider: 'ollama', baseUrl: 'http://localhost:1234/v1', model: 'worldview-field-copilot-e2e' }, 64000)
   await page.route('http://localhost:1234/v1/chat/completions', async route => {
     const body = route.request().postDataJSON() as {
       messages?: Array<{ role: string; content: string }>
@@ -1600,7 +1612,7 @@ test('神明与信仰面板一次生成结构化候选，刷新恢复后采纳�
                 })
               : JSON.stringify(modelCandidate),
           },
-        }],
+        finish_reason: 'stop' }],
         usage: { prompt_tokens: 190, completion_tokens: 70, total_tokens: 260 },
       }),
     })
@@ -1615,7 +1627,7 @@ test('神明与信仰面板一次生成结构化候选，刷新恢复后采纳�
   const candidate = page.getByRole('textbox', { name: '神明与信仰候选内容' })
   await expect(candidate).toContainText(modelCandidate.value.divineRules)
   await expect(page.getByText('本次实际输入证据', { exact: true })).toBeVisible()
-  await expect(page.getByText('存在神明或宗教信仰', { exact: true })).toBeVisible()
+  await expect(page.getByLabel('包含神明或宗教信仰设定（神明是否存在可保留未知）', { exact: true })).toBeVisible()
 
   await page.reload()
   await openSidebarLeaf(page, '世界观', '世界起源')
@@ -1674,6 +1686,7 @@ for (const preparation of [false, true]) test(`${preparation ? '创作定位' : 
       maxTokens: 0,
     }))
   })
+  await installBrowserServiceCapacityFixtureV1(page, { provider: 'ollama', baseUrl: 'http://localhost:1234/v1', model: 'inspiration-copilot-e2e' }, 64000)
   // This synthetic service has a finite allocation, read by the real capacity parser.
   await page.route('http://localhost:1234/api/ps', route => route.fulfill({
     status: 200, contentType: 'application/json', body: JSON.stringify({ models: [{ model: 'inspiration-copilot-e2e', context_length: 64000 }] }),
@@ -1699,7 +1712,7 @@ for (const preparation of [false, true]) test(`${preparation ? '创作定位' : 
           message: {
             content: JSON.stringify(preparation ? preparationResult : modelResult),
           },
-        }],
+        finish_reason: 'stop' }],
         usage: { prompt_tokens: 140, completion_tokens: 60, total_tokens: 200 },
       }),
     })
@@ -1802,6 +1815,7 @@ test('分步骤角色面板通过 character.create Skill 生成、恢复并确�
       contextWindow: 100000,
     }))
   })
+  await installBrowserServiceCapacityFixtureV1(page, { provider: 'ollama', baseUrl: 'http://localhost:1234/v1', model: 'character-copilot-e2e' }, 100000)
   await page.route('http://localhost:1234/v1/chat/completions', async route => {
     const body = route.request().postDataJSON() as {
       messages?: Array<{ role: string; content: string }>
@@ -1832,7 +1846,7 @@ test('分步骤角色面板通过 character.create Skill 生成、恢复并确�
                 })
               : JSON.stringify(modelCandidate),
           },
-        }],
+        finish_reason: 'stop' }],
         usage: { prompt_tokens: 180, completion_tokens: 70, total_tokens: 250 },
       }),
     })
@@ -1906,6 +1920,7 @@ test('已有角色补全通过定向 Skill 恢复候选，确认后只写入所�
       contextWindow: 100000,
     }))
   })
+  await installBrowserServiceCapacityFixtureV1(page, { provider: 'ollama', baseUrl: 'http://localhost:1234/v1', model: 'character-supplement-e2e' }, 100000)
   await page.route('http://localhost:1234/v1/chat/completions', async route => {
     const body = route.request().postDataJSON() as {
       messages?: Array<{ role: string; content: string }>
@@ -1939,7 +1954,7 @@ test('已有角色补全通过定向 Skill 恢复候选，确认后只写入所�
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({
-        choices: [{ message: { content } }],
+        choices: [{ message: { content } , finish_reason: 'stop' }],
         usage: { prompt_tokens: 180, completion_tokens: 70, total_tokens: 250 },
       }),
     })
@@ -2024,6 +2039,7 @@ test('主 Agent 调度大纲领域任务，确认可见整批候选后同步到�
       contextWindow: 100000,
     }))
   })
+  await installBrowserServiceCapacityFixtureV1(page, { provider: 'ollama', baseUrl: 'http://localhost:1234/v1', model: 'outline-copilot-e2e' }, 100000)
   await page.route('http://localhost:1234/v1/chat/completions', async route => {
     const body = route.request().postDataJSON() as {
       messages?: Array<{ role: string; content: string }>
@@ -2054,7 +2070,7 @@ test('主 Agent 调度大纲领域任务，确认可见整批候选后同步到�
                 })
               : JSON.stringify(modelCandidate),
           },
-        }],
+        finish_reason: 'stop' }],
         usage: { prompt_tokens: 220, completion_tokens: 80, total_tokens: 300 },
       }),
     })
@@ -2132,6 +2148,7 @@ test('故事线面板通过主 Agent 生成 durable 候选，确认后才写入�
       contextWindow: 100000,
     }))
   })
+  await installBrowserServiceCapacityFixtureV1(page, { provider: 'ollama', baseUrl: 'http://localhost:1234/v1', model: 'story-arc-copilot-e2e' }, 100000)
   await page.route('http://localhost:1234/v1/chat/completions', async route => {
     const body = route.request().postDataJSON() as {
       messages?: Array<{ role: string; content: string }>
@@ -2163,7 +2180,7 @@ test('故事线面板通过主 Agent 生成 durable 候选，确认后才写入�
                 })
               : JSON.stringify({ storyArcs: modelCandidate }),
           },
-        }],
+        finish_reason: 'stop' }],
         usage: { prompt_tokens: 240, completion_tokens: 100, total_tokens: 340 },
       }),
     })
@@ -2216,6 +2233,7 @@ test('主 Agent 为明确章纲生成正文，拒绝零写入并把可见修订�
       contextWindow: 100000,
     }))
   })
+  await installBrowserServiceCapacityFixtureV1(page, { provider: 'ollama', baseUrl: 'http://localhost:1234/v1', model: 'prose-copilot-e2e' }, 100000)
   await page.route('http://localhost:1234/v1/chat/completions', async route => {
     const body = route.request().postDataJSON() as {
       messages?: Array<{ role: string; content: string }>
@@ -2245,7 +2263,7 @@ test('主 Agent 为明确章纲生成正文，拒绝零写入并把可见修订�
                 })
               : modelDraft,
           },
-        }],
+        finish_reason: 'stop' }],
         usage: { prompt_tokens: 260, completion_tokens: 180, total_tokens: 440 },
       }),
     })
@@ -2280,6 +2298,7 @@ test('主 Agent 为明确章纲生成正文，拒绝零写入并把可见修订�
 
   await copilot.getByRole('button', { name: '关闭主 Agent' }).click()
   await page.getByTitle('编辑章节').click()
+  await page.getByRole('group', { name: '编辑模式', exact: true }).getByRole('button', { name: '富文本', exact: true }).click()
   await expect(page.locator('.tiptap-editor')).toContainText('作者确认稿')
   await expect(page.locator('.tiptap-editor')).not.toContainText('模型初稿')
   expect(generationCalls).toBe(2)
@@ -2313,13 +2332,14 @@ test('外部文档词条先形成带证据候选，作者确认后才进入 Code
               writingTechniques: {},
             }),
           },
-        }],
+        finish_reason: 'stop' }],
         usage: { prompt_tokens: 200, completion_tokens: 80, total_tokens: 280 },
       }),
     })
   })
   await openCleanHome(page)
   await createProject(page, 'E2E 词条导入审查')
+  await installBrowserServiceCapacityFixtureV1(page, { provider: 'ollama', baseUrl: 'http://localhost:1234/v1', model: 'codex-import-e2e' }, 100000)
   await page.evaluate(async () => {
     const load = new Function('path', 'return import(path)') as <T>(path: string) => Promise<T>
     const { useAIConfigStore } = await load<typeof import('../../src/stores/ai-config')>('/storyforge/src/stores/ai-config.ts')
@@ -2397,6 +2417,7 @@ test('真实世界观入口可维护修炼 DAG 并关联角色境界', async ({ 
       maxTokens: 0,
     }))
   })
+  await installBrowserServiceCapacityFixtureV1(page, { provider: 'ollama', baseUrl: 'http://localhost:1234/v1', model: 'cultivation-e2e' }, 64000)
   await page.route('http://localhost:1234/v1/chat/completions', async route => {
     progressExtractionCalls += 1
     const request = route.request().postDataJSON() as {
@@ -2427,7 +2448,7 @@ test('真实世界观入口可维护修炼 DAG 并关联角色境界', async ({ 
               }],
             }),
           },
-        }],
+        finish_reason: 'stop' }],
         usage: { prompt_tokens: 100, completion_tokens: 30, total_tokens: 130 },
       }),
     })
@@ -2531,6 +2552,7 @@ test('世界地图把明确距离和方位落实到命名实体，并持久化�
       maxTokens: 0,
     }))
   })
+  await installBrowserServiceCapacityFixtureV1(page, { provider: 'ollama', baseUrl: 'http://localhost:1234/v1', model: 'world-map-e2e' }, 64000)
   await page.route('http://localhost:1234/v1/chat/completions', async route => {
     generationCalls++
     const request = route.request().postDataJSON() as {
@@ -2624,6 +2646,7 @@ test('世界地图把明确距离和方位落实到命名实体，并持久化�
   await openSidebarLeaf(page, '世界观', '世界地图')
   await page.getByTitle('新建根世界').click()
   await expect(page.getByText('新世界', { exact: true })).toBeVisible()
+  await page.getByText('主世界', { exact: true }).click()
   await page.getByRole('button', { name: 'AI 生成地图', exact: true }).click()
   await expect.poll(() => generationCalls).toBe(1)
   await page.getByText('新世界', { exact: true }).click()
@@ -2697,6 +2720,7 @@ test('角色驱动 Skill 隔离选定方案，恢复确认后持久化并导入�
       contextWindow: 100000,
     }))
   })
+  await installBrowserServiceCapacityFixtureV1(page, { provider: 'ollama', baseUrl: 'http://localhost:1234/v1', model: 'character-driven-copilot-e2e' }, 100000)
   await page.route('http://localhost:1234/v1/chat/completions', async route => {
     generationCalls += 1
     const body = route.request().postDataJSON() as {
@@ -2721,7 +2745,7 @@ test('角色驱动 Skill 隔离选定方案，恢复确认后持久化并导入�
       body: JSON.stringify({
         choices: [{ message: { content: JSON.stringify(
           generationCalls === 1 ? oldCandidate : modelCandidate,
-        ) } }],
+        ) } , finish_reason: 'stop' }],
         usage: { prompt_tokens: 260, completion_tokens: 100, total_tokens: 360 },
       }),
     })
@@ -2831,6 +2855,7 @@ test('角色中途重规划保护已写正文，只把审查后的 patch 应用�
       contextWindow: 100000,
     }))
   })
+  await installBrowserServiceCapacityFixtureV1(page, { provider: 'ollama', baseUrl: 'http://localhost:1234/v1', model: 'character-revision-e2e' }, 100000)
   await page.route('http://localhost:1234/v1/chat/completions', async route => {
     const request = route.request().postDataJSON() as {
       messages?: Array<{ role: string; content: string }>
@@ -2913,7 +2938,7 @@ test('角色中途重规划保护已写正文，只把审查后的 patch 应用�
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({
-        choices: [{ message: { content } }],
+        choices: [{ message: { content } , finish_reason: 'stop' }],
           usage: { prompt_tokens: 240, completion_tokens: 120, total_tokens: 360 },
       }),
     })
@@ -2997,6 +3022,7 @@ test('世界组六字段扩写只产生可恢复候选，作者确认后一次�
       contextWindow: 100000,
     }))
   })
+  await installBrowserServiceCapacityFixtureV1(page, { provider: 'ollama', baseUrl: 'http://localhost:1234/v1', model: 'worldview-expand-e2e' }, 100000)
   await page.route('http://localhost:1234/v1/chat/completions', async route => {
     generationCalls += 1
     const request = route.request().postDataJSON() as {
@@ -3120,6 +3146,7 @@ test('多世界建议刷新恢复整批候选，作者选择后只创建所选�
       maxTokens: 0,
     }))
   })
+  await installBrowserServiceCapacityFixtureV1(page, { provider: 'ollama', baseUrl: 'http://localhost:1234/v1', model: 'world-suggest-e2e' }, 64000)
   await page.route('http://localhost:1234/v1/chat/completions', async route => {
     generationCalls += 1
     const request = route.request().postDataJSON() as {
@@ -3212,6 +3239,7 @@ test('世界宪法扫描刷新恢复批次，确认后仍只写待确认事实',
       contextWindow: 100000,
     }))
   })
+  await installBrowserServiceCapacityFixtureV1(page, { provider: 'ollama', baseUrl: 'http://localhost:1234/v1', model: 'constitution-extract-e2e' }, 100000)
   await page.route('http://localhost:1234/v1/chat/completions', async route => {
     generationCalls += 1
     const request = route.request().postDataJSON() as {
@@ -3302,6 +3330,7 @@ test('Codex 内容拆分刷新恢复候选，作者确认后才原子新增词�
       contextWindow: 100000,
     }))
   })
+  await installBrowserServiceCapacityFixtureV1(page, { provider: 'ollama', baseUrl: 'http://localhost:1234/v1', model: 'codex-extract-durable-e2e' }, 100000)
   await page.route('http://localhost:1234/v1/chat/completions', async route => {
     generationCalls += 1
     const request = route.request().postDataJSON() as {
@@ -3341,7 +3370,7 @@ test('Codex 内容拆分刷新恢复候选，作者确认后才原子新增词�
   await openCleanHome(page)
   await createProject(page, 'E2E Codex durable 拆分闭环')
   await openSidebarLeaf(page, '世界观', '自然环境')
-  await expect(page.getByRole('heading', { name: '🏔️ 自然环境与地理' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '🌐 世界结构' })).toBeVisible()
   await expect(page.getByText('📚 世界结构 · 具体词条', { exact: true })).toBeVisible()
 
   await page.getByRole('button', { name: 'AI 从内容拆分词条', exact: true }).click()
@@ -3383,6 +3412,7 @@ test('伏笔建议刷新恢复候选，作者确认后才原子新增正式伏�
       contextWindow: 100000,
     }))
   })
+  await installBrowserServiceCapacityFixtureV1(page, { provider: 'ollama', baseUrl: 'http://localhost:1234/v1', model: 'foreshadow-suggestions-durable-e2e' }, 100000)
   await page.route('http://localhost:1234/v1/chat/completions', async route => {
     generationCalls += 1
     const request = route.request().postDataJSON() as {
@@ -3471,6 +3501,7 @@ test('历史考据刷新恢复持久候选，确认后只写正式考据结果',
       contextWindow: 100000,
     }))
   })
+  await installBrowserServiceCapacityFixtureV1(page, { provider: 'ollama', baseUrl: 'http://localhost:1234/v1', model: 'history-agent-durable-e2e' }, 100000)
   await page.route('http://localhost:1234/v1/chat/completions', async route => {
     generationCalls += 1
     const request = route.request().postDataJSON() as {
@@ -3494,13 +3525,13 @@ test('历史考据刷新恢复持久候选，确认后只写正式考据结果',
   await openCleanHome(page)
   await createProject(page, 'E2E 历史 Agent durable 闭环')
   await openSidebarLeaf(page, '世界观', '历史年表')
-  await expect(page.getByRole('heading', { name: '📜 历史年表与时间线' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '📜 历史时间轴' })).toBeVisible()
   await page.getByRole('button', { name: '添加事件', exact: true }).click()
   const title = page.locator('input[value="新历史事件"]')
   await title.fill('盐晶新律颁布')
   await page.getByLabel('数字化年份').fill('300')
   await page.getByPlaceholder('如：开元十三年、公元725年').fill('星历三百年')
-  await page.getByRole('heading', { name: '📜 历史年表与时间线' }).click()
+  await page.getByRole('heading', { name: '📜 历史时间轴' }).click()
 
   await page.getByRole('button', { name: 'AI 历史考据', exact: true }).click()
   await expect(page.getByText('历史考据持久候选', { exact: true })).toBeVisible({ timeout: 30_000 })
@@ -3539,6 +3570,7 @@ test('参考分析总结刷新恢复持久候选，确认后同步版本和激�
       contextWindow: 100000,
     }))
   })
+  await installBrowserServiceCapacityFixtureV1(page, { provider: 'ollama', baseUrl: 'http://localhost:1234/v1', model: 'reference-derived-durable-e2e' }, 100000)
   await page.route('http://localhost:1234/v1/chat/completions', async route => {
     generationCalls += 1
     const request = route.request().postDataJSON() as {
@@ -3656,8 +3688,8 @@ test('参考分析总结刷新恢复持久候选，确认后同步版本和激�
   await openSidebarLeaf(page, '著作信息', '项目参考')
   await page.getByText('镜城证词', { exact: true }).click()
   await expect(page.getByText('v1 · 深层 · mirror.md', { exact: true })).toBeVisible()
-  await page.getByRole('button', { name: 'AI 全书总结', exact: true }).click()
-  await expect(page.getByText('全书总结持久候选', { exact: true })).toBeVisible({ timeout: 30_000 })
+  await page.getByRole('button', { name: 'AI 已读范围综合', exact: true }).click()
+  await expect(page.getByText('已读范围综合持久候选', { exact: true })).toBeVisible({ timeout: 30_000 })
   await expect(page.getByText('全书用受限视角保持证词之间的信息差。', { exact: true })).toBeVisible()
   expect(generationCalls).toBe(1)
 
@@ -3668,7 +3700,7 @@ test('参考分析总结刷新恢复持久候选，确认后同步版本和激�
   expect(generationCalls).toBe(1)
 
   await page.getByRole('button', { name: '确认写入', exact: true }).click()
-  await expect(page.getByText('AI 全书总结', { exact: true })).toBeVisible({ timeout: 30_000 })
+  await expect(page.getByText('AI 已读范围综合', { exact: true })).toBeVisible({ timeout: 30_000 })
   await expect(page.getByText('全书用受限视角保持证词之间的信息差。', { exact: true })).toBeVisible()
   expect(generationCalls).toBe(1)
 
@@ -3694,6 +3726,7 @@ test('影响人工修正后可恢复章纲与年表生成式候选并经确认�
       contextWindow: 100000,
     }))
   })
+  await installBrowserServiceCapacityFixtureV1(page, { provider: 'ollama', baseUrl: 'http://localhost:1234/v1', model: 'impact-outline-regeneration-e2e' }, 100000)
   await page.route('http://localhost:1234/v1/chat/completions', async route => {
     generationCalls += 1
     const request = route.request().postDataJSON() as {
@@ -3842,6 +3875,7 @@ test('影响人工修正后可恢复章纲与年表生成式候选并经确认�
 
   await page.reload()
   await openWorkspaceLeaf(page, '章节')
+  await page.getByRole('group', { name: '编辑模式', exact: true }).getByRole('button', { name: '富文本', exact: true }).click()
   await expect(page.locator('.tiptap-editor')).toContainText('潮门只开启一半')
   await page.getByRole('button', { name: '影响分析', exact: true }).click()
   await expect(page.getByText(/影响图已生成/)).toBeVisible()
@@ -4122,6 +4156,7 @@ test('Prompt 示例 AI 只进入编辑草稿，作者保存后才写全局模板
       contextWindow: 100000,
     }))
   })
+  await installBrowserServiceCapacityFixtureV1(page, { provider: 'ollama', baseUrl: 'http://localhost:1234/v1', model: 'prompt-examples-authoring-draft-e2e' }, 100000)
   await page.route('http://localhost:1234/v1/chat/completions', async route => {
     generationCalls += 1
     const request = route.request().postDataJSON() as {
@@ -4136,9 +4171,9 @@ test('Prompt 示例 AI 只进入编辑草稿，作者保存后才写全局模板
       status: 200,
       contentType: 'text/event-stream',
       body: [
-        `data: ${JSON.stringify({ choices: [{ delta: { content } }] })}`,
+        `data: ${JSON.stringify({ choices: [{ delta: { content } , finish_reason: 'stop' }] })}`,
         `data: ${JSON.stringify({
-          choices: [{ delta: {} }],
+          choices: [{ delta: {} , finish_reason: 'stop' }],
           usage: { prompt_tokens: 90, completion_tokens: 30, total_tokens: 120 },
         })}`,
         'data: [DONE]',

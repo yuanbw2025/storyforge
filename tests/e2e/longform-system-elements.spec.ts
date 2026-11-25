@@ -1,12 +1,14 @@
+import { installBrowserServiceCapacityFixtureV1 } from './helpers/browser-ai-config'
 import { expect, test } from '@playwright/test'
 import { createLongform } from './helpers/product-entry'
 import { openLongformLeaf } from './helpers/longform-navigation'
 
 test('系统文元素保留原文风；原生候选刷新恢复、编辑确认后才写入，同一 Work 可回读', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('storyforge-ai-config', JSON.stringify({ provider: 'ollama', baseUrl: 'https://system-elements.invalid/v1', model: 'elements-test', maxTokens: 4000, temperature: 0 })))
+  await installBrowserServiceCapacityFixtureV1(page, { provider: 'ollama', baseUrl: 'https://system-elements.invalid/v1', model: 'elements-test' }, 64000)
   let calls = 0
   const value = { version: 1, enabled: false, protagonistIntent: '保住小店', systemMechanism: '每日签到免费领礼物', rewardGrowth: '计划增加手艺，不当作已有余额', limitsCosts: '无惩罚', oppositionRelations: '邻居有不同诉求' }
-  await page.route('https://system-elements.invalid/**', async route => {
+  await page.route('https://system-elements.invalid/v1/chat/completions', async route => {
     calls++
     expect(route.request().postDataJSON().messages.map((row: { content: string }) => row.content).join('\n')).toContain('目标字段是 systemFictionElements')
     await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ choices: [{ message: { content: JSON.stringify({ field: 'systemFictionElements', value }) }, finish_reason: 'stop' }] }) })

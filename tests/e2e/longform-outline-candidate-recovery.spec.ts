@@ -1,3 +1,4 @@
+import { installBrowserServiceCapacityFixtureV1 } from './helpers/browser-ai-config'
 import { expect, test, type Page } from '@playwright/test'
 import { createLongform } from './helpers/product-entry'
 import { openLongformLeaf } from './helpers/longform-navigation'
@@ -9,8 +10,9 @@ async function generate(page: Page, options: { delayCandidate?: boolean; output?
     localStorage.setItem('storyforge_guide_completed', 'e2e')
     localStorage.setItem('storyforge-ai-config', JSON.stringify({ provider: 'ollama', model: 'isolated-outline-recovery', baseUrl: 'https://outline-recovery.invalid/v1', maxTokens: 4000, contextWindow: 64000 }))
   })
+  await installBrowserServiceCapacityFixtureV1(page, { provider: 'ollama', baseUrl: 'https://outline-recovery.invalid/v1', model: 'isolated-outline-recovery' }, 64000)
   let calls = 0
-  await page.route('https://outline-recovery.invalid/**', async route => {
+  await page.route('https://outline-recovery.invalid/v1/chat/completions', async route => {
     calls++
     await route.fulfill({ contentType: 'text/event-stream', body: `data: ${JSON.stringify({ choices: [{ delta: { content: options.output ?? output }, finish_reason: 'stop' }], usage: { prompt_tokens: 50, completion_tokens: 80, total_tokens: 130 } })}\n\ndata: [DONE]\n\n` })
   })

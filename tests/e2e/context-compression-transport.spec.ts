@@ -46,12 +46,20 @@ test('a rejected transport is one dispatch with explicit fallback evidence', asy
   expect(requests).toBe(1)
   expect(result.compression).toMatchObject({ outcome: 'fallback', attempts: 1 })
 })
-test('an impossible JSON envelope falls back before dispatch', async ({ page }) => {
-  let requests = 0
-  await page.route(fixtureRoute, route => { requests++; return route.abort() })
-  const { result } = await runCompression(page, 8)
-  expect(requests).toBe(0)
-  expect(result.compression).toMatchObject({ outcome: 'fallback', attempts: 0, failureCode: 'compression-envelope-exceeds-output-budget' })
+test('a tiny legacy policy value does not cap the complete JSON envelope', async ({ page }) => {
+  const requests: Array<{ max_tokens: number }> = []
+  await page.route(fixtureRoute, async route => {
+    const body = route.request().postDataJSON(); requests.push(body)
+    const anchors = JSON.parse(body.messages[1].content.match(/【必须覆盖的逐字锚点】([^\n]+)/u)[1])
+    await route.fulfill({ json: { choices: [{ message: { content: JSON.stringify({ version: 1, summary: '保留潮门规则与认知边界。',
+      coveredAnchorIds: anchors.map((anchor: { id: string }) => anchor.id),
+      evidenceQuotes: anchors.map((anchor: { id: string; quote: string }) => ({ anchorId: anchor.id, quote: anchor.quote })) }) }, finish_reason: 'stop' }] } })
+  })
+  const { result, deliveredTokens } = await runCompression(page, 8)
+  expect(requests).toHaveLength(1)
+  expect(requests[0].max_tokens).toBeGreaterThan(8)
+  expect(result.compression).toMatchObject({ outcome: 'verified', attempts: 1, requiredAnchorCount: 3, coveredAnchorCount: 3 })
+  expect(deliveredTokens).toBeLessThanOrEqual(1000)
 })
 test('only a completed invalid response uses the bounded semantic repair', async ({ page }) => {
   let requests = 0

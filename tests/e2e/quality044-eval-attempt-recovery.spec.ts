@@ -33,7 +33,7 @@ test('044 H17 real settings stops at one unknown dispatch and preserves status a
       useAIConfigStore.getState().setConfig({ provider: 'openai', model: 'gpt-4o-mini', apiKey: 'sfqa044-synthetic-only',
         baseUrl: syntheticBaseUrl, temperature: 0, maxTokens: 3000, contextWindow: 128_000 })
     }, baseUrl)
-    await page.goto('./home/settings')
+    await page.goto('./home/settings?developerTools=1')
     const section = page.getByRole('heading', { name: 'H17 上下文质量对照', exact: true }).locator('xpath=ancestor::section[1]')
     await section.getByRole('button', { name: '运行', exact: true }).click()
     await expect(section.getByRole('status')).toContainText('上次评测请求结果未知')

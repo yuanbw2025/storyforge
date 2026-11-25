@@ -1,3 +1,4 @@
+import { installBrowserServiceCapacityFixtureV1 } from './helpers/browser-ai-config'
 import { expect, test, type BrowserContext, type Page } from '@playwright/test'
 import type { MotionDramaSeriesBibleV1, WorkspaceScope } from '../../src/lib/types'
 
@@ -190,6 +191,7 @@ for (const medium of ['comic', 'motion-drama'] as const) {
         usage: { prompt_tokens: 6, completion_tokens: 7, total_tokens: 13 },
       }) })
     })
+    await installBrowserServiceCapacityFixtureV1(page, { provider: 'custom', baseUrl: `${origin}/quality001016/v1`, model: 'quality-synthetic-model' }, 128_000)
     await page.evaluate(async baseUrl => {
       const importer = new Function('path', 'return import(path)') as (path: string) => Promise<unknown>
       const { useAIConfigStore } = await importer('/storyforge/src/stores/ai-config.ts') as typeof import('../../src/stores/ai-config')

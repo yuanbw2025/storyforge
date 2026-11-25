@@ -1,3 +1,4 @@
+import { installBrowserServiceCapacityFixtureV1 } from './helpers/browser-ai-config'
 import { expect, test, type Page } from '@playwright/test'
 import { createLongform } from './helpers/product-entry'
 
@@ -29,6 +30,7 @@ async function setup(page: Page, browserVoice = true) {
       cancel: () => { probe.canceled++ },
     } })
   }, { browserVoice })
+  await installBrowserServiceCapacityFixtureV1(page, { provider: 'ollama', baseUrl: 'https://companion-test.invalid/v1', model: 'isolated-test' }, 64000)
   await createLongform(page, '炉娘隔离验收')
   await page.getByRole('navigation', { name: '工作台创作方式' }).getByRole('button', { name: 'Agent', exact: true }).click()
   await expect(page.getByRole('textbox', { name: '告诉主 Agent 你的目标' })).toBeEnabled()

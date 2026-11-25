@@ -1,3 +1,4 @@
+import { installBrowserServiceCapacityFixtureV1 } from './helpers/browser-ai-config'
 import { expect, test } from '@playwright/test'
 
 test('084 preserves the longest NPC reply through the next turn, explicit memory and reload', async ({ browser, baseURL }, testInfo) => {
@@ -62,6 +63,7 @@ test('084 preserves the longest NPC reply through the next turn, explicit memory
     if (location.origin === expectedOrigin) localStorage.setItem('storyforge_guide_completed', 'sfqa084-isolated')
   }, origin.origin)
   const page = await context.newPage()
+  await installBrowserServiceCapacityFixtureV1(page, { provider: 'custom', baseUrl: 'https://sfqa084-native.invalid/v1', model: 'gpt-4o-mini' }, 128000)
   page.on('pageerror', error => pageErrors.push(error.message))
 
   try {
@@ -75,7 +77,7 @@ test('084 preserves the longest NPC reply through the next turn, explicit memory
       const { useAIConfigStore } = await load<typeof import('../../src/stores/ai-config')>('/storyforge/src/stores/ai-config.ts')
       useAIConfigStore.getState().setRememberApiKey(true)
       useAIConfigStore.getState().setConfig({
-        provider: 'openai', apiKey: 'synthetic-sfqa084-native-key', model: 'gpt-4o-mini',
+        provider: 'custom', apiKey: 'synthetic-sfqa084-native-key', model: 'gpt-4o-mini',
         baseUrl: 'https://sfqa084-native.invalid/v1', maxTokens: 1_600, contextWindow: 128_000, temperature: 0.2,
       })
       const { scope, session, release } = await createGovernedTextOpenWorldSessionFixtureV1({

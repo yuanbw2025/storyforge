@@ -105,6 +105,7 @@ test('library rename and search preserve the selected Work across reopening', as
   const id = await create(page, '待重命名作品')
   const primary = page.getByRole('navigation', { name: '长篇一级导航' })
   await primary.getByRole('button', { name: '作品库', exact: true }).click()
+  await page.getByLabel('更多操作：待重命名作品', { exact: true }).click()
   await page.getByRole('button', { name: '重命名', exact: true }).click()
   const dialog = page.getByRole('dialog')
   await dialog.getByRole('textbox').fill('改名后的探路人')
@@ -128,6 +129,7 @@ test('library rename failure keeps its dialog and name until an acknowledged ret
     db.works.update = async () => { throw new DOMException('改名写入失败', 'QuotaExceededError') }
     Object.assign(window, { restoreRenameWrite: () => { db.works.update = original } })
   })
+  await page.getByLabel('更多操作：改名失败原作', { exact: true }).click()
   await page.getByRole('button', { name: '重命名', exact: true }).click()
   const dialog = page.getByRole('dialog')
   await dialog.getByRole('textbox').fill('必须保留的改名')
@@ -152,6 +154,7 @@ test('renaming an inactive sibling Work never changes the active Work pointer', 
   }, id)
   await page.getByRole('navigation', { name: '长篇一级导航' }).getByRole('button', { name: '作品库', exact: true }).click()
   const card = page.locator('article').filter({ has: page.getByRole('heading', { name: '待改名作品 B', exact: true }) })
+  await card.getByLabel('更多操作：待改名作品 B', { exact: true }).click()
   await card.getByRole('button', { name: '重命名', exact: true }).click()
   const dialog = page.getByRole('dialog'); await dialog.getByRole('textbox').fill('独立改名作品 B')
   await dialog.getByRole('button', { name: '保存名称', exact: true }).click(); await expect(dialog).not.toBeVisible()

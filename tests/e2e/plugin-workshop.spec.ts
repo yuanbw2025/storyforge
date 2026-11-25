@@ -190,9 +190,9 @@ test('first-run examples create separate workspaces with real composed plugins',
 test('independent AI plugin keeps editable candidates and terminal history after plugin removal', async ({ page }) => {
   await page.addInitScript(() => {
   })
-  registerBrowserFixtureAIConfigV1(page, { provider: 'openai', baseUrl: 'https://plugin-ai.invalid/v1', model: 'gpt-4o', temperature: 0.2, maxTokens: 4000, apiKey: 'isolated-test-key' })
+  registerBrowserFixtureAIConfigV1(page, { provider: 'custom', baseUrl: 'https://plugin-ai.invalid/v1', model: 'gpt-4o', temperature: 0.2, maxTokens: 4000, apiKey: 'isolated-test-key' }, { serviceContextWindow: 64000 })
   let calls = 0
-  await page.route('https://plugin-ai.invalid/**',async route => {
+  await page.route('https://plugin-ai.invalid/v1/chat/completions',async route => {
     calls++
     expect(JSON.stringify(route.request().postDataJSON())).toContain('构思')
     await route.fulfill({json:{choices:[{message:{role:'assistant',content:JSON.stringify({title:'灯塔的选择',premise:'守灯人收到最后一封信。',turn:'她决定公开航线。'})},finish_reason:'stop'}],usage:{prompt_tokens:100,completion_tokens:100,total_tokens:200}}})
