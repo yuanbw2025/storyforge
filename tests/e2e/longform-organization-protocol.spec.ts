@@ -6,7 +6,7 @@ const pageErrors = new WeakMap<Page, string[]>()
 test.beforeEach(async ({ page }) => { const errors: string[] = []; pageErrors.set(page, errors); page.on('pageerror', error => errors.push(error.message)) })
 test.afterEach(async ({ page }) => { expect(pageErrors.get(page)).toEqual([]) })
 async function setup(page: Page) {
-  await page.addInitScript(() => localStorage.setItem('storyforge-ai-config', JSON.stringify({ provider: 'agnes', model: 'agnes-2.5-flash', baseUrl: 'https://organization.invalid/v1', contextWindow: 128000, maxTokens: 8000 })))
+  await page.addInitScript(() => localStorage.setItem('storyforge-ai-config', JSON.stringify({ provider: 'agnes', model: 'agnes-2.5-flash', baseUrl: 'https://apihub.agnes-ai.com/v1', contextWindow: 128000, maxTokens: 8000 })))
   await createLongform(page, '七域协议隔离验证')
   const seed = await page.evaluate(async text => {
     const imp = new Function('p', 'return import(p)')
@@ -52,7 +52,7 @@ test('all seven domains preserve anchored candidates through reload and explicit
     storyline: { progress: [{ arcId: seed.arcId, currentStageId: 'hand-over', status: 'active', progressNote: '抵达交接地点', involvedEntities: ['林舟'], anchorId: 'p1' }], crossings: [], newArcs: [] },
   }
   const raw = JSON.stringify(output), before = await data(page, seed.projectId)
-  await page.route('https://organization.invalid/**', async route => { requests.push(route.request().postDataJSON()); await route.fulfill({ json: { choices: [{ message: { content: raw }, finish_reason: 'stop' }] } }) })
+  await page.route('https://apihub.agnes-ai.com/v1/chat/completions', async route => { requests.push(route.request().postDataJSON()); await route.fulfill({ json: { choices: [{ message: { content: raw }, finish_reason: 'stop' }] } }) })
   await page.getByRole('button', { name: '整理本章', exact: true }).click()
   await expect(page.getByRole('button', { name: '关闭整理本章', exact: true })).toBeVisible()
   expect(requests).toHaveLength(1)
@@ -78,7 +78,7 @@ test('all seven domains preserve anchored candidates through reload and explicit
 test('an invalid row is visible and its exact original response survives refresh', async ({ page }) => {
   const seed = await setup(page), raw = JSON.stringify({ ...empty(), storyEvents: [{ title: '抵达', storyTime: '', importance: 2, description: '抵达', sourceQuote: '林舟终于抵达云港。' }] })
   let calls = 0
-  await page.route('https://organization.invalid/**', async route => { calls++; await route.fulfill({ json: { choices: [{ message: { content: raw }, finish_reason: 'stop' }] } }) })
+  await page.route('https://apihub.agnes-ai.com/v1/chat/completions', async route => { calls++; await route.fulfill({ json: { choices: [{ message: { content: raw }, finish_reason: 'stop' }] } }) })
   await page.getByRole('button', { name: '整理本章', exact: true }).click()
   await expect(page.getByRole('dialog', { name: '整理本章失败', exact: true })).toContainText('年表候选没有全部通过')
   expect((await data(page, seed.projectId)).agentRunArtifacts.some(row => row.artifactKind === 'raw-response' && row.content === raw)).toBe(true)
@@ -89,7 +89,7 @@ test('an invalid row is visible and its exact original response survives refresh
 })
 test('provider rejection uses one dispatch and no canonical write', async ({ page }) => {
   const seed = await setup(page); let calls = 0
-  await page.route('https://organization.invalid/**', async route => { calls++; await route.fulfill({ status: 503, json: { error: { message: 'temporarily unavailable' } } }) })
+  await page.route('https://apihub.agnes-ai.com/v1/chat/completions', async route => { calls++; await route.fulfill({ status: 503, json: { error: { message: 'temporarily unavailable' } } }) })
   await page.getByRole('button', { name: '整理本章', exact: true }).click()
   await expect(page.getByRole('dialog', { name: '整理本章失败', exact: true })).toBeVisible()
   await page.getByRole('button', { name: '知道了', exact: true }).click(); await page.reload()
@@ -97,7 +97,7 @@ test('provider rejection uses one dispatch and no canonical write', async ({ pag
 })
 test('a request-evidence save failure prevents dispatch; explicit new run succeeds after storage recovers', async ({ page }) => {
   const seed = await setup(page); let calls = 0
-  await page.route('https://organization.invalid/**', async route => { calls++; await route.fulfill({ json: { choices: [{ message: { content: JSON.stringify(empty()) }, finish_reason: 'stop' }] } }) })
+  await page.route('https://apihub.agnes-ai.com/v1/chat/completions', async route => { calls++; await route.fulfill({ json: { choices: [{ message: { content: JSON.stringify(empty()) }, finish_reason: 'stop' }] } }) })
   await page.evaluate(async () => {
     const { db } = await (new Function('return import("/storyforge/src/lib/db/schema.ts")'))()
     const fail = (_key: unknown, record: { artifactKind: string }) => {
@@ -116,7 +116,7 @@ test('a request-evidence save failure prevents dispatch; explicit new run succee
   expect(calls).toBe(1); expect((await data(page, seed.projectId)).storyTimelineEvents).toHaveLength(0)
 })
 test('prose adoption keeps post-organization authorization and raw evidence through refresh', async ({ page }) => {
-  await page.addInitScript(() => localStorage.setItem('storyforge-ai-config', JSON.stringify({ provider: 'agnes', model: 'agnes-2.5-flash', baseUrl: 'https://organization.invalid/v1', maxTokens: 8000, contextWindow: 128000 })))
+  await page.addInitScript(() => localStorage.setItem('storyforge-ai-config', JSON.stringify({ provider: 'agnes', model: 'agnes-2.5-flash', baseUrl: 'https://apihub.agnes-ai.com/v1', maxTokens: 8000, contextWindow: 128000 })))
   await createLongform(page, '章后七域完整授权')
   const projectId = await page.evaluate(async () => {
     const imp = new Function('p', 'return import(p)')
@@ -136,7 +136,7 @@ test('prose adoption keeps post-organization authorization and raw evidence thro
   await page.getByRole('button', { name: '写本章正文', exact: true }).click()
   const generated = chapterText.repeat(12), organizationRaw = JSON.stringify({ ...empty(), storyEvents: [{ title: '抵达云港', storyTime: '', importance: 2, description: '林舟抵达云港', anchorId: 'p1' }] })
   const requests: any[] = []
-  await page.route('https://organization.invalid/**', async route => {
+  await page.route('https://apihub.agnes-ai.com/v1/chat/completions', async route => {
     const body = route.request().postDataJSON(); requests.push(body)
     if (body.stream) await route.fulfill({ contentType: 'text/event-stream', body: `data: ${JSON.stringify({ choices: [{ delta: { content: generated }, finish_reason: 'stop' }] })}\n\ndata: [DONE]\n\n` })
     else await route.fulfill({ json: { choices: [{ message: { content: organizationRaw }, finish_reason: 'stop' }] } })
@@ -174,7 +174,7 @@ test('the actual empty-roster request example leaves unavailable target arrays e
     useAIConfigStore.setState({ config: { ...useAIConfigStore.getState().config, apiKey: 'isolated-test-token' } })
   })
   const requests: any[] = []
-  await page.route('https://organization.invalid/**', async route => { requests.push(route.request().postDataJSON()); await route.fulfill({ json: { choices: [{ message: { content: JSON.stringify(empty()) }, finish_reason: 'stop' }] } }) })
+  await page.route('https://apihub.agnes-ai.com/v1/chat/completions', async route => { requests.push(route.request().postDataJSON()); await route.fulfill({ json: { choices: [{ message: { content: JSON.stringify(empty()) }, finish_reason: 'stop' }] } }) })
   await page.getByRole('button', { name: '整理本章', exact: true }).click()
   await expect(page.getByRole('button', { name: '关闭整理本章', exact: true })).toBeVisible()
   expect(requests).toHaveLength(1)
@@ -189,7 +189,7 @@ test('author deselection survives closing and refreshing before selective adopti
     inventoryEvents: [{ itemName: '潮汐钥匙', heldByName: '林舟', action: 'gain', quantity: 1, note: '拾起', anchorId: 'p2' }],
     storyEvents: [{ title: '抵达云港', storyTime: '', importance: 2, description: '林舟抵达云港', anchorId: 'p1' }],
   }
-  await page.route('https://organization.invalid/**', async route => { calls++; await route.fulfill({ json: { choices: [{ message: { content: JSON.stringify(output) }, finish_reason: 'stop' }] } }) })
+  await page.route('https://apihub.agnes-ai.com/v1/chat/completions', async route => { calls++; await route.fulfill({ json: { choices: [{ message: { content: JSON.stringify(output) }, finish_reason: 'stop' }] } }) })
   await page.getByRole('button', { name: '整理本章', exact: true }).click()
   const timeline = () => page.getByRole('checkbox', { name: /^抵达云港 · 重要度 2/u })
   await expect(timeline()).toBeChecked(); await timeline().uncheck()
@@ -212,7 +212,7 @@ test('selection save failure retains choices and only explicit retry unblocks ad
     inventoryEvents: [{ itemName: '潮汐钥匙', heldByName: '林舟', action: 'gain', quantity: 1, note: '拾起', anchorId: 'p2' }],
     storyEvents: [{ title: '抵达云港', storyTime: '', importance: 2, description: '林舟抵达云港', anchorId: 'p1' }],
   }
-  await page.route('https://organization.invalid/**', async route => { calls++; await route.fulfill({ json: { choices: [{ message: { content: JSON.stringify(output) }, finish_reason: 'stop' }] } }) })
+  await page.route('https://apihub.agnes-ai.com/v1/chat/completions', async route => { calls++; await route.fulfill({ json: { choices: [{ message: { content: JSON.stringify(output) }, finish_reason: 'stop' }] } }) })
   await page.getByRole('button', { name: '整理本章', exact: true }).click()
   const timeline = () => page.getByRole('checkbox', { name: /^抵达云港 · 重要度 2/u })
   await expect(timeline()).toBeChecked()

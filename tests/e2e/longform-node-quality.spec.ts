@@ -1,9 +1,11 @@
+import { installBrowserServiceCapacityFixtureV1 } from './helpers/browser-ai-config'
 import { expect, test, type Page } from '@playwright/test'
 import { createLongform } from './helpers/product-entry'
 import { openLongformLeaf } from './helpers/longform-navigation'
 
 async function setup(page: Page, revision = false) {
   await page.addInitScript(() => localStorage.setItem('storyforge-ai-config', JSON.stringify({ provider: 'ollama', model: 'node-quality-test', baseUrl: 'https://node-quality.invalid/v1', temperature: .7, maxTokens: 4000, contextWindow: 128000 })))
+  await installBrowserServiceCapacityFixtureV1(page, { provider: 'ollama', baseUrl: 'https://node-quality.invalid/v1', model: 'node-quality-test' }, 128000)
   await createLongform(page, '节点同源审修')
   const target = await page.evaluate(async revision => {
     const imp = new Function('p', 'return import(p)')
@@ -27,7 +29,7 @@ async function setup(page: Page, revision = false) {
 }
 
 function mock(page: Page, calls: any[], fail = false) {
-  return page.route('https://node-quality.invalid/**', async route => {
+  return page.route('https://node-quality.invalid/v1/chat/completions', async route => {
     const body = route.request().postDataJSON(); calls.push(body)
     if (fail) return route.fulfill({ status: 503, body: '服务暂时不可用' })
     const system = body.messages[0].content

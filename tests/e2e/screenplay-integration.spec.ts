@@ -89,9 +89,9 @@ test('screenplay AI candidate edits and excluded items survive refresh before ad
  await page.addInitScript(()=>{
   localStorage.setItem('storyforge_guide_completed','e2e')
  })
- registerBrowserFixtureAIConfigV1(page, { provider: 'openai', baseUrl: 'https://screenplay-test.invalid/v1', model: 'gpt-4o', temperature: 0.2, maxTokens: 4000, apiKey: 'isolated-test-key' })
+ registerBrowserFixtureAIConfigV1(page, { provider: 'custom', baseUrl: 'https://screenplay-test.invalid/v1', model: 'gpt-4o', temperature: 0.2, maxTokens: 4000, apiKey: 'isolated-test-key' }, { serviceContextWindow: 64000 })
  let calls=0
- await page.route('https://screenplay-test.invalid/**',async route=>{
+ await page.route('https://screenplay-test.invalid/v1/chat/completions',async route=>{
   calls++;const request=JSON.stringify(route.request().postDataJSON());const key=request.match(/asu_[A-Za-z0-9_-]{8,64}/)?.[0];expect(key).toBeTruthy()
   const facts=[{stableKey:'fact.arrival',kind:'event',statement:'林岚到达车站。',subjectKeys:[],sourceUnitKeys:[key],confidence:1},{stableKey:'fact.wait',kind:'event',statement:'她决定等待。',subjectKeys:[],sourceUnitKeys:[key],confidence:1}]
   await route.fulfill({contentType:'application/json',body:JSON.stringify({choices:[{message:{role:'assistant',content:JSON.stringify(facts)},finish_reason:'stop'}],usage:{prompt_tokens:100,completion_tokens:100,total_tokens:200}})})
@@ -141,6 +141,7 @@ for (const profile of ['long','short'] as const) test(`adapting a ${profile} nov
  await gotoWithBrowserFixtureAIConfigV1(page, `./${profile}${profile==='short'?'/library':''}`)
  let book=page.locator('article').filter({has:page.getByRole('heading',{name:'原作保留验收',exact:true})})
  await expect(book).toBeVisible()
+ if (profile==='long') await book.getByText('更多操作',{exact:true}).click()
  await book.getByRole('button',{name:'重命名',exact:true}).click()
  await page.getByRole('dialog').getByRole('textbox').fill('修改后的原作')
  await page.getByRole('dialog').getByRole('button',{name:'保存名称',exact:true}).click()
@@ -157,7 +158,9 @@ for (const profile of ['long','short'] as const) test(`adapting a ${profile} nov
  await gotoWithBrowserFixtureAIConfigV1(page, scriptUrl)
  await expect(page.getByRole('navigation',{name:'剧本页面导航'})).toBeVisible()
  await gotoWithBrowserFixtureAIConfigV1(page, `./${profile}${profile==='short'?'/library':''}`)
- await page.locator('article').filter({has:page.getByRole('heading',{name:'修改后的原作',exact:true})}).getByRole('button',{name:'删除作品',exact:true}).click()
+ const editedBook=page.locator('article').filter({has:page.getByRole('heading',{name:'修改后的原作',exact:true})})
+ if (profile==='long') await editedBook.getByText('更多操作',{exact:true}).click()
+ await editedBook.getByRole('button',{name:'删除作品',exact:true}).click()
  await page.getByRole('dialog').getByRole('button',{name:'继续',exact:true}).click()
  const download=page.waitForEvent('download')
  await page.getByRole('dialog').getByRole('button',{name:'立即备份',exact:true}).click()

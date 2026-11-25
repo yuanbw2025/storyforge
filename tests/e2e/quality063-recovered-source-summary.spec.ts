@@ -1,3 +1,4 @@
+import { installBrowserServiceCapacityFixtureV1 } from './helpers/browser-ai-config'
 import { expect, test, type Page } from '@playwright/test'
 import { createLongform } from './helpers/product-entry'
 import { openLongformLeaf } from './helpers/longform-navigation'
@@ -18,8 +19,9 @@ async function setup(page: Page, chapterCount = 2) {
     localStorage.setItem('storyforge_guide_completed', 'e2e')
     localStorage.setItem('storyforge-ai-config', JSON.stringify({ provider: 'ollama', model: 'isolated-batch-detail', baseUrl: 'https://batch-detail.invalid/v1', maxTokens: 6000, contextWindow: 64000 }))
   })
+  await installBrowserServiceCapacityFixtureV1(page, { provider: 'ollama', baseUrl: 'https://batch-detail.invalid/v1', model: 'isolated-batch-detail' }, 64000)
   let calls = 0
-  await page.route('https://batch-detail.invalid/**', async route => {
+  await page.route('https://batch-detail.invalid/v1/chat/completions', async route => {
     calls++
     await route.fulfill({ json: { choices: [{ message: { content: output }, finish_reason: 'stop' }], usage: { prompt_tokens: 50, completion_tokens: 80, total_tokens: 130 } } })
   })

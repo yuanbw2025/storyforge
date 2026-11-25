@@ -1,3 +1,4 @@
+import { installBrowserServiceCapacityFixtureV1 } from './helpers/browser-ai-config'
 import { expect, test, type Page } from '@playwright/test'
 import { createLongform } from './helpers/product-entry'
 
@@ -70,6 +71,7 @@ async function setup(page: Page, name: string) {
       }),
     )
   })
+  await installBrowserServiceCapacityFixtureV1(page, { provider: 'ollama', baseUrl: 'https://agent-experience.invalid/v1', model: 'isolated-agent-test' }, 100000)
   await createLongform(page, name)
 }
 async function agent(page: Page) {
@@ -347,7 +349,7 @@ test('a blank work starts with one visible chapter plan and reaches saved prose 
   expect((await storedCounts(page)).outlines).toHaveLength(0)
   await page.getByRole('button', { name: '确认计划并开始', exact: true }).click()
   await expect(page.getByRole('textbox', { name: '标题 · 候选 1', exact: true })).toHaveValue('来信')
-  await expect(page.getByText(/本轮团队约使用 [1-9][\d,]* \/ 160,000 tokens，1 次调用/)).toBeVisible()
+  await expect(page.getByText(/本轮团队约使用 [1-9][\d,]* tokens，1 次调用/)).toBeVisible()
   await page.getByRole('button', { name: '采纳', exact: true }).click()
   await expect(page.getByRole('textbox', { name: '标题 · 候选 1', exact: true })).toHaveValue('雨夜来信')
   await expect(page.getByRole('button', { name: '采纳', exact: true })).toBeEnabled()

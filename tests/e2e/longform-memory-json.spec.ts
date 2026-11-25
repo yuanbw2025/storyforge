@@ -1,3 +1,4 @@
+import { installBrowserServiceCapacityFixtureV1 } from './helpers/browser-ai-config'
 import { expect, test, type Page } from '@playwright/test'
 import { createLongform } from './helpers/product-entry'
 
@@ -20,6 +21,8 @@ async function addChapter(page: Page, first: boolean) {
   await page.getByRole('button', { name: '添加场景', exact: true }).click()
   await page.getByPlaceholder('一句话场景概要...', { exact: true }).fill('询问、回应、关门。')
   await page.getByRole('button', { name: '写本章正文', exact: true }).click()
+  await page.getByRole('group', { name: '编辑模式', exact: true }).getByRole('button', { name: '富文本', exact: true }).click()
+  await page.getByRole('textbox', { name: '自定义指令...', exact: true }).fill(`写${prose.length}字。`)
 }
 
 async function prepare(page: Page) {
@@ -27,8 +30,9 @@ async function prepare(page: Page) {
     provider: 'ollama', baseUrl: 'https://memory-json.invalid/v1', model: 'memory-json-test',
     maxTokens: 4000, contextWindow: 64000, temperature: 0,
   })))
+  await installBrowserServiceCapacityFixtureV1(page, { provider: 'ollama', baseUrl: 'https://memory-json.invalid/v1', model: 'memory-json-test' }, 64000)
   const requests: Array<Record<string, any>> = []
-  await page.route('https://memory-json.invalid/**', async route => {
+  await page.route('https://memory-json.invalid/v1/chat/completions', async route => {
     const body = route.request().postDataJSON()
     requests.push(body)
     if (body.stream) {
@@ -50,7 +54,7 @@ async function chapters(page: Page) {
   })
 }
 
-test('手动记忆与生成前补建发送 JSON 对象请求，保存后刷新不再调用模型', async ({ page }) => {
+test('手动记忆使用 JSON 对象；正文完整读取修改后的前章，不隐式补建记忆', async ({ page }) => {
   const requests = await prepare(page)
   await page.locator('.tiptap-editor').fill(prose)
   await page.getByRole('button', { name: '生成章节记忆', exact: true }).click()
@@ -69,14 +73,12 @@ test('手动记忆与生成前补建发送 JSON 对象请求，保存后刷新�
   await page.getByRole('button', { name: '✨ 生成正文', exact: true }).click()
   await page.getByRole('dialog', { name: '正文生成提示', exact: true }).getByRole('button', { name: '开始生成', exact: true }).click()
   await expect(page.getByRole('textbox', { name: 'AI 候选可编辑内容', exact: true })).toHaveValue(prose)
-  expect(requests).toHaveLength(3)
-  expect(requests[1]).toMatchObject({ stream: false, response_format: { type: 'json_object' } })
+  expect(requests).toHaveLength(2)
+  expect(requests[1].stream).toBe(true)
   expect(requests[1].messages.map((message: any) => message.content).join('\n')).toContain('林舟把钥匙交给苏砚。')
-  expect(requests[2].stream).toBe(true)
-  expect(requests[2].messages.map((message: any) => message.content).join('\n')).toContain(summary)
   const refreshed = (await chapters(page)).find((row: any) => row.id === first.id)
-  expect(refreshed.summarySourceTextHash).not.toBe(first.summarySourceTextHash)
-  expect(refreshed.continuityHandoff.sourceTextHash).toBe(refreshed.summarySourceTextHash)
+  expect(refreshed.summarySourceTextHash).toBe(first.summarySourceTextHash)
+  expect(refreshed.continuityHandoff.sourceTextHash).toBe(first.summarySourceTextHash)
 })
 
 test('采纳后经作者授权的记忆任务使用 JSON 模式，完成后刷新不重做', async ({ page }) => {
@@ -100,7 +102,7 @@ test('采纳后经作者授权的记忆任务使用 JSON 模式，完成后刷�
   await page.getByRole('button', { name: '确认并开始章后任务', exact: true }).click()
   await expect(page.getByRole('button', { name: '刷新章节记忆', exact: true })).toBeVisible()
   expect(requests).toHaveLength(2)
-  expect(requests[1]).toMatchObject({ stream: false, response_format: { type: 'json_object' }, max_tokens: 8000 })
+  expect(requests[1]).toMatchObject({ stream: false, response_format: { type: 'json_object' }, max_tokens: 4000 })
   const stored = (await chapters(page))[0]
   expect(stored.summary).toBe(summary)
   expect(stored.continuityHandoff.sourceTextHash).toBe(stored.summarySourceTextHash)

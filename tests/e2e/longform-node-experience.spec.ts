@@ -1,3 +1,4 @@
+import { installBrowserServiceCapacityFixtureV1 } from './helpers/browser-ai-config'
 import { expect, test, type Page } from '@playwright/test'
 import { createLongform } from './helpers/product-entry'
 import { openLongformLeaf } from './helpers/longform-navigation'
@@ -7,6 +8,8 @@ async function setup(page: Page, incomplete = false) {
     localStorage.setItem('storyforge_guide_completed', 'e2e')
     localStorage.setItem('storyforge-ai-config', JSON.stringify({ provider: 'custom', apiKey: 'isolated-test', model: 'test-model', baseUrl: 'https://node-test.invalid/v1', temperature: 0.7, maxTokens: 2000, contextWindow: 32000 }))
   })
+
+  await installBrowserServiceCapacityFixtureV1(page, { provider: 'custom', baseUrl: 'https://node-test.invalid/v1', model: 'test-model' }, 32000)
   await createLongform(page, '节点跨模式验收')
   const projectId = Number(new URL(page.url()).pathname.split('/').pop())
   await page.evaluate(async ({ projectId, incomplete }) => {

@@ -22,6 +22,7 @@ test('portal dialogs use the shared palette and browser reload never restores an
   await page.addInitScript(()=>localStorage.setItem('storyforge-theme','forge'))
   await createLongform(page,'新界面弹窗验证')
   await page.goto('./long')
+  await page.getByLabel('更多操作：新界面弹窗验证', {exact:true}).click()
   await page.getByRole('button',{name:'重命名',exact:true}).click()
   const dialog=page.getByRole('dialog')
   await expect(dialog).toHaveCSS('background-color','rgb(250, 248, 241)')

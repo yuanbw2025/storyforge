@@ -1,3 +1,4 @@
+import { installBrowserServiceCapacityFixtureV1 } from './helpers/browser-ai-config'
 import { expect, test, type Page } from '@playwright/test'
 import { createLongform } from './helpers/product-entry'
 
@@ -10,6 +11,7 @@ async function prepare(page: Page) {
     provider: 'ollama', baseUrl: 'https://state-recovery.invalid/v1', model: 'state-recovery-fixture',
     maxTokens: 1200, contextWindow: 64000, temperature: 0,
   })))
+  await installBrowserServiceCapacityFixtureV1(page, { provider: 'ollama', baseUrl: 'https://state-recovery.invalid/v1', model: 'state-recovery-fixture' }, 64000)
   // Isolated failures must never be submitted to the production support service.
   await page.route(/^https?:\/\//, route => {
     const host = new URL(route.request().url()).hostname
@@ -175,7 +177,7 @@ for (const fields of ['[null]', '[{"key":"位置"}]', '[{"key":"位置","value":
 test('坏状态阻止模型请求；修复后生成、编辑候选、刷新采纳、手改保存和下游状态回读', async ({ page }) => {
   const calls: any[] = []
   const generated = '林照站在山门外，右手缠着布条。他用左手拨开草丛，沿溪探查道路，听见断桥下的水声便停了脚步。'.repeat(8)
-  await page.route('https://state-recovery.invalid/**', route => {
+  await page.route('https://state-recovery.invalid/v1/chat/completions', route => {
     calls.push(route.request().postDataJSON())
     return route.fulfill({ contentType: 'text/event-stream', body: `data: ${JSON.stringify({ choices: [{ delta: { content: generated }, finish_reason: 'stop' }] })}\n\ndata: [DONE]\n\n` })
   })
@@ -195,6 +197,7 @@ test('坏状态阻止模型请求；修复后生成、编辑候选、刷新采�
   await repair.getByRole('button', { name: '保存修复', exact: true }).click()
   await expect(repair).toHaveCount(0)
   await page.goto(`./workspace/${target.projectId}?module=chapters-list&chapter=${target.outlineNodeId}`)
+  await page.getByRole('button', { name: '富文本', exact: true }).click()
   await page.getByPlaceholder('自定义指令...', { exact: true }).fill('只写当前场景，保留右手受伤，停在断桥处。')
   await page.getByRole('button', { name: '✨ 生成正文', exact: true }).click()
   await page.getByRole('dialog', { name: '正文生成提示', exact: true }).getByRole('button', { name: '开始生成', exact: true }).click()
@@ -214,6 +217,7 @@ test('坏状态阻止模型请求；修复后生成、编辑候选、刷新采�
   expect((await read(page, target)).chapter.content).not.toContain(generated)
   await page.reload()
   await expect(candidate).toHaveValue(edited)
+  await page.getByRole('button', { name: '富文本', exact: true }).click()
   expect(calls).toHaveLength(1)
   await page.getByRole('button', { name: '采纳', exact: true }).click()
   await expect(page.locator('.tiptap-editor')).toContainText('把探路结果记在纸上')
