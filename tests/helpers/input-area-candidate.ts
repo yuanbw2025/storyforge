@@ -63,14 +63,15 @@ export async function seedInputAreaStoryCandidate() {
     execute: async options => {
       const trace = options.executionTrace, budget = options.budget
       if (!trace?.taskStarted || !trace.candidateReady || !budget) throw new Error('Expected durable fixture hooks')
+      const task = options.plan.tasks[0]
       await trace.taskStarted(task)
-      const prepared = await prepareStoryCoreCopilot({ projectId: workspace.scope.projectId, scope: workspace.scope, worldGroupId: null, authorRequest: instruction, skillId: task.skillId })
+      const prepared = await prepareStoryCoreCopilot({ projectId: workspace.scope.projectId, scope: workspace.scope, worldGroupId: null, authorRequest: instruction, skillId: 'world-origin.story-core', promptExecution: task.promptExecution })
       const reservation = budget.reserveCall({ label: task.id, messages: [{ role: 'user', content: instruction }], maxOutputTokens: 200 })
       budget.settleCall(reservation, draft)
       const gateway = await prepareRequiredMasterGatewayFixtureV1({ scope: workspace.scope, worldGroupId: null, executionTrace: trace }, task, draft)
       const candidate: ExecutedMasterCandidate = {
         payload: { version: 1, taskId: task.id, agentId: task.agentId, skillId: task.skillId, storyCoreField: prepared.targetField,
-          baseSnapshot: prepared.snapshot, label: prepared.label, contextSources: gateway.contextSources, contextEvidence: gateway.contextEvidence,
+          promptExecutionEvidence: prepared.promptExecutionEvidence, baseSnapshot: prepared.snapshot, label: prepared.label, contextSources: gateway.contextSources, contextEvidence: gateway.contextEvidence,
           workspaceScope: workspace.scope, dependsOnTaskIds: [], teamBudgetEvidence: budget.snapshot() },
         draft, runtimeNode: prepared.node, runtimeOutput: output, contextGatewayRuntime: gateway.contextGatewayRuntime,
       }

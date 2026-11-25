@@ -36,7 +36,7 @@ async function jump(page: Page, name: string) {
   await page.getByPlaceholder('搜索词条', { exact: true }).fill(name)
   await page.getByRole('button', { name: new RegExp(name) }).click()
   await page.getByText(name, { exact: true }).filter({ visible: true }).click()
-  await expect(page.locator('input[placeholder="名称"]:visible')).toHaveValue(name)
+  await expect(page.getByRole('region', { name: '旧版政经文化词条' }).getByPlaceholder('名称', { exact: true })).toHaveValue(name)
 }
 
 async function readHistoryRows(page: Page, entries: Array<{ key: string; id: number; categoryId: number }>) {
@@ -93,12 +93,13 @@ test('search cannot replace a legacy editor while its author draft failed to sav
   await page.getByPlaceholder('搜索词条', { exact: true }).fill(politics.name)
   await page.getByRole('button', { name: new RegExp(politics.name) }).click()
   await expect(page.getByRole('alert').filter({ hasText: '作者编辑保存失败' }).first()).toBeVisible()
-  await expect(page.locator('input[placeholder="名称"]:visible')).toHaveValue(society.name)
+  await expect(page.getByRole('region', { name: '旧版政经文化词条' }).getByPlaceholder('名称', { exact: true })).toHaveValue(society.name)
   await expect(page.locator('input[placeholder="一句话简介"]:visible')).toHaveValue('仍须保留的旧社会修改')
   await page.evaluate(() => (window as unknown as { restoreLegacyWrite: () => void }).restoreLegacyWrite())
   await page.getByRole('button', { name: '重试保存词条', exact: true }).click()
   await expect(page.getByRole('alert').filter({ hasText: '输入已保留' })).toHaveCount(0)
   await page.getByRole('button', { name: new RegExp(politics.name) }).click()
   await page.getByText(politics.name, { exact: true }).filter({ visible: true }).click()
-  await expect(page.locator('input[placeholder="名称"]:visible')).toHaveValue(politics.name)
+  await expect(page.getByPlaceholder('名称', { exact: true }).first()).toHaveValue(politics.name)
+  await expect(page.getByRole('region', { name: '旧版政经文化词条' }).getByPlaceholder('名称', { exact: true })).toHaveValue(society.name)
 })

@@ -92,6 +92,7 @@ async function actualPacket(page: Page, f: Fixture, target: ChapterTarget, opera
       chapterId: chapter.id, outlineNodeId: node.id!, worldGroupId: null, operation: input.operation, perspectiveCharacterId: null,
       authorRequest: input.operation === 'review' ? '预览当前章节受控创作上下文'
         : [node.title, node.summary, htmlToPlainText(chapter.content).slice(-2000)].filter(Boolean).join('\n'),
+      ...(input.operation === 'review' ? {} : { taskRequestV2: true as const }),
       citedReferenceIds: input.operation === 'review' ? undefined : [], config: useAIConfigStore.getState().config,
     })
     return { packet: assembly.contextGatewayExecution.contextPacket,

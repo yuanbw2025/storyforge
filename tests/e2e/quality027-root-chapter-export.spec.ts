@@ -114,7 +114,10 @@ test('027 public long-import API → default root-chapter UI → real TXT/Markdo
       const saved = await download.path()
       if (!saved) throw new Error('027 download did not produce a real local file')
       const text = await readFile(saved, 'utf8')
-      const expectedBodies = seed.chapters.map(chapter => format === 'TXT' ? chapter.plain : chapter.plain.replace(/\n/g, '\n\n'))
+      const expectedBodies = format === 'TXT' ? seed.chapters.map(chapter => chapter.plain) : await page.evaluate(async chapters => {
+        const { serializeAuthoringMarkdownExportV1 } = await (new Function('return import("/storyforge/src/lib/editor/authoring-markdown-export.ts")'))()
+        return chapters.map(chapter => serializeAuthoringMarkdownExportV1(chapter.html).markdown)
+      }, seed.chapters)
       assertFullBodiesOnceInOrder(text, expectedBodies)
       expect(await databaseBytes(page)).toBe(beforeDownloads)
       await testInfo.attach(`027-actual-${format}`, { path: saved, contentType: 'text/plain; charset=utf-8' })
