@@ -13,7 +13,7 @@ test.beforeEach(async ({ context }) => {
   })
 })
 async function settled(page: Page) {
-  await expect(page.getByTestId('avg-page')).toBeVisible()
+  await expect(page.getByTestId('avg-page')).toBeVisible({ timeout: 15_000 })
   await expect(page.getByText('读取 AVG 作品…', { exact: true })).toBeHidden()
   await expect(page.getByText('打开功能…', { exact: true })).toBeHidden()
 }
@@ -21,9 +21,12 @@ async function navigate(page: Page, route: string) {
   const primary = AVG_PRIMARY_NAV.find(([id]) => id === avgPrimaryForPage(route))!
   const menu = page.getByRole('navigation', { name: 'AVG 页面导航', exact: true })
   if (!await menu.isVisible()) await page.getByRole('button', { name: 'AVG 目录', exact: true }).click()
-  await menu.getByRole('button', { name: primary[1], exact: true }).click()
+  const primaryButton = menu.getByRole('button', { name: primary[1], exact: true })
+  await primaryButton.click()
+  await expect(primaryButton).toHaveAttribute('aria-current', 'page')
   if (route !== primary[2]) {
     const contents = page.getByRole('navigation', { name: 'AVG 内容导航', exact: true })
+    await expect(contents).toBeAttached()
     if (!await contents.isVisible()) await page.getByRole('button', { name: primary[0] === 'player' ? '游玩目录' : '制作目录', exact: true }).click()
     await contents.getByRole('button', { name: AVG_PAGES.find(([id]) => id === route)![1], exact: true }).click()
   }
@@ -43,6 +46,9 @@ async function snapshot(page: Page) {
 }
 for (const width of [1728, 1366, 390]) {
   test(`BUG028 AVG private layouts and linked routes at ${width}px`, async ({ page }, info) => {
+    // The case loads every private route and captures full-page evidence.
+    // Keep each individual assertion bounded while allowing the full route tour.
+    test.setTimeout(180_000)
     await page.setViewportSize({ width, height: 900 })
     const errors: string[] = []; page.on('pageerror', error => errors.push(error.message))
     await page.goto('./avg/library'); await settled(page)

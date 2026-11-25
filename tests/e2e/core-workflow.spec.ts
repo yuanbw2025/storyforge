@@ -183,13 +183,13 @@ test('产品综合首页可从零创建世界引擎并分配稳定编号', async
   await createWorld(page, '潮汐之后', '海平面吞没大陆后的漂浮聚落。')
 
   await expect(page.getByRole('heading', { name: '世界引擎', exact: true })).toBeVisible()
-  await expect(page.locator('.lf-library-books').getByRole('heading', { name: '潮汐之后', exact: true })).toBeVisible()
+  await expect(page.locator('.lf-library-grid').getByRole('heading', { name: '潮汐之后', exact: true })).toBeVisible()
   await expect(page.locator('.lf-library-grid article').first()).toContainText(/W-[A-Z0-9]+-[A-Z0-9]+ · 尚未发布/)
   await expect(page.getByRole('button',{name:'编辑世界',exact:true})).toBeVisible()
 
   await page.goto('./')
   await createWorld(page, '群星港', '')
-  await expect(page.locator('.lf-library-books').getByRole('heading', { name: '群星港', exact: true })).toBeVisible()
+  await expect(page.locator('.lf-library-grid').getByRole('heading', { name: '群星港', exact: true })).toBeVisible()
 
   await page.goto('./')
   await page.goto('./world/worlds')
@@ -197,7 +197,7 @@ test('产品综合首页可从零创建世界引擎并分配稳定编号', async
   await expect(tidalWorld).toHaveCount(1)
   await tidalWorld.getByRole('button',{name:'编辑世界',exact:true}).click()
   await openWorldSection(page,'worlds')
-  await expect(page.locator('.lf-library-books').getByRole('heading', { name: '潮汐之后', exact: true })).toBeVisible()
+  await expect(page.locator('.lf-library-grid').getByRole('heading', { name: '潮汐之后', exact: true })).toBeVisible()
 
   await page.getByLabel('搜索本地世界').fill('潮汐之后')
   await expect(page.locator('.lf-library-grid article')).toHaveCount(1)
@@ -219,7 +219,7 @@ test('独立长篇保持独立，并可由作者显式派生且封存为世界 v
   await page.getByRole('button',{name:'打开世界',exact:true}).click()
   await openWorldSection(page,'worlds')
   await expect(page.getByRole('heading', { name: '我的世界', exact: true })).toBeVisible()
-  await expect(page.locator('.lf-library-books').getByRole('heading', { name: '分步骤世界基线 · 世界', exact: true })).toBeVisible()
+  await expect(page.locator('.lf-library-grid').getByRole('heading', { name: '分步骤世界基线 · 世界', exact: true })).toBeVisible()
   await expect(page.locator('.lf-library-grid article').first()).toContainText(/W-[A-Z0-9]+-[A-Z0-9]+ · 已发布 v1/)
   await expect(page.getByRole('navigation', { name: '世界页面导航' }).getByRole('button', { name: '世界设定', exact: true })).toBeVisible()
   const identities = await page.evaluate(async () => {
@@ -354,7 +354,7 @@ test('世界引擎可生成并预检本地世界分享包，再导入为新编�
   await page.getByRole('button', { name: '确认导入纯语义世界', exact: true }).click()
   await expect(page).toHaveURL(/world\/basics\?project=/)
   await page.getByRole('navigation',{name:'世界页面导航'}).getByRole('button',{name:'我的世界',exact:true}).click()
-  await expect(page.locator('.lf-library-books').getByRole('heading', { name: '分享包测试世界', exact: true })).toHaveCount(2)
+  await expect(page.locator('.lf-library-grid').getByRole('heading', { name: '分享包测试世界', exact: true })).toHaveCount(2)
   await expect(page.locator('.lf-library-grid article')).toHaveCount(2)
   // The library has no active-world header; read the two rendered entries
   // instead of racing the outgoing world's heading during navigation.
@@ -870,7 +870,9 @@ test('一致性 Agent 显式单次检测，刷新恢复只读报告且不写业�
     expect(request.stream).toBe(false)
     expect(request.response_format).toEqual({ type: 'json_object' })
     expect(request.temperature).toBe(0)
-    expect(request.max_tokens).toBe(2_048)
+    // The isolated service fixture exposes a 100k input window; the final
+    // routed request uses its prepared 16k output capacity, without the old 2048 cap.
+    expect(request.max_tokens).toBe(16_000)
     const content = JSON.stringify({
       findings: [],
       cognitionReferences: [],
