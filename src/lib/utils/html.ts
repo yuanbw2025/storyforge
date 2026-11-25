@@ -39,12 +39,12 @@ export function normalizeProseForEditorV1(text: string): string {
 }
 
 /** HTML → 纯文本（剥离标签，段落之间用 \n 分隔） */
-export function htmlToPlainText(html: string): string {
+export function htmlToPlainText(html: string, options: { normalize?: boolean } = {}): string {
   if (!html) return ''
-  if (!isHtml(html)) return html
+  if (!isHtml(html) && options.normalize !== false) return html
   if (typeof document === 'undefined') {
     // SSR fallback：简单去标签
-    return html
+    const text = html
       .replace(/<\/(p|div|h[1-6]|li|blockquote|br)>/gi, '\n')
       .replace(/<br\s*\/?>/gi, '\n')
       .replace(/<[^>]+>/g, '')
@@ -52,8 +52,7 @@ export function htmlToPlainText(html: string): string {
       .replace(/&amp;/g, '&')
       .replace(/&lt;/g, '<')
       .replace(/&gt;/g, '>')
-      .replace(/\n{3,}/g, '\n\n')
-      .trim()
+    return options.normalize === false ? text : text.replace(/\n{3,}/g, '\n\n').trim()
   }
   const tmp = document.implementation.createHTMLDocument('').createElement('div')
   tmp.innerHTML = html
@@ -66,7 +65,8 @@ export function htmlToPlainText(html: string): string {
       el.append('\n')
     }
   })
-  return (tmp.textContent || '').replace(/\n{3,}/g, '\n\n').trim()
+  const text = tmp.textContent || ''
+  return options.normalize === false ? text : text.replace(/\n{3,}/g, '\n\n').trim()
 }
 
 /** 统计字数（中文按字符数、英文按单词拆分再合计） */

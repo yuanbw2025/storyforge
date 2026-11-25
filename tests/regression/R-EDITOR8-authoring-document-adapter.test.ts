@@ -8,6 +8,21 @@ const identity: AuthoringDocumentIdentityV1 = { projectId: 1, worldId: 2, workId
 const edit = (adapter: AuthoringDocumentAdapterV1, from: number, to: number, insert: string) => adapter.applySourceChange({ identity, sourceRevision: adapter.sourceRevision, changes: { from, to, insert } })
 
 describe('037 hidden prototype: one HTML document with positional source projection', () => {
+  it('keeps whole-document plain text exact when reusing paragraph fragments across edits and undo', () => {
+    const html = '\n<!--gap--><p> 甲 &amp; 😀 </p>\n<p></p><p></p><blockquote><p>乙<br>丙</p></blockquote>\n<p style="color:red">保护</p><p>末尾</p>\n'
+    const changed = vi.fn(), adapter = new AuthoringDocumentAdapterV1({ identity, html, onHtmlChange: changed })
+    expect(adapter.getPlainText()).toBe(htmlToPlainText(html))
+    const at = adapter.getSource().lastIndexOf('末尾') + 1
+    edit(adapter, at, at, '新增')
+    expect(changed.mock.lastCall?.[1]).toBe(htmlToPlainText(adapter.getHtml()))
+    expect(adapter.getPlainText()).toBe(htmlToPlainText(adapter.getHtml()))
+    expect(adapter.undoSource()).toBe(true)
+    expect(adapter.getHtml()).toBe(html)
+    expect(changed.mock.lastCall?.[1]).toBe(htmlToPlainText(html))
+    expect(adapter.redoSource()).toBe(true)
+    expect(changed.mock.lastCall?.[1]).toBe(htmlToPlainText(adapter.getHtml()))
+  })
+
   it('shares source undo/redo across display changes without adding display-only history', () => {
     const changed = vi.fn(), adapter = new AuthoringDocumentAdapterV1({ identity, html: '<p>甲</p>', onHtmlChange: changed })
     edit(adapter, 1, 1, '乙')
