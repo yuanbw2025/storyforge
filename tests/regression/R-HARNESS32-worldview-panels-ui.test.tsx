@@ -3,6 +3,7 @@ import { act, createElement, type ComponentType } from 'react'
 import { createRoot } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Project } from '../../src/lib/types'
+import { db } from '../../src/lib/db/schema'
 import { WorldSettingsLayoutProvider } from '../../src/components/longform/WorldSettingsLayout'
 
 const mocks = vi.hoisted(() => ({
@@ -112,6 +113,9 @@ function candidate(field: string, label: string, value: unknown = `候选的${la
     event: {
       id: 51,
       projectId: project.id!,
+      workId: project.activeWorkId!,
+      conversationId: 31,
+      durableRunId: 61,
       kind: 'candidate',
       content: JSON.stringify({ field, value }),
       payload: '{}',
@@ -121,6 +125,10 @@ function candidate(field: string, label: string, value: unknown = `候选的${la
       taskId: 'worldview-field-1',
       agentId: 'world-origin',
       skillId: 'world-origin.worldview-field',
+      workspaceScope: { projectId: project.id!, worldId: project.activeWorldId!, workId: project.activeWorkId! },
+      runId: 61,
+      runStepId: 'worldview-field-step',
+      runGeneration: 1,
       worldviewField: field,
       label,
       contextSources: ['worldview', 'storyCore'],
@@ -146,12 +154,23 @@ async function renderPanel(component: ComponentType<{ project: Project }>, props
   return host
 }
 
+async function readyReview(host: HTMLElement) {
+  const adopt = Array.from(host.querySelectorAll('button')).find(button => button.textContent?.includes('采纳'))!
+  for (let attempt = 0; attempt < 40 && adopt.disabled; attempt++) {
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 25)) })
+  }
+  expect(adopt.disabled).toBe(false)
+  return adopt
+}
+
 it('a late adoption cannot reload the old workspace after this panel switches owners', async () => {
   mocks.copilot.pendingCandidates = [candidate('worldOrigin', '世界来源')]
   let release!: () => void
   mocks.copilot.adoptCandidate.mockImplementationOnce(() => new Promise<void>(resolve => { release = resolve }))
   const host = await renderPanel(WorldviewOriginPanel)
-  await act(async () => Array.from(host.querySelectorAll('button')).find(button => button.textContent?.includes('采纳'))!.click())
+  const adopt = await readyReview(host)
+  await act(async () => adopt.click())
+  expect(mocks.copilot.adoptCandidate).toHaveBeenCalledOnce()
   const next = { ...project, id: 2, activeWorldId: 21, activeWorkId: 22 }
   await act(async () => mounted.at(-1)!.root.render(createElement(WorldviewOriginPanel, { project: next })))
   await act(async () => release())
@@ -164,7 +183,9 @@ it('a late adoption cannot publish a read after its panel unmounts', async () =>
   let release!: () => void
   mocks.copilot.adoptCandidate.mockImplementationOnce(() => new Promise<void>(resolve => { release = resolve }))
   const host = await renderPanel(WorldviewOriginPanel)
-  await act(async () => Array.from(host.querySelectorAll('button')).find(button => button.textContent?.includes('采纳'))!.click())
+  const adopt = await readyReview(host)
+  await act(async () => adopt.click())
+  expect(mocks.copilot.adoptCandidate).toHaveBeenCalledOnce()
   const entry = mounted.pop()!
   await act(async () => entry.root.unmount()); entry.host.remove()
   await act(async () => release())
@@ -184,7 +205,13 @@ function generateButton(host: HTMLElement) {
     .find(button => button.textContent?.includes('AI 生成'))!
 }
 
-beforeEach(() => {
+beforeEach(async () => {
+  await db.agentConversations.clear()
+  await db.agentConversations.put({
+    id: 31, projectId: project.id!, workId: project.activeWorkId!, worldGroupId: null,
+    purpose: 'master-authoring', status: 'active', title: '世界设定候选审查',
+    createdAt: 1, updatedAt: 1,
+  })
   mocks.copilot.pendingCandidates = []
   mocks.copilot.loading = false
   mocks.copilot.busy = false
@@ -273,6 +300,7 @@ describe('R-HARNESS32 · 三个世界基座面板统一进入主 Agent Harness',
     }
     mocks.copilot.pendingCandidates = [candidate('divineDesign', '神明与信仰', divineValue)]
     const host = await renderPanel(WorldviewOriginPanel)
+    await readyReview(host)
 
     await vi.waitFor(() => {
       expect(host.querySelector('textarea[aria-label="神明与信仰候选内容"]')).not.toBeNull()
@@ -282,6 +310,7 @@ describe('R-HARNESS32 · 三个世界基座面板统一进入主 Agent Harness',
     expect(host.textContent).not.toContain('正在将信仰体系拆分')
 
     const editor = host.querySelector<HTMLTextAreaElement>('textarea[aria-label="神明与信仰候选内容"]')!
+    expect(editor.readOnly).toBe(false)
     const revisedValue = { ...divineValue, divineRules: '神谕必须由两名无血缘见证者共同记录。' }
     const revised = JSON.stringify(revisedValue, null, 2)
     await act(async () => setInputValue(editor, revised))
@@ -333,6 +362,7 @@ describe('R-HARNESS32 · 三个世界基座面板统一进入主 Agent Harness',
     }
     mocks.copilot.pendingCandidates = [candidate('naturalResources', '自然资源明细', naturalResources)]
     const host = await renderPanel(WorldviewNaturalPanel)
+    await readyReview(host)
 
     await vi.waitFor(() => {
       expect(host.querySelector('textarea[aria-label="自然资源明细候选内容"]')).not.toBeNull()
@@ -341,6 +371,7 @@ describe('R-HARNESS32 · 三个世界基座面板统一进入主 Agent Harness',
     expect(host.textContent).toContain('自然资源分类明细（原生结构）')
 
     const editor = host.querySelector<HTMLTextAreaElement>('textarea[aria-label="自然资源明细候选内容"]')!
+    expect(editor.readOnly).toBe(false)
     const revisedValue = {
       ...naturalResources,
       others: '贝壳纸是城邦间的契约载体，烧毁后会留下不可伪造的潮纹。',
