@@ -195,7 +195,7 @@ test('⑥ 保存失败保持源码态不伪成功；重试后才返回阅读', a
   const area = pane(page).locator('textarea').first()
   await expect(area).toBeVisible(); await area.fill('# 保存失败应保留')
   // flush 应抛错（hook 已注入），不吞错地让测试继续；area 仍可见
-  let flushOk = false; try { await flush(page); flushOk = true } catch (e) { void e }
+  try { await flush(page) } catch (e) { void e }
   await expect(pane(page).locator('textarea')).toBeVisible()
   await expect(pane(page).locator('[data-markdown-read-view]')).toHaveCount(0)
   await expect(pane(page).locator('[data-local-save-status]')).toHaveAttribute('data-local-save-status', 'failed')
