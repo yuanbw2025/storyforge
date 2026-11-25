@@ -73,6 +73,28 @@ async function withHook(body: (read: () => UseAIStreamReturn) => Promise<void>) 
 }
 
 describe('B03 actual durable request generations and length revision', () => {
+  it('keeps a complete duplicated reply reviewable without another POST, blocks direct adoption and accepts the author-selected body', async () => {
+    const f = await fixture(), body = '甲'.repeat(320), raw = `${body}\n</think>\n# 盐门\n${body}`, posts = http([raw])
+    await withHook(async read => {
+      let saved!: Awaited<ReturnType<typeof runProseLengthTaskV2>>
+      await act(async () => { saved = await runProseLengthTaskV2({ scope: f.scope, task: f.task, ai: read() }) })
+      expect(saved.disposition).toBe('needs-attention'); expect(saved.text).toBe(raw)
+      expect(saved.reason).toContain('重复了正文')
+      const published = await publishProseLengthTaskCandidateV2({ scope: f.scope, result: saved })
+      await expect(commitProseGenerationAdoptionV1({ scope: f.scope, runId: saved.runId, candidate: published.candidate,
+        contentHtml: plainTextToHtml(raw), wordCount: countWords(raw) })).rejects.toThrow('重复了正文')
+      expect((await db.chapters.get(f.chapterId))?.content).toBe('')
+      const candidate = await reviseProseGenerationCandidateV1({ scope: f.scope, candidate: published.candidate, outputText: `# 盐门\n${body}` })
+      const adopted = await commitProseGenerationAdoptionV1({ scope: f.scope, runId: saved.runId, candidate,
+        contentHtml: plainTextToHtml(candidate.outputText), wordCount: countWords(candidate.outputText) })
+      expect(adopted.snapshot.projection.state).toBe('completed')
+      expect((await db.chapters.get(f.chapterId))?.content).toBe(plainTextToHtml(candidate.outputText))
+      const restored = await readProseLengthTaskV2(f.scope, saved.runId)
+      expect(await readAgentRunArtifactExactV1({ projectId: f.scope.projectId, ...restored.history[0].round.rawRef })).toContain('</think>')
+      expect(posts).toHaveLength(1)
+    })
+  }, 30_000)
+
   it.each(['ready', 'best-author-edit'] as const)('publishes %s through the original candidate/adoption writer and records a V4 terminal receipt', async kind => {
     const f = await fixture(), posts = http(kind === 'ready' ? ['甲'.repeat(100)] : ['甲'.repeat(40), '甲'.repeat(30)])
     await withHook(async read => {

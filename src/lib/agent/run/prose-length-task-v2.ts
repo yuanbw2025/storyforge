@@ -363,7 +363,8 @@ async function execute(input: RunProseLengthTaskV2, cursor: ProseCursor, root: R
       }
       if (!raw || !rawRef) throw new Error('没有可验证的正文原答，不自动重发。')
       if (!['complete', 'incomplete'].includes(raw.response.completion)) throw new Error('正文结果未确认；原答已保留，不自动重发。')
-      if (!text.trim() || observeDuplicatedProseFrameV1(text) || validateProseInformationBoundaryV1(text, root.informationBoundary).length) throw new Error('正文未通过原信息边界或完整内容校验。')
+      const duplicateFrame = observeDuplicatedProseFrameV1(text)
+      if (!text.trim() || duplicateFrame && raw.response.completion !== 'complete' || validateProseInformationBoundaryV1(text, root.informationBoundary).length) throw new Error('正文未通过原信息边界或完整内容校验。')
       const observation = await observeDraft(cursor.snapshot, root, text)
       const draftRef = await cursor.record('tool-result', text, true)
       const round: Round = { version: 'prose-length-round-v2', runId: cursor.snapshot.run.id, generation: cursor.snapshot.projection.generation,
@@ -373,6 +374,7 @@ async function execute(input: RunProseLengthTaskV2, cursor: ProseCursor, root: R
       const roundRef = compiled?.ref ?? await cursor.record('tool-result', canonicalStringify(round), true)
       if (!compiled) { state.roundRefs.push(roundRef); await cursor.checkpoint(state) }
       input.onProgress?.({ runId: cursor.snapshot.run.id, rounds: state.roundRefs.length, words: observation.measuredWords, status: raw.response.completion })
+      if (duplicateFrame) return result(cursor, root, state, roundRef, 'needs-attention', duplicateFrame.message)
       if (raw.response.completion === 'incomplete') {
         if (history.some(item => item.round.resultHash === round.resultHash) || !raw.response.text.trim()
           || plan.mode === 'continue-incomplete' && priorText.includes(raw.response.text.trim())) return result(cursor, root, state, best?.ref ?? roundRef, best ? 'needs-attention' : 'raw-only', '停笔续接没有内容进展；原件保留。')
