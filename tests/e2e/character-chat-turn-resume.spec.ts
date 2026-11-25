@@ -6,7 +6,7 @@ test.beforeEach(async ({page}) => {
   await page.addInitScript(() => {
     localStorage.setItem('storyforge_guide_completed', 'e2e')
   })
-  registerBrowserFixtureAIConfigV1(page, { provider: 'openai', baseUrl: 'https://chat-resume.invalid/v1', model: 'test', maxTokens: 6000, apiKey: 'isolated-test-key' })
+  registerBrowserFixtureAIConfigV1(page, { provider: 'custom', baseUrl: 'https://chat-resume.invalid/v1', model: 'test', maxTokens: 6000, apiKey: 'isolated-test-key' }, { serviceContextWindow: 64000 })
 })
 
 async function seed(page: Page, mode: 'partial' | 'unknown' | 'player') {
@@ -42,7 +42,7 @@ async function seed(page: Page, mode: 'partial' | 'unknown' | 'player') {
 
 test('refresh keeps an unfinished turn and explicitly completes only its remaining actions with the original role', async ({page}) => {
   let actions = 0, reviews = 0
-  await page.route('https://chat-resume.invalid/**', async route => {
+  await page.route('https://chat-resume.invalid/v1/chat/completions', async route => {
           if (await fulfillChatActionChoiceFixture(route)) return
     const prompt = route.request().postDataJSON().messages.map((m: {content: string}) => m.content).join('\n')
     let output: unknown
@@ -89,7 +89,7 @@ test('refresh keeps an unfinished turn and explicitly completes only its remaini
 
 test('an unknown request remains visible after refresh and cannot be resent through completing the turn', async ({page}) => {
   let calls = 0
-  await page.route('https://chat-resume.invalid/**', async route => {calls++; await route.abort()})
+  await page.route('https://chat-resume.invalid/v1/chat/completions', async route => {calls++; await route.abort()})
   await seed(page, 'unknown')
   await expect(page.getByTestId('chat-turn-resume')).toContainText('结果未知')
   await expect(page.getByRole('button', {name: '补齐未完成本轮', exact: true})).toBeDisabled()
@@ -101,7 +101,7 @@ test('an unknown request remains visible after refresh and cannot be resent thro
 
 test('a saved player message starts one response and a waiting role offers no misleading reply-resume button', async ({page}) => {
   let calls = 0
-  await page.route('https://chat-resume.invalid/**', async route => {
+  await page.route('https://chat-resume.invalid/v1/chat/completions', async route => {
           if (await fulfillChatActionChoiceFixture(route)) return
     calls++
     const review = route.request().postDataJSON().messages.some((m: {content: string}) => m.content.includes('本次持久化行动候选'))
