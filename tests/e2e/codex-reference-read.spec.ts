@@ -33,6 +33,7 @@ test('invalid Codex names do not block chapter entry, save or reload and remain 
     return db.codexEntries.where('categoryId').equals(categoryId).toArray()
   })
   await page.getByTitle('编辑章节').click()
+  await page.getByRole('group', { name: '编辑模式', exact: true }).getByRole('button', { name: '富文本', exact: true }).click()
   const editor = page.locator('.tiptap-editor')
   await expect(editor).toBeVisible()
   await editor.fill('玄门守住旧城。')

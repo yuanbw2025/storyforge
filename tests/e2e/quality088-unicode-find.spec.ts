@@ -13,6 +13,7 @@ test('Unicode 零宽搜索有限返回，错误可修正且 emoji 正常替换�
   await page.getByRole('button', { name: '添加章节', exact: true }).click()
   await expect.poll(() => page.locator('input').evaluateAll(inputs => inputs.some(input => input instanceof HTMLInputElement && input.value === '第1章'))).toBe(true)
   await page.getByTitle('编辑章节').click()
+  await page.getByRole('group', { name: '编辑模式', exact: true }).getByRole('button', { name: '富文本', exact: true }).click()
   const editor = page.locator('.tiptap-editor')
   await expect(editor).toBeVisible()
   await editor.fill('😀e\u0301 😀e\u0301')
