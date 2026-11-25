@@ -1,8 +1,8 @@
 import { createHash } from 'node:crypto'
 /** @typedef {{sender: unknown, senderFrame: {url: string} | null}} Caller */
-/** @typedef {{id:string,url:string,method:string,headers:Record<string,string>,body?:string}} OpenOptions */
+/** @typedef {{id:string,url:string,method:string,headers:Record<string,string>,body?:string,bodySha256?:string,chunkIndex?:number|string,totalChunks?:number|string}} OpenOptions */
 /** @typedef {{abort:AbortController,timer?:ReturnType<typeof setTimeout>,reader?:ReadableStreamDefaultReader<Uint8Array>,pending?:Buffer,reading?:boolean}} ActiveRequest */
-/** @typedef {(url:string,init:RequestInit & {body?:Buffer})=>Promise<Response>} RelayFetch */
+/** @typedef {(url:string,init:Omit<RequestInit,'body'> & {body?:Buffer})=>Promise<Response>} RelayFetch */
 /** @typedef {{chunks:(Buffer|null)[],total:number,hash:string,url:string,method:string,headers:Record<string,string>,received:number}} PendingBody */
 const NATIVE_BODY_CHUNK_BYTES = 4 * 1024 * 1024
 // Only the trusted desktop main frame can use this pull-based transport.

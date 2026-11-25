@@ -12,7 +12,7 @@ export async function verifyDiagnosticContext(app, page, launch) {
   await page.goto('http://localhost:17831/storyforge/home/settings')
   await page.getByRole('region', { name: '问题与故障反馈' }).waitFor()
   assert.equal(await page.getByLabel('附带最近操作轨迹（可选，默认关闭）').count(), 0)
-  assert.equal(await page.evaluate(() => localStorage.getItem('storyforge-diagnostic-context-v1')), null)
+  assert.equal(await page.evaluate(() => window.localStorage.getItem('storyforge-diagnostic-context-v1')), null)
   // Use the installed operation collector: a direct IPC fixture can be replaced
   // by a later real UI update. Button content must never enter the stored trail.
   await page.evaluate(() => {
@@ -69,7 +69,7 @@ export async function verifyDiagnosticContext(app, page, launch) {
   await page.waitForSelector('#root main, #root button', {timeout:60000})
   await page.goto('http://localhost:17831/storyforge/home/settings')
   await page.getByRole('region', { name: '问题与故障反馈' }).waitFor()
-  assert.equal(await page.evaluate(() => localStorage.getItem('storyforge-diagnostic-context-v1')), null)
+  assert.equal(await page.evaluate(() => window.localStorage.getItem('storyforge-diagnostic-context-v1')), null)
   const rows = await page.evaluate(async () => {
     const client = /** @type {Window & {storyforgeClient?: {diagnostics?():Promise<unknown[]>}}} */ (window).storyforgeClient
     return await client?.diagnostics?.() ?? []
@@ -85,11 +85,13 @@ export async function verifyDiagnosticContext(app, page, launch) {
   const optOutSource = await buildDiagnosticOptOutFixture()
   assert.equal(await page.evaluate(source => {
     (0, eval)(source)
-    return window.__storyforgeDiagnosticFixture.disable()
+    const fixture = /** @type {Window & {__storyforgeDiagnosticFixture?:{disable:()=>boolean}}} */ (window)
+    if (!fixture.__storyforgeDiagnosticFixture) throw new Error('Missing diagnostic opt-out fixture')
+    return fixture.__storyforgeDiagnosticFixture.disable()
   }, optOutSource), true)
   await page.reload()
   await page.getByRole('region', { name: '问题与故障反馈' }).waitFor()
-  assert.equal(await page.evaluate(() => localStorage.getItem('storyforge-operation-trail-v1')), null)
+  assert.equal(await page.evaluate(() => window.localStorage.getItem('storyforge-operation-trail-v1')), null)
   await page.waitForFunction(async () => {
     const client = /** @type {Window & {storyforgeClient?: {diagnostics?():Promise<unknown[]>}}} */ (window).storyforgeClient
     const rows = await client?.diagnostics?.() ?? []
