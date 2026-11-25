@@ -3,16 +3,46 @@ import type { AIConfig } from '../../../src/lib/types'
 
 type FixtureConfig = Partial<AIConfig>
 type ConfigSource = FixtureConfig | ((destination: URL) => FixtureConfig)
-interface Registration { source: ConfigSource; once: boolean; ifAbsent: boolean; applied: WeakSet<Page> }
+interface Registration { source: ConfigSource; once: boolean; ifAbsent: boolean; serviceContextWindow?: number; applied: WeakSet<Page> }
 const configurations = new WeakMap<Page | BrowserContext, Registration>()
+const serviceModels = new WeakMap<Page, Map<string, Map<string, number>>>()
+
+/** Explicit service metadata for isolated synthetic providers; never an author capacity override. */
+export async function installBrowserServiceCapacityFixtureV1(
+  page: Page, config: Pick<AIConfig, 'provider' | 'baseUrl' | 'model'>, contextWindow: number,
+): Promise<void> {
+  const base = new URL(config.baseUrl)
+  if (!Number.isSafeInteger(contextWindow) || contextWindow <= 0
+      || (!base.hostname.endsWith('.invalid') && !['127.0.0.1', 'localhost'].includes(base.hostname))) {
+    throw new Error('Service capacity fixture requires a finite window and an isolated synthetic host')
+  }
+  if (config.provider !== 'custom' && config.provider !== 'ollama') {
+    throw new Error('Service capacity fixture requires a metadata-capable local provider')
+  }
+  const endpoint = `${base.origin}${base.pathname.replace(/\/v1\/?$/, '').replace(/\/$/, '')}${config.provider === 'ollama' ? '/api/ps' : '/api/v1/models'}`
+  let endpoints = serviceModels.get(page)
+  if (!endpoints) { endpoints = new Map(); serviceModels.set(page, endpoints) }
+  let models = endpoints.get(endpoint)
+  if (!models) {
+    models = new Map(); endpoints.set(endpoint, models)
+    const registered = models
+    await page.route(endpoint, async route => {
+      if (route.request().method() !== 'GET') return route.fallback()
+      await route.fulfill({ json: { models: [...registered].map(([model, window]) => config.provider === 'ollama'
+        ? { model, context_length: window }
+        : { key: model, type: 'llm', loaded_instances: [{ config: { context_length: window } }] }) } })
+    })
+  }
+  models.set(config.model, contextWindow)
+}
 
 /** Explicit synthetic fixture input, never a production credential migration. */
 export function registerBrowserFixtureAIConfigV1(
-  target: Page | BrowserContext, source: ConfigSource, options: { once?: boolean; ifAbsent?: boolean } = {},
+  target: Page | BrowserContext, source: ConfigSource, options: { once?: boolean; ifAbsent?: boolean; serviceContextWindow?: number } = {},
 ): void {
   configurations.set(target, {
     source: typeof source === 'function' ? source : structuredClone(source),
-    once: options.once === true, ifAbsent: options.ifAbsent === true, applied: new WeakSet(),
+    once: options.once === true, ifAbsent: options.ifAbsent === true, serviceContextWindow: options.serviceContextWindow, applied: new WeakSet(),
   })
 }
 
@@ -40,6 +70,10 @@ export async function prepareBrowserFixtureAIConfigV1(page: Page, destination?: 
   }
   const source = registration.source
   const config = structuredClone(typeof source === 'function' ? source(next) : source)
+  if (registration.serviceContextWindow != null) {
+    if (!config.provider || !config.baseUrl || !config.model) throw new Error('Incomplete synthetic service metadata fixture')
+    await installBrowserServiceCapacityFixtureV1(page, { provider: config.provider, baseUrl: config.baseUrl, model: config.model }, registration.serviceContextWindow)
+  }
   await page.evaluate(async ({ input, ifAbsent }) => {
     const load = new Function('path', 'return import(path)') as <T>(path: string) => Promise<T>
     const { useAIConfigStore } = await load<typeof import('../../../src/stores/ai-config')>('/storyforge/src/stores/ai-config.ts')
