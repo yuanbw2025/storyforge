@@ -54,8 +54,8 @@ describe('B20a 第六片 · 灵感准备 promptExecution 路径不再伪造 6k �
       return inspirationJson
     })
     const prepared = await prepareInspirationCopilot({
-      projectId: project.id!, scope, worldGroupId: null,
-      authorRequest: '整理当前灵感碎片为准备候选', mode: 'organize',
+      projectId: project.id!, scope,
+      authorRequest: '灵感准备任务=organize；整理当前灵感碎片为准备候选', skillId: 'inspiration.prepare',
       selectedFragmentIds: ['idea-selected'],
     })
     // 解析合同不在本片范围：只要派发已完成即可断言 wire 与冻结覆盖。

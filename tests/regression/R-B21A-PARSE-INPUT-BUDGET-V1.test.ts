@@ -87,7 +87,7 @@ describe('B21a · 文档分块输入预算跟随真实容量，而非固定 100k
     const f = await fixture(documentText)
     // 独立模型名：容量按路由缓存，不能复用上一条的 262k 发现结果。
     useAIConfigStore.getState().setConfig({ model: 'isolated-b21a-small', contextWindow: 96_000 })
-    const post = vi.fn(async (url: unknown) => {
+    const post = vi.fn(async (url: unknown, _init?: RequestInit) => {
       if (String(url).endsWith('/api/v1/models')) {
         return new Response(JSON.stringify({ models: [{ key: 'isolated-b21a-small', type: 'llm',
           loaded_instances: [{ config: { context_length: 96_000 } }] }] }))

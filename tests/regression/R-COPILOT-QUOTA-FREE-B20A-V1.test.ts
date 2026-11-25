@@ -65,7 +65,7 @@ describe('B20a 第二片 · 角色/规则/进度/灵感派发不再带固定输�
       recordMeta(meta)
       return payload
     })
-    const baseInput = {
+    const baseInput: Parameters<typeof createCharacterCopilotNode>[0] = {
       projectId: 73120,
       scope: undefined,
       worldGroupId: null,
@@ -74,13 +74,14 @@ describe('B20a 第二片 · 角色/规则/进度/灵感派发不再带固定输�
       snapshot: { serialized: 'x', visibleNames: [] },
       worldContext: '',
       characterContext: '',
-      genres: [],
-    } as never
+      genres: '', projectName: '隔离配额测试', inputGuidance: '', contextSources: [],
+      assembled: { text: '', segments: [], included: [], omitted: [], trimmed: [], totalInputTokens: 0, inputBudget: 128_000, overBudgetBeforeTrim: false, overBudgetAfterTrim: false },
+    }
     const node = createCharacterCopilotNode(baseInput)
     await node.run([{ role: 'user', content: '生成' }])
     expect(seenMeta[0]!.configOverrides?.maxTokens).toBeUndefined()
     seenMeta.length = 0
-    const nodeExplicit = createCharacterCopilotNode({ ...baseInput, generationOverrides: { maxTokens: 9_000 } } as never)
+    const nodeExplicit = createCharacterCopilotNode({ ...baseInput, generationOverrides: { maxTokens: 9_000 } })
     await nodeExplicit.run([{ role: 'user', content: '生成' }])
     expect(seenMeta[0]!.configOverrides?.maxTokens).toBe(9_000)
   })

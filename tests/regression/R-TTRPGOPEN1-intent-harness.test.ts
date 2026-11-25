@@ -9,6 +9,7 @@ import { generateTtrpgOpenIntentCandidateV1, executeTtrpgOpenIntentRequestV1,
   readTtrpgOpenIntentCandidateV1, recoverTtrpgOpenRuntimeCandidateV1 } from '../../src/lib/ttrpg/open-intent-harness'
 import { prepareTtrpgOpenIntentInputV1 } from '../../src/lib/ttrpg/open-intent-input'
 import { startTtrpgOpenEpochV1, startTtrpgOpenIntentCandidateOperationV1, changeTtrpgSafetyStatus } from '../../src/lib/ttrpg/runtime-commands'
+import { parseTtrpgRuntimeStateV2 } from '../../src/lib/ttrpg/open-runtime-contract'
 import { readProductRuntimeState } from '../../src/lib/product/runtime-core'
 import { readInstanceAgentRunV1 } from '../../src/lib/agent/run/event-store'
 import { readAgentRunArtifactExactV1 } from '../../src/lib/memory/artifact-store'
@@ -65,7 +66,7 @@ describe('R-TTRPGOPEN1 governed one-send intent transport and recoverable candid
     await expect(readTtrpgOpenIntentCandidateV1({...read,viewerKey:'viewer.not-the-author'})).rejects.toThrow()
     const after=await readProductRuntimeState(fixture.sessionId)
     expect(after.entities).toEqual(before.entities);expect(after.ttrpg!.checks).toEqual(before.ttrpg!.checks)
-    expect(after.ttrpg!.openRun!.worldTime).toEqual(before.ttrpg!.openRun!.worldTime);expect(after.ttrpg!.openRun!.operations).toEqual([])
+    expect(parseTtrpgRuntimeStateV2(after.ttrpg)!.openRun!.worldTime).toEqual(parseTtrpgRuntimeStateV2(before.ttrpg)!.openRun!.worldTime);expect(parseTtrpgRuntimeStateV2(after.ttrpg)!.openRun!.operations).toEqual([])
     await expect(startTtrpgOpenIntentCandidateOperationV1({...await openEnvelopeV1(fixture.sessionId,'fullraw.invalid-adopt'),...read,candidateHash,decision:'start'})).rejects.toThrow()
     db.close();await db.open()
     expect(await readTtrpgOpenIntentCandidateV1(read)).toEqual(generated.candidate)
@@ -74,7 +75,7 @@ describe('R-TTRPGOPEN1 governed one-send intent transport and recoverable candid
     expect(runAI).toHaveBeenCalledOnce()
     const snapshot=await readInstanceAgentRunV1(fixture.scope,generated.prepared.runId)
     expect(snapshot.events.some(e=>e.type==='confirmation.recorded'||e.type==='runtime.candidate.adopted')).toBe(false)
-    expect((await readProductRuntimeState(fixture.sessionId)).ttrpg!.openRun!.operations).toEqual([])
+    expect(parseTtrpgRuntimeStateV2((await readProductRuntimeState(fixture.sessionId)).ttrpg)!.openRun!.operations).toEqual([])
   })
 
   it('keeps a genuinely retained legacy clipped candidate and its saved hash unchanged instead of regenerating it with the new full-text default',async()=>{
@@ -135,8 +136,8 @@ describe('R-TTRPGOPEN1 governed one-send intent transport and recoverable candid
       artifactKind: 'raw-response', contentHash: generated.candidate.rawResponseHash }))
     const after = await readProductRuntimeState(fixture.sessionId)
     expect(after.entities).toEqual(before.entities)
-    expect(after.ttrpg!.openRun!.worldTime).toEqual(before.ttrpg!.openRun!.worldTime)
-    expect(after.ttrpg!.openRun!.coordination.calls[0].usage!.actualCostUsd).toBeNull()
+    expect(parseTtrpgRuntimeStateV2(after.ttrpg)!.openRun!.worldTime).toEqual(parseTtrpgRuntimeStateV2(before.ttrpg)!.openRun!.worldTime)
+    expect(parseTtrpgRuntimeStateV2(after.ttrpg)!.openRun!.coordination.calls[0].usage!.actualCostUsd).toBeNull()
     await db.agentRunCheckpoints.where('runId').equals(generated.prepared.runId).delete()
     db.close(); await db.open()
     expect(await readTtrpgOpenIntentCandidateV1(resume(generated.prepared))).toEqual(generated.candidate)
@@ -158,7 +159,7 @@ describe('R-TTRPGOPEN1 governed one-send intent transport and recoverable candid
     expect(await executeTtrpgOpenIntentRequestV1({ ...resume(generated.prepared), runAI })).toEqual({ status: 'not-sent' })
     expect(runAI).toHaveBeenCalledTimes(1)
     const after = await readProductRuntimeState(fixture.sessionId)
-    expect(after.entities).toEqual(before.entities); expect(after.ttrpg!.openRun!.worldTime).toEqual(before.ttrpg!.openRun!.worldTime)
+    expect(after.entities).toEqual(before.entities); expect(parseTtrpgRuntimeStateV2(after.ttrpg)!.openRun!.worldTime).toEqual(parseTtrpgRuntimeStateV2(before.ttrpg)!.openRun!.worldTime)
   })
   it.each(['not-json', JSON.stringify({ ...JSON.parse(output), actorKey: 'other-human' }),
     JSON.stringify({ ...JSON.parse(output), targetRefs: ['secret.hidden-owner'] })])('retains invalid raw output with no automatic repair (%s)', async raw => {

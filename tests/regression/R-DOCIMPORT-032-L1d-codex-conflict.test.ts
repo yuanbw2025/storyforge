@@ -28,7 +28,7 @@ vi.mock('../../src/lib/workspace/scope', () => ({
     table === 'codexEntries' ? seams.entries : []),
 }))
 
-globalThis.IS_REACT_ACT_ENVIRONMENT = true
+Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
 const mounted: Array<{ host: HTMLDivElement; root: ReturnType<typeof createRoot> }> = []
 async function mount(element: React.ReactElement) {
   const host = document.createElement('div'); document.body.append(host)
@@ -117,7 +117,7 @@ describe('032-L1-d-CODEX detectCodexSameNameConflictsV1 pure helper', () => {
 })
 
 describe('032-L1-d-CODEX CodexImportReviewModal wiring', () => {
-  async function mountReview(candidates: ReturnType<typeof candidate>[], onConfirm = vi.fn(async () => undefined)) {
+  async function mountReview(candidates: ReturnType<typeof candidate>[], onConfirm = vi.fn(async (_entries: React.ComponentProps<typeof CodexImportReviewModal>['candidates']) => undefined)) {
     return mount(createElement(CodexImportReviewModal, {
       filename: '设定集.txt',
       candidates,
@@ -164,7 +164,7 @@ describe('032-L1-d-CODEX CodexImportReviewModal wiring', () => {
 
   it('never blocks confirmation: the edited draft still reaches onConfirm unchanged', async () => {
     seams.entries = [{ id: 9, categoryId: 21, name: '盐约港', worldGroupId: null }]
-    const onConfirm = vi.fn(async () => undefined)
+    const onConfirm = vi.fn(async (_entries: React.ComponentProps<typeof CodexImportReviewModal>['candidates']) => undefined)
     const host = await mountReview([candidate()], onConfirm)
     await vi.waitFor(() => expect(host.querySelector('[role="status"]')).toBeTruthy())
     const confirmButton = Array.from(host.querySelectorAll('button'))

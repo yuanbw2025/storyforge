@@ -18,11 +18,11 @@ test.beforeEach(async ({ page, baseURL }) => {
 })
 
 async function seed(page: import('@playwright/test').Page, md: string) {
-  return (page as any).evaluate(async md => {
+  return page.evaluate(async md => {
     const load = new Function('path', 'return import(path)') as <T>(p: string) => Promise<T>
-    const { seedCurrentWorkspace } = await load('/storyforge/tests/helpers/current-workspace.ts')
-    const { useWorldviewStore } = await load('/storyforge/src/stores/worldview.ts')
-    const { db } = await load('/storyforge/src/lib/db/schema.ts')
+    const { seedCurrentWorkspace } = await load<typeof import('../helpers/current-workspace')>('/storyforge/tests/helpers/current-workspace.ts')
+    const { useWorldviewStore } = await load<typeof import('../../src/stores/worldview')>('/storyforge/src/stores/worldview.ts')
+    const { db } = await load<typeof import('../../src/lib/db/schema')>('/storyforge/src/lib/db/schema.ts')
     const { scope } = await seedCurrentWorkspace('051 Verify isolated natural panel')
     await useWorldviewStore.getState().loadAll(scope)
     const w = useWorldviewStore.getState().localSaveWitnesses.worldStructure!
@@ -36,17 +36,17 @@ async function seed(page: import('@playwright/test').Page, md: string) {
 
 async function snapshot(page: import('@playwright/test').Page) {
 
-  return (page as any).evaluate(async () => {
+  return page.evaluate(async () => {
     const load = new Function('path', 'return import(path)') as <T>(p: string) => Promise<T>
-    return (await load('/storyforge/src/lib/db/schema.ts')).db.worldviews.toArray()
+    return (await load<typeof import('../../src/lib/db/schema')>('/storyforge/src/lib/db/schema.ts')).db.worldviews.toArray()
   })
 }
 
 async function flush(page: import('@playwright/test').Page) {
 
-  await (page as any).evaluate(async () => {
+  await page.evaluate(async () => {
     const load = new Function('path', 'return import(path)') as <T>(p: string) => Promise<T>
-    await (await load('/storyforge/src/lib/authoring/pending-edit-coordinator.ts')).flushPendingEditsV1()
+    await (await load<typeof import('../../src/lib/authoring/pending-edit-coordinator')>('/storyforge/src/lib/authoring/pending-edit-coordinator.ts')).flushPendingEditsV1()
   })
 }
 
@@ -159,10 +159,10 @@ test('④ 选择/拖选/键盘 copy 不误触发 save；危险 HTML/script/ifram
 test('⑤ 非 MD 条目负例：清空后再导航不触发 markdownRead 分支', async ({ page }) => {
   // 创建项目但不写任何 MD，模拟首次使用场景
 
-  const ids = await (page as any).evaluate(async () => {
+  const ids = await page.evaluate(async () => {
     const load = new Function('path', 'return import(path)') as <T>(p: string) => Promise<T>
-    const { seedCurrentWorkspace } = await load('/storyforge/tests/helpers/current-workspace.ts')
-    const { useWorldviewStore } = await load('/storyforge/src/stores/worldview.ts')
+    const { seedCurrentWorkspace } = await load<typeof import('../helpers/current-workspace')>('/storyforge/tests/helpers/current-workspace.ts')
+    const { useWorldviewStore } = await load<typeof import('../../src/stores/worldview')>('/storyforge/src/stores/worldview.ts')
     const { scope } = await seedCurrentWorkspace('051 Verify no-md field negative')
     await useWorldviewStore.getState().loadAll(scope)
     return { projectId: scope.projectId }
@@ -185,7 +185,7 @@ test('⑥ 保存失败保持源码态不伪成功；重试后才返回阅读', a
   // 注入失败模拟：hook Dexie worldviews updating 抛错
   await page.evaluate(async () => {
     const load = new Function('path', 'return import(path)') as <T>(p: string) => Promise<T>
-    const { db } = await load('/storyforge/src/lib/db/schema.ts')
+    const { db } = await load<typeof import('../../src/lib/db/schema')>('/storyforge/src/lib/db/schema.ts')
     ;(window as unknown as { _cleanup051v?: () => void })._cleanup051v?.()
     const fault = () => { throw new DOMException('simulated quota', 'QuotaExceededError') }
     db.worldviews.hook('updating', fault)

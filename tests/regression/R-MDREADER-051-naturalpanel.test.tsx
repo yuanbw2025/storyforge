@@ -4,11 +4,12 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { InlineTextarea, type InlineSave } from '../../src/components/shared/InlineEdit'
 import { db } from '../../src/lib/db/schema'
 import { useWorldviewStore } from '../../src/stores/worldview'
-import { type LocalSaveIntentV1 } from '../../src/lib/authoring/local-save-evidence'
+import { inputAreaLayoutV1, worldviewInputAreaFieldV1 } from '../../src/lib/input-area-layout'
+import { type LocalSaveIntentV1, type LocalSaveNaturalFieldV1 } from '../../src/lib/authoring/local-save-evidence'
 import { flushPendingEditsV1, resetPendingEditCoordinatorForTestsV1 } from '../../src/lib/authoring/pending-edit-coordinator'
 import { seedCurrentWorkspace } from '../helpers/current-workspace'
 import type { WorkspaceScope } from '../../src/lib/types'
-;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ENVIRONMENT = true
+;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 const mounted: { host: HTMLDivElement; root: ReturnType<typeof createRoot> }[] = []
 beforeEach(async () => { await db.delete(); await db.open(); resetPendingEditCoordinatorForTestsV1() })
 afterEach(async () => { vi.useRealTimers(); for (const ui of mounted.splice(0)) { await act(async () => ui.root.unmount()); ui.host.remove() } resetPendingEditCoordinatorForTestsV1(); vi.unstubAllGlobals(); vi.restoreAllMocks(); db.close() })
@@ -31,14 +32,14 @@ async function mount(element: React.ReactNode) {
   await act(async () => root.render(element))
   return { host, root, unmount: async () => { await act(async () => root.unmount()); host.remove(); const i = mounted.indexOf({ host, root }); if (i >= 0) mounted.splice(i, 1) } }
 }
-function Consumer({ scope, writer, markdownRead = true, fieldKey = 'worldStructure' as const }: { scope: WorkspaceScope; writer?: InlineSave; markdownRead?: boolean; fieldKey?: string }) {
+function Consumer({ scope, writer, markdownRead = true, fieldKey = 'worldStructure' as const }: { scope: WorkspaceScope; writer?: InlineSave; markdownRead?: boolean; fieldKey?: LocalSaveNaturalFieldV1 }) {
   const state = useWorldviewStore()
   const identity = { ...scope, table: 'worldviews' as const, field: fieldKey, worldGroupId: null }
   const save: InlineSave = writer ?? ((value, intent) => state.saveWorldview({ projectId: scope.projectId, [fieldKey]: value }, scope, intent!))
-  const value = state.worldview ? (state.worldview as Record<string, unknown>)[fieldKey] as string : ''
+  const value = state.worldview ? state.worldview[fieldKey] ?? '' : ''
   return <InlineTextarea value={value} onChange={save} markdownRead={markdownRead} placeholder="点击编辑…"
-    localSave={{ identity, witness: (state.localSaveWitnesses as Record<string, unknown> | null)?.[fieldKey] ?? null }}
-    inputAreaLayout={{ enabled: true, preferenceKey: `world.${fieldKey}/current` }} />
+    localSave={{ identity, witness: state.localSaveWitnesses[fieldKey] ?? null }}
+    inputAreaLayout={inputAreaLayoutV1(true, worldviewInputAreaFieldV1(fieldKey))} />
 }
 async function button(host: HTMLElement, name: string) {
   const btn = [...host.querySelectorAll('button')].find(el => el.textContent === name)

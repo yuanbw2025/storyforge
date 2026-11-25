@@ -119,7 +119,7 @@ it('accepts a structurally valid long contract with every binding intact and a r
     worldGroupId: null, contractHash: accepted.contractHash, type: 'contract.accepted',
     createdAt: 1_786_111_000_002, payload: { contractJson },
   })
-  if (event.type !== 'contract.accepted') throw new Error('Accepted contract event missing')
+  if (event.type !== 'contract.accepted' || typeof event.payload.contractJson !== 'string') throw new Error('Accepted contract event missing')
   expect(event.payload.contractJson.length).toBe(contractJson.length)
   expect(await sha256Text(event.payload.contractJson)).toBe(accepted.contractHash)
 })

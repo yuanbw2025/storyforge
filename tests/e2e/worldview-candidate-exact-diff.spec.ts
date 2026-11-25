@@ -16,7 +16,7 @@ function startInputObservation(element:Element,detailed:boolean){
   if(detailed){window.addEventListener('beforeinput',event=>record('beforeinput',event),{capture:true,signal:controller.signal});window.addEventListener('input',event=>record('input-before-react',event),{capture:true,signal:controller.signal});document.addEventListener('input',event=>record('input-after-react',event),{signal:controller.signal})}
   Reflect.set(window,'__054InputMeasure',{tasks,events,controller,observer,started,marks})
 }
-function stopInputObservation(){const measurement=Reflect.get(window,'__054InputMeasure') as {tasks:Array<{start:number;duration:number}>;events:unknown[];controller:AbortController;observer:PerformanceObserver;started:number;marks:Record<string,number>};for(const entry of measurement.observer.takeRecords())measurement.tasks.push({start:entry.startTime,duration:entry.duration});measurement.observer.disconnect();measurement.controller.abort();return{elapsed:performance.now()-measurement.started,longTasks:measurement.tasks,events:measurement.events,marks:{...measurement.marks,done:performance.now()}}}
+function stopInputObservation(){const measurement=Reflect.get(window,'__054InputMeasure') as {tasks:Array<{start:number;duration:number}>;events:unknown[];controller:AbortController;observer:PerformanceObserver;started:number;marks:Record<string,number>};for(const entry of measurement.observer.takeRecords())measurement.tasks.push({start:entry.startTime,duration:entry.duration});measurement.observer.disconnect();measurement.controller.abort();return{elapsed:performance.now()-measurement.started,longTasks:measurement.tasks,events:measurement.events,marks:{...measurement.marks,done:performance.now()} as Record<string,number>}}
 /** 5 在 DSH-054-测量门口径裁决.json 里定的双轨口径：原注入断言与全部阈值一字不改、
  * 继续运行并保留红；fill() 注入墙钟只作诊断；通过判定改用应用侧窗口。
  * 这个切片只按 marks 取窗口，不改变任何既有观测、阈值或注入方式。 */
@@ -465,7 +465,7 @@ test('054 actual candidate review: exact middle insertions, native editor, 14 th
           const app=Reflect.get(window,'__054AppWindow') as {tasks:Array<{start:number;duration:number}>;observer:PerformanceObserver;started:number}
           measurement.observer.disconnect()
           for(const entry of app.observer.takeRecords())app.tasks.push({start:entry.startTime,duration:entry.duration});app.observer.disconnect()
-          return{elapsed:performance.now()-measurement.started,longTasks:measurement.tasks,appWindow:{started:app.started,elapsed:performance.now()-app.started,longTasks:app.tasks},marks:{...measurement.marks,done:performance.now()},domElements:element.querySelectorAll('*').length,visibleRows:element.querySelectorAll('.wv-diff-row').length,textUnits:element.textContent?.length,status:[...element.querySelectorAll('[role="status"]')].map(node=>node.textContent)}
+          return{elapsed:performance.now()-measurement.started,longTasks:measurement.tasks,appWindow:{started:app.started,elapsed:performance.now()-app.started,longTasks:app.tasks},marks:{...measurement.marks,done:performance.now()} as Record<string,number>,domElements:element.querySelectorAll('*').length,visibleRows:element.querySelectorAll('.wv-diff-row').length,textUnits:element.textContent?.length,status:[...element.querySelectorAll('[role="status"]')].map(node=>node.textContent)}
         })
         displayMeasurements.push({size,...result});expect(result.domElements).toBeLessThan(5000)
         expect((await readNative()).world).toBe(ids.worldviewBefore)

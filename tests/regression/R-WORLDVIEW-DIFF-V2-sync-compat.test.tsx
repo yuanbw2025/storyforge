@@ -25,7 +25,7 @@ class FixtureWorker {
 // own controls/baseline/edit/adopt path and really uses the pinned live
 // comparison helper; strict frozen054 identity stays V1-only and never gates
 // V2. Model/network/DB writes are all forbidden here.
-const baseline = vi.hoisted(() => ({ values: { worldOrigin: '旧稿原文' }, id: 1, ragDocumentId: null, updatedAt: 1, serialized: 'fixture', foundationState: 'partial' }))
+const baseline = vi.hoisted(() => ({ values: { worldOrigin: '旧稿原文' } as Record<string, unknown>, id: 1, ragDocumentId: null, updatedAt: 1, serialized: 'fixture', foundationState: 'partial' }))
 const restoreMock = vi.hoisted(() => vi.fn(async () => ({ baseline })))
 vi.mock('../../src/lib/agent/run/worldview-field-v2-durable', () => ({ restoreWorldviewFieldMasterV2: restoreMock }))
 vi.mock('../../src/components/shared/PromptRunPanel', () => ({ default: () => null }))

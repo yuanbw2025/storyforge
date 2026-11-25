@@ -15,7 +15,7 @@ import { useOutlineStore } from '../../src/stores/outline'
 import ChapterEditor from '../../src/components/editor/ChapterEditor'
 import type { Chapter } from '../../src/lib/types'
 
-globalThis.IS_REACT_ACT_ENVIRONMENT = true
+Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
 
 /** 已提交章行 → 外部同步用的真实回执归属（与 ChapterEditor 内同一构造方式）。 */
 function receiptOf(chapter: Pick<Chapter, 'id' | 'updatedAt'>): string {

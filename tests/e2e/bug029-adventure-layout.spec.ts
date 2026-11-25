@@ -35,10 +35,12 @@ for (const width of [1728, 1366, 390]) {
       const b = await load('/storyforge/tests/helpers/current-product-build.ts') as typeof import('../helpers/current-product-build')
       const f = await load('/storyforge/tests/helpers/text-adventure-v2-foundation.ts') as typeof import('../helpers/text-adventure-v2-foundation')
       const owned = await w.seedCurrentProductWorld('029长标题工作区：潮钟群岛的原文与存档🌊'.repeat(3))
+      if (owned.release.id === undefined) throw new Error('Seeded release must be persisted')
+      const worldRelease = { ...owned.release, id: owned.release.id }
       const catalog = await w.loadCurrentProductWorldSourceCatalogV1({ scope: owned.scope, worldReleaseId: owned.release.id!, productType: 'text-adventure' })
-      const runtimePackage = f.createTextAdventureFoundationRuntimePackageV2({ worldRelease: owned.release, sourceCatalog: catalog })
+      const runtimePackage = f.createTextAdventureFoundationRuntimePackageV2({ worldRelease, sourceCatalog: catalog })
       runtimePackage.definition.title = '潮钟群岛与最后一封信🌊'.repeat(2)
-      await b.seedCurrentProductBuild({ scope: owned.scope, worldRelease: owned.release, runtimePackage, title: runtimePackage.definition.title })
+      await b.seedCurrentProductBuild({ scope: owned.scope, worldRelease, runtimePackage, title: runtimePackage.definition.title })
       return owned.scope
     })
     await workspace.selectOption(String(scope.projectId))

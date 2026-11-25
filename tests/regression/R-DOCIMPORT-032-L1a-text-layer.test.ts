@@ -57,7 +57,7 @@ vi.mock('../../src/stores/import-session', () => ({
   },
 }))
 
-globalThis.IS_REACT_ACT_ENVIRONMENT = true
+Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
 const mounted: Array<{ host: HTMLDivElement; root: ReturnType<typeof createRoot> }> = []
 const fetchSpy = vi.fn(() => { throw new Error('032-L1-a forbids model/network calls') })
 

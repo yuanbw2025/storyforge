@@ -1,12 +1,13 @@
+import type { AIConfig } from '../../src/lib/types'
 import { afterEach, describe, expect, it } from 'vitest'
 import { resetModelCapacityForTestsV1 } from '../../src/lib/ai/model-capacity'
 import { adventureRuntimeInputBudgetV1 } from '../../src/lib/adventure/harness'
 import { openWorldRuntimeInputBudgetV1 } from '../../src/lib/open-world/harness'
 import { openWorldEvolutionRuntimeInputBudgetV1 } from '../../src/lib/open-world/evolution-harness'
 
-const evidenced = { provider: 'deepseek', model: 'deepseek-v4-flash',
+const evidenced: AIConfig = { provider: 'deepseek', model: 'deepseek-v4-flash',
   baseUrl: 'https://api.deepseek.com/v1', apiKey: 'isolated-only', maxTokens: 8_000, temperature: 0 }
-const unknown = { provider: 'custom', model: 'unknown-conservative-model',
+const unknown: AIConfig = { provider: 'custom', model: 'unknown-conservative-model',
   baseUrl: 'https://isolated.invalid/v1', apiKey: 'isolated-only', contextWindow: 262_144,
   maxTokens: 8_000, temperature: 0 }
 

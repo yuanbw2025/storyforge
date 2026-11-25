@@ -419,7 +419,7 @@ describe('NW-1A · NW-0B corpus evidence and current database lifecycle', () => 
     const before = await db.characters.get(recordId)
     const keys = ['ragDocumentId', 'semanticSubKey', 'semanticId', 'revisionHash']
     expect(FIELD_REGISTRY.filter(field => keys.includes(field.field))).toEqual([])
-    const result = await adopt({ projectId: f.scope.projectId, scope: f.scope, target: 'characters', recordId, mode: 'merge',
+    const result = await adopt({ projectId: f.scope.projectId, scope: f.scope, target: 'characters', recordId, mode: 'replace',
       data: Object.fromEntries(keys.map(key => [key, 'model-forged'])) })
     expect(result.written).toEqual([])
     expect(result.unknown.sort()).toEqual([...keys].sort())
@@ -427,7 +427,7 @@ describe('NW-1A · NW-0B corpus evidence and current database lifecycle', () => 
     // extension may adopt them. This is not permission for a generic write.
     expect(FIELD_REGISTRY.find(field => field.target === 'characters' && field.field === 'narrativeTimeV1')?.adoptionPolicy)
       .toBe('narrative-annotation-v1')
-    const proposal = await adopt({ projectId: f.scope.projectId, scope: f.scope, target: 'characters', recordId, mode: 'merge',
+    const proposal = await adopt({ projectId: f.scope.projectId, scope: f.scope, target: 'characters', recordId, mode: 'replace',
       data: { narrativeTimeV1: 'model-forged' } })
     expect(proposal.written).toEqual([])
     expect(proposal.skipped[0]?.reason).toContain('确认与来源 CAS')
@@ -449,6 +449,6 @@ describe('NW-1A · NW-0B corpus evidence and current database lifecycle', () => 
       cases: corpusResults.sort((a, b) => a.family.localeCompare(b.family, 'en')),
       inputHashes: Object.fromEntries(paths.sort().map(file => [file, createHash('sha256').update(fs.readFileSync(file)).digest('hex')])) }
     if (process.env.NW_IR_REPORT) fs.writeFileSync(process.env.NW_IR_REPORT, JSON.stringify(receipt, null, 2) + '\n')
-    else expect(receipt).toEqual(JSON.parse(fs.readFileSync('tests/acceptance/narrative-world/ir-contract-20261125-capacity-release-input-v1.json', 'utf8')))
+    else expect(receipt).toEqual(JSON.parse(fs.readFileSync('tests/acceptance/narrative-world/ir-contract-20261125-capacity-release-input-v2.json', 'utf8')))
   })
 })

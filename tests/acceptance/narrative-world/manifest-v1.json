@@ -21,9 +21,19 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261125-capacity-release-input-v3.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261125-capacity-release-input-v4.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261125-capacity-release-input-v3.json",
+        "workPackage": "CAPACITY-RELEASE-409",
+        "note": "Preserve the v3 release measurement before current tooling type fixes, test fixture typing and verified Skill freshness records. The v4 measurement preserves the corpus, deterministic observations and known gaps; no live-model or product acceptance inferred."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/ir-contract-20261125-capacity-release-input-v1.json",
+        "workPackage": "CAPACITY-RELEASE-409",
+        "note": "Preserve the IR v1 measurement before typing the malformed external-input fixtures. IR v2 retains every deterministic case outcome and refreshes only the input hashes."
+      },
       {
         "path": "tests/acceptance/narrative-world/baseline-20261125-capacity-release-input-v2.json",
         "workPackage": "CAPACITY-RELEASE-409",

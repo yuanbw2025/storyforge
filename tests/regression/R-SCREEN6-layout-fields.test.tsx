@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client'
 import { afterEach, expect, it, vi } from 'vitest'
 import ScreenplayFields from '../../src/components/screenplay/ScreenplayFields'
 
-globalThis.IS_REACT_ACT_ENVIRONMENT = true
+Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
 let root: ReturnType<typeof createRoot> | undefined
 let host: HTMLDivElement
 async function draw(value: unknown, options = {}) {

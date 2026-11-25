@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client'
 import { afterEach, expect, it, vi } from 'vitest'
 import ComicFields from '../../src/components/comic/ComicFields'
 
-globalThis.IS_REACT_ACT_ENVIRONMENT = true
+Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
 let root: ReturnType<typeof createRoot> | undefined
 let host: HTMLDivElement
 const draw = async (value: unknown) => {

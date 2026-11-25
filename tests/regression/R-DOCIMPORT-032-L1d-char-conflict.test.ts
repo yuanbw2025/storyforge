@@ -24,7 +24,7 @@ vi.mock('../../src/lib/workspace/scope', () => ({
   }),
 }))
 
-globalThis.IS_REACT_ACT_ENVIRONMENT = true
+Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
 const mounted: Array<{ host: HTMLDivElement; root: ReturnType<typeof createRoot> }> = []
 async function mount(element: React.ReactElement) {
   const host = document.createElement('div'); document.body.append(host)
@@ -43,7 +43,7 @@ function candidateWith(result: UnifiedParseResult) {
   return {
     version: 1 as const,
     kind: 'document-import-chunk-candidate' as const,
-    portable: false,
+    portable: false as const,
     sessionId: 11,
     chunkIndex: 0,
     sourceTextHash: 's'.repeat(64),
@@ -61,7 +61,7 @@ const sessionFixture = (targetScope?: WorkspaceScope): ImportSession => ({
   targetWorldGroupId: null, targetScope, status: 'done', createdAt: 1, updatedAt: 1,
 })
 
-async function mountReview(result: UnifiedParseResult, onConfirm = vi.fn(async () => undefined)) {
+async function mountReview(result: UnifiedParseResult, onConfirm = vi.fn(async (_result: UnifiedParseResult) => undefined)) {
   return mount(createElement(ImportReportModal, {
     session: sessionFixture(targetScope),
     onRetryFailed: () => undefined,
@@ -119,7 +119,7 @@ describe('032-L1-d-CHAR candidate review same-name hint', () => {
     const host = await mount(createElement(ImportReportModal, {
       session: sessionFixture(undefined),
       onRetryFailed: () => undefined, onClose: () => undefined, onDiscard: () => undefined,
-      review: { candidate: candidateWith({ characters: [{ name: '林昭' }] } as unknown as UnifiedParseResult), raw: null, canConfirm: true, onConfirm: vi.fn(async () => undefined) },
+      review: { candidate: candidateWith({ characters: [{ name: '林昭' }] } as unknown as UnifiedParseResult), raw: null, canConfirm: true, onConfirm: vi.fn(async (_result: UnifiedParseResult) => undefined) },
     }))
     await act(async () => { await new Promise(resolve => setTimeout(resolve, 10)) })
     expect(host.querySelector('[role="status"]')).toBeNull()
@@ -127,7 +127,7 @@ describe('032-L1-d-CHAR candidate review same-name hint', () => {
 
   it('degrades to an empty hint on read failure instead of blocking confirmation', async () => {
     rows.fail = true
-    const onConfirm = vi.fn(async () => undefined)
+    const onConfirm = vi.fn(async (_result: UnifiedParseResult) => undefined)
     const host = await mountReview({ characters: [{ name: '林昭' }] } as unknown as UnifiedParseResult, onConfirm)
     await act(async () => { await new Promise(resolve => setTimeout(resolve, 10)) })
     expect(host.querySelector('[role="status"]')).toBeNull()
@@ -138,7 +138,7 @@ describe('032-L1-d-CHAR candidate review same-name hint', () => {
 
   it('still saves the edited draft unchanged: the hint never rewrites adopt input', async () => {
     rows.characters = [{ id: 7, name: '林昭' }]
-    const onConfirm = vi.fn(async () => undefined)
+    const onConfirm = vi.fn(async (_result: UnifiedParseResult) => undefined)
     const host = await mountReview({ characters: [{ name: '林昭', appearance: '原貌。' }] } as unknown as UnifiedParseResult, onConfirm)
     await vi.waitFor(() => expect(host.textContent).toContain('候选角色「林昭」'))
     const confirmButton = Array.from(host.querySelectorAll('button')).find(button => button.textContent?.includes('确认保存本块'))!
