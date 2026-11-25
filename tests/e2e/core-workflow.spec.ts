@@ -422,6 +422,7 @@ async function createBookWithSavedChapter(page: Page, projectName: string, chapt
   await page.getByRole('button', { name: '添加章节', exact: true }).click()
   await expectInputValue(page, '第1章')
   await page.getByTitle('编辑章节').click()
+  await page.getByRole('group', { name: '编辑模式', exact: true }).getByRole('button', { name: '富文本', exact: true }).click()
 
   const editor = page.locator('.tiptap-editor')
   await expect(editor).toBeVisible()
@@ -2479,6 +2480,7 @@ test('真实世界观入口可维护修炼 DAG 并关联角色境界', async ({ 
   await page.getByRole('button', { name: '添加章节', exact: true }).click()
   await expectInputValue(page, '第1章')
   await page.getByTitle('编辑章节').click()
+  await page.getByRole('group', { name: '编辑模式', exact: true }).getByRole('button', { name: '富文本', exact: true }).click()
   const editor = page.locator('.tiptap-editor')
   await editor.fill('林舟与强敌鏖战三日，最终在生死关头凝成道基，正式踏入筑基境，剑气照亮整座山谷。')
   await page.getByRole('button', { name: '保存', exact: true }).click()

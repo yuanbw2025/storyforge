@@ -23,6 +23,7 @@ test('同一章从章纲到任务细纲到正文再返回；快速编辑先保�
   await page.getByRole('button', { name: '写本章正文', exact: true }).click()
   await expect(page).toHaveURL(new RegExp(`module=chapters-list&chapter=${chapterNode}&work=${workId}`))
   await expect(page.getByRole('heading', { name: '第1章', exact: true, level: 2 })).toBeVisible()
+  await page.getByRole('group', { name: '编辑模式', exact: true }).getByRole('button', { name: '富文本', exact: true }).click()
   await page.locator('.tiptap-editor').fill('两人把明早分工定下来，关灯回家。')
   await page.getByRole('button', { name: '查看本章细纲', exact: true }).click()
   await expect(page).toHaveURL(new RegExp(`module=detailed-outline&chapter=${chapterNode}&work=${workId}`))

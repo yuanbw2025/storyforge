@@ -351,6 +351,7 @@ test('standard plugin composition keeps prose input responsive without repeated 
  await gotoWithBrowserFixtureAIConfigV1(page, `./workspace/${project}?module=outline`)
  await page.getByRole('navigation',{name:'长篇工作台二级导航'}).getByRole('button',{name:'大纲与章纲',exact:true}).click()
  await page.getByRole('button',{name:'添加卷',exact:true}).click();await page.getByRole('button',{name:'添加章节',exact:true}).click();await page.getByTitle('编辑章节',{exact:true}).click()
+  await page.getByRole('group', { name: '编辑模式', exact: true }).getByRole('button', { name: '富文本', exact: true }).click()
  const editor=page.locator('.tiptap-editor');await expect(editor).toBeVisible();await editor.fill('灯塔的光越过海雾。'.repeat(300))
  await page.evaluate(()=>{
   const records={frames:[] as number[],longTasks:[] as number[]};Reflect.set(window,'sfPluginInputMetrics',records)

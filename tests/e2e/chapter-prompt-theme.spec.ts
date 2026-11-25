@@ -37,6 +37,7 @@ test('未来演化的小字在所有主题有清晰对比，主题切换不改�
   await page.getByRole('button', { name: '添加卷', exact: true }).click()
   await page.getByRole('button', { name: '添加章节', exact: true }).click()
   await page.getByTitle('编辑章节', { exact: true }).click()
+  await page.getByRole('group', { name: '编辑模式', exact: true }).getByRole('button', { name: '富文本', exact: true }).click()
   const editor = page.locator('.tiptap-editor')
   await editor.fill('山间雨停，两人来到渡口。')
   await page.getByRole('button', { name: '影响分析', exact: true }).click()
