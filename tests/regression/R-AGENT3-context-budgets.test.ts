@@ -59,7 +59,7 @@ describe('AGENT-1 27.1-e · 领域上下文预算与输入证据', () => {
     expect(split.every(item => item.sourceBudgetScale === policy.sourceBudgetScale)).toBe(true)
   })
 
-  it('领域上限与模型窗口取较小值，源比例只能收窄登记预算', async () => {
+  it('请求预算约束手工原文，源比例不能放大预算或恢复旧100k额度', async () => {
     const projectId = (await seedCurrentWorkspace('Context budget')).scope.projectId
     const text = '潮'.repeat(80_000)
     const compact = await assembleContext({
@@ -80,7 +80,21 @@ describe('AGENT-1 27.1-e · 领域上下文预算与输入证据', () => {
       inputBudgetTokens: 120_000,
       sourceBudgetScale: 4,
     })
-    expect(clamped.totalInputTokens).toBeLessThanOrEqual(100_000)
+    const registeredScale = await assembleContext({
+      projectId,
+      sourceKeys: ['manualText'],
+      manualSourceText: text,
+      inputBudgetTokens: 120_000,
+      sourceBudgetScale: 1,
+    })
+    expect(clamped.inputBudget).toBe(120_000)
+    expect(clamped.totalInputTokens).toBeGreaterThan(100_000)
+    expect(clamped.totalInputTokens).toBeLessThanOrEqual(clamped.inputBudget)
+    expect(clamped.text).toContain(text)
+    expect(clamped.sourceEvidence?.find(source => source.key === 'manualText'))
+      .toMatchObject({ delivery: 'full' })
+    expect(clamped.text).toBe(registeredScale.text)
+    expect(clamped.totalInputTokens).toBe(registeredScale.totalInputTokens)
   })
 
   it('输入证据合并时保留档位、预算和去重后的真实来源', () => {
