@@ -151,6 +151,7 @@ test('047 native story core, history blur, and rule native inputs preserve real 
   await history.getByRole('button', { name: '恢复自适应', exact: true }).click()
   expect(await snapshot(page)).toBe(historyBeforeLeave)
   await page.getByRole('button', { name: '历史总述与纪年', exact: true }).click()
+  await expect.poll(async () => (await snapshot(page)).includes('历史原稿：灯塔建立。')).toBe(true)
   await page.reload()
   await page.getByRole('button', { name: '历史总述与纪年', exact: true }).click()
   await expect(history.locator('textarea')).toHaveValue('历史原稿：灯塔建立。')
@@ -341,7 +342,9 @@ test('047 native StoryCore raw toggle preserves the governed candidate and has a
   await nudge(page, 'story.logline/candidate')
   await page.getByRole('button', { name: '查看原始结构', exact: true }).click()
   const raw = page.locator('[data-input-area-layout="story.logline/raw"]')
-  expect(JSON.parse(await raw.locator('textarea').inputValue())).toEqual({ field: 'logline', value: text })
+  await expect.poll(async () => {
+    try { return JSON.parse(await raw.locator('textarea').inputValue()) } catch { return null }
+  }).toEqual({ field: 'logline', value: text })
   await nudge(page, 'story.logline/raw')
   await raw.getByRole('button', { name: '恢复自适应', exact: true }).click()
   expect(await snapshot(page)).toBe(before)

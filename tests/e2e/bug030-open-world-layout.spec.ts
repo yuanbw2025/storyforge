@@ -22,6 +22,9 @@ async function snapshot(page: Page) {
 }
 for (const width of [1728, 1366, 390]) {
   test(`BUG030 private open-world routes, sources and immutable saves at ${width}px`, async ({ page }, info) => {
+    // The case loads every private route and captures full-page evidence.
+    // Keep each individual assertion bounded while allowing the full route tour.
+    test.setTimeout(180_000)
     const errors: string[] = []; page.on('pageerror', error => errors.push(error.message))
     await page.setViewportSize({ width, height: 900 }); await page.goto('./openworld/runtime')
     const workspace = page.getByRole('combobox', { name: '创作工作区', exact: true })
