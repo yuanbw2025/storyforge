@@ -1611,6 +1611,8 @@ export async function commitProseGenerationAdoptionV1(input: {
   const intentHash = await hashCanonicalValue(intentBody)
   const previous = await readAgentRunV1(input.scope, input.runId)
   const taskProof = await assertProseTaskCandidateV2(input.scope, input.candidate, previous)
+  const frame = observeDuplicatedProseFrameV1(input.candidate.outputText)
+  if (frame) throw new Error(frame.message)
   if (input.candidate.taskLengthV2?.disposition === 'needs-attention') throw new Error('该 AI 正文仍未满足篇幅；可保留、拒绝，或由作者编辑后明确采用，不会自动重发。')
   if (previous.projection.state === 'completed' && previous.projection.terminalReceiptHash) {
     const { durable, ...body } = input.candidate
@@ -1629,8 +1631,6 @@ export async function commitProseGenerationAdoptionV1(input: {
     }
     return { snapshot: previous, receiptHash: previous.projection.terminalReceiptHash }
   }
-  const frame = observeDuplicatedProseFrameV1(input.candidate.outputText)
-  if (frame) throw new Error(frame.message)
   if (input.candidate.operation === 'quality-revise' && input.candidate.qualityRevision) {
     const protectionError = qualityRevisionProtectionErrorV1(input.candidate.qualityRevision.plan, input.candidate.outputText)
     if (protectionError) throw new Error(protectionError)

@@ -2948,10 +2948,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     const frame = observeSeparatedProseFrameV1(output)
     if (!candidate || !frame) return
     try {
-      const scope = await resolveScopeLike(project.id!)
-      const tokenUsage = await readProseGenerationObservedUsageV1({ scope, runId: candidate.durable.runId, attempt: candidate.durable.attempt })
-      if (editorChapterIdRef.current !== candidate.chapterId || proseCandidateRef.current?.durable.runId !== candidate.durable.runId) return
-      restoreAI({ output: output.slice(frame.afterSeparator).trim(), operation: candidate.operation, tokenUsage })
+      await handleSaveProseCandidateDraft(output.slice(frame.afterSeparator).trim())
     } catch (error) {
       if (editorChapterIdRef.current === candidate.chapterId && proseCandidateRef.current?.durable.runId === candidate.durable.runId) setProseGenerationError(error instanceof Error ? error.message : '原正文用量证据无法读取，候选仍已保留。')
     }
