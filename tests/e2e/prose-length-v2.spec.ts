@@ -1,3 +1,4 @@
+import { installBrowserServiceCapacityFixtureV1 } from './helpers/browser-ai-config'
 import { expect, test, type Page } from '@playwright/test'
 import { createLongform } from './helpers/product-entry'
 if (process.env.STORYFORGE_B03_LIVE === '1') test.use({ trace: 'off', screenshot: 'off', video: 'off' })
@@ -17,6 +18,8 @@ async function setup(page: Page, answers: Array<string | null>, live?: { provide
     localStorage.setItem('storyforge-ai-api-key-remember', 'true')
     localStorage.setItem('storyforge-ai-config', JSON.stringify(config))
   }, live ?? { provider: 'custom', baseUrl: 'https://b03-e2e.invalid/v1', model: 'b03-ui-synthetic', apiKey: 'b03-synthetic-only', temperature: 0, maxTokens: 12 })
+
+  await installBrowserServiceCapacityFixtureV1(page, { provider: 'custom', baseUrl: 'https://b03-e2e.invalid/v1', model: 'b03-ui-synthetic' }, 64000)
   const posts: Array<Record<string, unknown>> = []
   await page.route('**/*', async route => {
     const request = route.request(), url = new URL(request.url())
@@ -83,6 +86,10 @@ test('B03 ordinary editor revises four drafts, restores author edits, and adopts
   await expect(draft).toHaveCount(0)
   await expect.poll(async () => (await readRows(page, 'agentRuns')).find(row => String(row.contractJson).includes('prose.generate.v2'))?.status).toBe('completed')
   expect(String((await readRows(page, 'chapters'))[0].content)).toContain(edited)
+  await expect(page.getByRole('textbox', { name: '正文 Markdown', exact: true })).toContainText(edited)
+  await page.reload()
+  await page.getByRole('button', { name: '实时预览', exact: true }).click()
+  await expect(page.getByRole('textbox', { name: '正文 Markdown', exact: true })).toContainText(edited)
   expect(posts).toHaveLength(4)
 })
 

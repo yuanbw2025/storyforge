@@ -2973,13 +2973,15 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       await dialog.alert({ title: '旧修订预览只读', message: '请从质量审校重新选择问题与可改范围。旧报告输出不能直接写回当前章节。' })
       return
     }
-    if (!editorRef.current || !currentChapter?.id) return
+    const proseSession = markdownCmActive ? markdownSessionRef.current : null
+    const generatedOperation = ai.operation === 'generate' || ai.operation === 'continue'
+    if (!currentChapter?.id || (!editorRef.current && !(proseSession && generatedOperation))) return
     const acceptedChapterId = currentChapter.id
     const acceptedChapterTitle = outlineNode?.title || currentChapter.title || '未知章节'
     const aiAction = ai.operation
     if (
       (aiAction === 'polish' || aiAction === 'expand' || aiAction === 'deai')
-      && !editorRef.current.getSelectedText()
+      && !editorRef.current?.getSelectedText()
     ) {
       await dialog.alert({
         title: '请重新选中原文',
@@ -2995,13 +2997,19 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     // 这样作者看到的内容、正式 chapters 行和后处理 barrier 绑定在同一份候选证据上。
     let durableCandidate = shouldAutoProcess ? proseCandidateRef.current : null
     if (durableCandidate && durableCandidate.operation === aiAction) {
-      const beforeHtml = editorRef.current.getHTML()
+      const beforeHtml = proseSession ? proseSession.getHtml() : editorRef.current!.getHTML()
       let fullHtml = html
       let fullText = normalizeProseForEditorV1(text)
       if (aiAction === 'continue') {
-        editorRef.current.appendContent(html)
-        fullHtml = editorRef.current.getHTML()
-        fullText = editorRef.current.getPlainText()
+        if (proseSession) {
+          // CM 的外部采纳在 CAS 写库后由回执同步 effect 刷新，不提前改动作者草稿。
+          fullHtml = beforeHtml + html
+          fullText = htmlToPlainText(fullHtml)
+        } else {
+          editorRef.current!.appendContent(html)
+          fullHtml = editorRef.current!.getHTML()
+          fullText = editorRef.current!.getPlainText()
+        }
       }
       const fullWordCount = countWords(fullText)
       try {
@@ -3023,8 +3031,8 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
         setProseCandidate(null)
         proseCandidateRef.current = null
         ai.reset()
-        if (aiAction === 'generate') {
-          editorRef.current.setContent(fullHtml)
+        if (aiAction === 'generate' && !proseSession) {
+          editorRef.current!.setContent(fullHtml)
         }
         setContent(fullHtml)
         setPlainText(fullText)
@@ -3043,10 +3051,10 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
           setTransitionError(error instanceof Error ? error.message : '章节后处理启动失败')
         })
       } catch (error) {
-        if (aiAction === 'continue') {
-          editorRef.current.setContent(beforeHtml)
+        if (aiAction === 'continue' && !proseSession) {
+          editorRef.current!.setContent(beforeHtml)
           setContent(beforeHtml)
-          setPlainText(editorRef.current.getPlainText())
+          setPlainText(editorRef.current!.getPlainText())
         }
         setTransitionError(error instanceof Error ? error.message : '正文候选采纳失败')
       }
@@ -3061,6 +3069,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       return
     }
 
+    if (!editorRef.current) return
     if (aiAction === 'deai-full') {
       // 整章去 AI 味：替换全文。
       editorRef.current.setContent(html)
