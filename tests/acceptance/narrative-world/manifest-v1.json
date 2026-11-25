@@ -21,9 +21,14 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261121-063-main558-input-v2.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261125-capacity-release-input-v1.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261121-063-main558-input-v2.json",
+        "workPackage": "CAPACITY-RELEASE-409",
+        "note": "Preserve the measured main558 input receipt before the merged capacity/budget and source declaration updates. The 2026-11-25 release receipt remeasures current inputs; all deterministic outcomes, gaps and unsupported observations are compared unchanged. No live-model or product acceptance is inferred."
+      },
       {
         "path": "tests/acceptance/narrative-world/baseline-20261120-063-producer-input-v1.json",
         "workPackage": "BUG-063-A2-MAIN558",
