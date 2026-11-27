@@ -10,7 +10,7 @@ import { useCharacterStore } from '../../stores/character'
 import { useAIStream } from '../../hooks/useAIStream'
 import { createAISessionKey } from '../../stores/ai-generation-session'
 import { useAutoSave } from '../../hooks/useAutoSave'
-import { buildChapterStatusPatchV1, createChapterEditorDraftBufferV1, shouldPersistChapterEditorContentV1 } from '../../lib/authoring/chapter-editor-save'
+import { assertChapterEditorSavedV1, buildChapterStatusPatchV1, createChapterEditorDraftBufferV1, shouldPersistChapterEditorContentV1, type ChapterEditorRecordV1 } from '../../lib/authoring/chapter-editor-save'
 import { useBeforeUnload } from '../../hooks/useBeforeUnload'
 import { buildChapterTaskRequestV2, buildPolishPrompt, buildExpandPrompt, buildDeAIPrompt } from '../../lib/ai/adapters/chapter-adapter'
 import AuthorLengthControl from '../shared/AuthorLengthControl'
@@ -301,6 +301,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
   const [savedContent, setSavedContent] = useState('')
   const [manualSaving, setManualSaving] = useState(false)
   const [manualSaveError, setManualSaveError] = useState('')
+  const statusSaveSequence = useRef(0)
   const [hasPendingChapterDrafts, setHasPendingChapterDrafts] = useState(false)
   // R8 生产挂载：仅已解析准入的独立长篇开放 Markdown 实时预览/源码模式。
   const activeWork = useActiveWork(project)
@@ -335,9 +336,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
         await updateChapter(draft.chapterId, { content: draft.html, wordCount })
       }
       const saved = await db.chapters.get(draft.chapterId)
-      if (!saved || saved.content !== draft.html || saved.wordCount !== wordCount) {
-        throw new Error('正文尚未保存成功；修改已保留，请重试保存。')
-      }
+      assertChapterEditorSavedV1(before, saved, { content: draft.html, wordCount })
       if (editorChapterIdRef.current === draft.chapterId) setSavedContent(draft.html)
     })
   }
@@ -987,45 +986,70 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
   }, [content])
 
   const persistCurrentEditorContent = useCallback(async (): Promise<{ html: string; plain: string; wordCount: number } | null> => {
+    const chapter = currentChapter as ChapterEditorRecordV1 | null, owner = proseViewOwnerRef.current
+    if (!chapter?.id) return null
+    if (chapter.projectId !== owner.projectId || chapter.workId !== owner.workId) throw new Error('章节不属于当前作品；修改仍保留，未确认保存。')
+    const ownsView = () => editorChapterIdRef.current === chapter.id && proseViewOwnerRef.current.projectId === owner.projectId
+      && proseViewOwnerRef.current.worldId === owner.worldId && proseViewOwnerRef.current.workId === owner.workId
     await flushChapterDrafts()
-    if (!currentChapter?.id) return null
+    if (!ownsView()) throw new Error('章节已切换；原稿仍保留，未将当前编辑器写入旧章节。')
     const { html, plain, wordCount: wc } = readActiveEditorContent()
-    if (shouldPersistChapterEditorContentV1(currentChapter, html, wc)) {
-      await updateChapter(currentChapter.id, { content: html, wordCount: wc })
+    if (shouldPersistChapterEditorContentV1(chapter, html, wc)) {
+      await updateChapter(chapter.id, { content: html, wordCount: wc })
     }
-    setContent(html)
-    setPlainText(plain)
-    setSavedContent(html)
+    const actual = await db.chapters.get(chapter.id)
+    const currentSnapshot = ownsView() && readActiveEditorContent().html === html
+    assertChapterEditorSavedV1(chapter, actual, currentSnapshot ? { content: html, wordCount: wc } : {})
+    if (currentSnapshot) {
+      setContent(html); setPlainText(plain)
+      setSavedContent(html)
+    }
     return { html, plain, wordCount: wc }
   }, [currentChapter, updateChapter, flushChapterDrafts, readActiveEditorContent])
 
   const handleManualSave = useCallback(async () => {
     if (manualSaving) return
+    const chapterId = editorChapterIdRef.current
     setManualSaving(true)
     setManualSaveError('')
     try {
       await persistCurrentEditorContent()
     } catch (error) {
-      setManualSaveError(error instanceof Error ? error.message : String(error))
+      if (editorChapterIdRef.current === chapterId) setManualSaveError(error instanceof Error ? error.message : String(error))
     } finally {
       setManualSaving(false)
     }
   }, [manualSaving, persistCurrentEditorContent])
 
   const handleStatusChange = useCallback(async (status: ChapterStatus) => {
-    if (!currentChapter?.id) return
+    const chapter = currentChapter as ChapterEditorRecordV1 | null, owner = proseViewOwnerRef.current
+    if (!chapter?.id) return
+    const sequence = ++statusSaveSequence.current
+    if (chapter.projectId !== owner.projectId || chapter.workId !== owner.workId) {
+      setManualSaveError('章节不属于当前作品；修改仍保留，未更改状态。')
+      return
+    }
+    const ownsView = () => editorChapterIdRef.current === chapter.id && proseViewOwnerRef.current.projectId === owner.projectId
+      && proseViewOwnerRef.current.worldId === owner.worldId && proseViewOwnerRef.current.workId === owner.workId
     setManualSaveError('')
     try {
       await flushChapterDrafts()
+      if (!ownsView()) throw new Error('章节已切换；原稿仍保留，未更改旧章节状态。')
       const { html, plain, wordCount: wc } = readActiveEditorContent()
-      await updateChapter(currentChapter.id, buildChapterStatusPatchV1(html, wc, status))
-      setContent(html)
-      setPlainText(plain)
-      setSavedContent(html)
+      const patch = buildChapterStatusPatchV1(html, wc, status)
+      await updateChapter(chapter.id, patch)
+      const actual = await db.chapters.get(chapter.id)
+      if (sequence !== statusSaveSequence.current) return
+      const currentSnapshot = ownsView() && readActiveEditorContent().html === html
+      assertChapterEditorSavedV1(chapter, actual, currentSnapshot ? patch : { status })
+      if (currentSnapshot) {
+        setContent(html); setPlainText(plain)
+        setSavedContent(html)
+      }
     } catch (error) {
-      setManualSaveError(error instanceof Error ? error.message : String(error))
+      if (ownsView() && sequence === statusSaveSequence.current) setManualSaveError(error instanceof Error ? error.message : String(error))
     }
-  }, [currentChapter?.id, updateChapter, flushChapterDrafts, readActiveEditorContent])
+  }, [currentChapter, updateChapter, flushChapterDrafts, readActiveEditorContent])
 
   // 切换章节：同步到本地 state（RichEditor 会基于 value 重建内容）
   useEffect(() => {
@@ -3155,7 +3179,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
           saveDisabled={compareSourceHtml != null}
           saving={manualSaving}
           saveError={manualSaveError}
-          isSaved={content === savedContent}
+          isSaved={content === savedContent && !hasPendingChapterDrafts}
           onStatusChange={status => { void handleStatusChange(status) }}
           onToggleContext={() => setShowContext(!showContext)}
           onOpenCompare={() => { void handleOpenComparePolish() }}
@@ -3298,7 +3322,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
           onPerspectiveCharacterChange={characterId => {
             if (currentChapter.id) void updateChapter(currentChapter.id, {
               perspectiveCharacterId: characterId,
-            })
+            }).catch(error => { if (editorChapterIdRef.current === currentChapter.id) setManualSaveError(error instanceof Error ? error.message : String(error)) })
           }}
         />
       )}
@@ -3841,7 +3865,8 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
         </label>
         <textarea
           value={currentChapter.notes || ''}
-          onChange={e => currentChapter.id && updateChapter(currentChapter.id, { notes: e.target.value })}
+          onChange={e => { if (currentChapter.id) void updateChapter(currentChapter.id, { notes: e.target.value })
+            .catch(error => { if (editorChapterIdRef.current === currentChapter.id) setManualSaveError(error instanceof Error ? error.message : String(error)) }) }}
           placeholder="写给自己的备忘..."
           rows={2}
           className="w-full p-2 bg-bg-elevated border border-border rounded text-xs text-text-muted resize-y focus:outline-none focus:border-accent"

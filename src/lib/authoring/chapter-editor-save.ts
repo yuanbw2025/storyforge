@@ -1,4 +1,6 @@
 import type { Chapter, ChapterStatus } from '../types'
+/** Ownership metadata is read-only evidence, not an editable Chapter field. */
+export type ChapterEditorRecordV1 = Chapter & { readonly workId?: number }
 
 export interface ChapterEditorDraftV1 {
   chapterId: number
@@ -59,4 +61,18 @@ export function buildChapterStatusPatchV1(
   status: ChapterStatus,
 ): Pick<Chapter, 'content' | 'wordCount' | 'status'> {
   return { content: html, wordCount, status }
+}
+
+/** A successful callback alone cannot acknowledge the original editor buffer.
+ * Compare its actual record identity and only the submitted editor fields. */
+export function assertChapterEditorSavedV1(
+  before: ChapterEditorRecordV1,
+  actual: ChapterEditorRecordV1 | undefined,
+  patch: Partial<Pick<Chapter, 'content' | 'wordCount' | 'status'>>,
+): void {
+  if (!actual || actual.id !== before.id || actual.projectId !== before.projectId || actual.workId !== before.workId
+    || actual.ragDocumentId !== before.ragDocumentId) throw new Error('原章节身份已变化；修改仍保留，未确认保存。')
+  if ('content' in patch && (actual.content ?? '') !== (patch.content ?? '')
+    || 'wordCount' in patch && (actual.wordCount ?? 0) !== (patch.wordCount ?? 0)
+    || patch.status !== undefined && actual.status !== patch.status) throw new Error('正文尚未保存成功；修改已保留，请重试保存。')
 }
