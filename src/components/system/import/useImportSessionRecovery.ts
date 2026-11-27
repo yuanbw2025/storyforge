@@ -2,9 +2,9 @@ import { useEffect, useState } from 'react'
 import { extractTextFromFile, textLayerReportLineV1 } from '../../../lib/doc-parser'
 import type { CsvGridV1 } from '../../../lib/import/csv-grid'
 import { publishTextLayerNoticeV1, publishCsvGridViewV1 } from './ImportDocOverview'
-import { chunkDocument, quickHash } from '../../../lib/import/chunker'
+import { recoverFrozenImportSourceV1 } from '../../../lib/import/frozen-source-recovery'
 import type { ImportSession } from '../../../lib/types/import-session'
-import { hashImportChunkTextV1, hasFrozenImportIdentityV1, readImportSessionAuthorityV1, useImportSessionStore } from '../../../stores/import-session'
+import { hasFrozenImportIdentityV1, readImportSessionAuthorityV1, useImportSessionStore } from '../../../stores/import-session'
 import { hasChunkTexts, registerChunkTexts } from '../../../lib/import/pipeline'
 
 export default function useImportSessionRecovery(projectId: number, activeWorldId?: number | null, activeWorkId?: number | null) {
@@ -76,26 +76,12 @@ export default function useImportSessionRecovery(projectId: number, activeWorldI
         // 032-L1-c：仅 csv 且非 empty 时记录只读侧车；不改变 registerChunkTexts 输入（仍是 plainText）。
         setCsvGrid(result.csvGrid ?? null)
         publishCsvGridViewV1(result.csvGrid ?? null)
-        const plans = chunkDocument(result.text, { targetChars: frozen.chunkSize })
-        let matches = quickHash(result.text) === frozen.fileHash && plans.length === frozen.totalChunks
-        for (const plan of plans) {
-          if (!matches) break
-          const chunk = frozen.chunks[plan.index]
-          matches = Boolean(chunk && chunk.index === plan.index && chunk.sourceTextHash === await hashImportChunkTextV1(plan.text))
-        }
+        const plans = await recoverFrozenImportSourceV1(result.text, frozen)
         if (cancelled) return
-        if (matches) {
-          await readImportSessionAuthorityV1(session.id, projectId, frozen)
-          if (cancelled) return
-          registerChunkTexts(session.id, plans.map(plan => ({ index: plan.index, text: plan.text })))
-          setBlobRestored(true)
-        } else {
-          console.warn(
-            '[import] Blob 恢复后原文件或切块摘要不一致：',
-            `原 ${session.totalChunks} vs 新 ${plans.length}`,
-          )
-          setBlobRestored(false)
-        }
+        await readImportSessionAuthorityV1(session.id, projectId, frozen)
+        if (cancelled) return
+        registerChunkTexts(session.id, plans.map(plan => ({ index: plan.index, text: plan.text })))
+        setBlobRestored(true)
       } catch (error) {
         console.error('[import] 从 Blob 恢复失败：', error)
         setBlobRestored(false)

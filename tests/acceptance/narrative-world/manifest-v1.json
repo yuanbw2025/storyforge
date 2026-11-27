@@ -21,9 +21,14 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261127-release409-finite-service-main685-v1.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261127-document031-auto-input-v1.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261127-release409-finite-service-main685-v1.json",
+        "sha256": "0531152751fd80358a1b885d38f306c55d8724ea8c3762c681740ce5836964ac",
+        "note": "Preserve the measured main receipt before wiring the existing adaptive document planner and sharing its unchanged request policy. Remeasure current deterministic inputs without changing corpus, outcomes or known gaps."
+      },
       {
         "path": "tests/acceptance/narrative-world/baseline-20261127-markdown051-descriptions-v1.json",
         "sha256": "4be643a188bc5f821942501483bd04e172c6d71686ac30f77b89f02946c6026c",
