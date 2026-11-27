@@ -1,3 +1,4 @@
+import type { LocalSaveAckV1, LocalSaveIntentV1 } from '../../lib/authoring/local-save-evidence'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ChevronDown, ChevronRight, Trash2 } from 'lucide-react'
 import type { Character, Project, WorldGroup } from '../../lib/types'
@@ -6,9 +7,9 @@ import {
   ORDER_AXIS_LABELS,
   ROLE_WEIGHT_LABELS,
 } from '../../lib/character/character-axes'
-import { InlineInput, InlineTextarea } from '../shared/InlineEdit'
+import { InlineInput } from '../shared/InlineEdit'
 import CharacterAxesPicker from './CharacterAxesPicker'
-import CharacterDimensionFields from './CharacterDimensionFields'
+import CharacterDimensionFields, { CharacterDraftField } from './CharacterDimensionFields'
 import CharacterStatusPanel from './CharacterStatusPanel'
 import CharacterSupplementAction from './CharacterSupplementAction'
 import CharacterLifecycleAction from './CharacterLifecycleAction'
@@ -24,7 +25,7 @@ interface Props {
   worldGroups?: WorldGroup[]
   activeWorldGroupId?: number | null
   onUpdateField: (field: keyof Character, value: string) => void | Promise<void>
-  onPatch: (patch: Partial<Character>, expected?: Partial<Character>) => void | Promise<void>
+  onPatch: (patch: Partial<Character>, expected?: Partial<Character>, confirmation?: LocalSaveIntentV1) => void | Promise<void | LocalSaveAckV1>
   onReload: () => void
   onDelete: () => void
 }
@@ -197,9 +198,10 @@ export default function CharacterDetailCard({
           <div className="flex gap-2">
             <span className="w-20 flex-shrink-0 pt-1.5 text-xs text-text-muted">人物关系</span>
             <div className="flex-1 min-w-0">
-              <InlineTextarea markdownRead
-                value={char.relationships || ''}
-                onChange={value => onUpdateField('relationships', value)}
+              <CharacterDraftField markdownRead character={char} field="relationships" dimension={{ label: '人物关系', rows: 3 }}
+                value={char.relationships}
+                onCommit={(value, expected, confirmation) => confirmation ? onPatch({ relationships: value }, { relationships: expected as string }, confirmation)
+                  : onPatch({ relationships: value }, { relationships: expected as string })}
                 placeholder="点击填写人物关系…"
               />
             </div>

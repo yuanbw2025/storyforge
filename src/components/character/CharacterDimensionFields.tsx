@@ -1,11 +1,13 @@
-import AcknowledgedTextField from '../shared/AcknowledgedTextField'
+import { useAuthorRecordSavesV1 } from '../shared/AuthorRecordSaveScope'
+import type { LocalSaveAckV1, LocalSaveIntentV1 } from '../../lib/authoring/local-save-evidence'
+import AcknowledgedTextField, { type AcknowledgedTextFieldProps } from '../shared/AcknowledgedTextField'
 import type { Character } from '../../lib/types'
 import { dimensionsByGroup, type CharacterDimensionKey, type CharacterDimensionSpec } from '../../lib/character/character-dimensions'
 import { FIELD_REGISTRY } from '../../lib/registry/field-registry'
 
 interface Props {
   character: Character
-  onChange: (patch: Partial<Character>, expected?: Partial<Character>) => void | Promise<void>
+  onChange: (patch: Partial<Character>, expected?: Partial<Character>, confirmation?: LocalSaveIntentV1) => void | Promise<void | LocalSaveAckV1>
   /** 行内已显示、此处不重复的维度（如 NPC 行已有 简介/地点） */
   exclude?: CharacterDimensionKey[]
 }
@@ -13,15 +15,19 @@ interface Props {
 interface DimensionFieldProps {
   dimension: Pick<CharacterDimensionSpec, 'label' | 'rows'>
   value: unknown
-  onCommit: (value: string, expected: unknown) => void | Promise<void>
+  onCommit: AcknowledgedTextFieldProps['onCommit']
+  localSave?: AcknowledgedTextFieldProps['localSave']
+  character?: Character
+  field?: string
   input?: boolean
   placeholder?: string
   className?: string
   markdownRead?: boolean
 }
 
-export function CharacterDraftField({ dimension, ...props }: DimensionFieldProps) {
-  return <AcknowledgedTextField {...props} label={dimension.label} rows={dimension.rows} />
+export function CharacterDraftField({ dimension, character, field, ...props }: DimensionFieldProps) {
+  const saved = useAuthorRecordSavesV1('characters', character)
+  return <AcknowledgedTextField {...props} localSave={props.localSave ?? (field ? saved(field) : undefined)} label={dimension.label} rows={dimension.rows} />
 }
 
 /**
@@ -30,6 +36,7 @@ export function CharacterDraftField({ dimension, ...props }: DimensionFieldProps
  * 加一个维度只改 CHARACTER_DIMENSIONS + FIELD_REGISTRY,这里自动出现。
  */
 export default function CharacterDimensionFields({ character, onChange, exclude = [] }: Props) {
+  const saved = useAuthorRecordSavesV1('characters', character)
   const skip = new Set<CharacterDimensionKey>(exclude)
 
   return (
@@ -49,7 +56,10 @@ export default function CharacterDimensionFields({ character, onChange, exclude 
                     dimension={d}
                     markdownRead={FIELD_REGISTRY.some(spec => spec.target === 'characters' && spec.field === d.key && spec.type === 'longtext')}
                     value={character[d.key]}
-                    onCommit={(value, expected) => onChange({ [d.key]: value } as Partial<Character>, { [d.key]: expected } as Partial<Character>)}
+                    localSave={saved(d.key)}
+                    onCommit={(value, expected, confirmation) => confirmation
+                      ? onChange({ [d.key]: value } as Partial<Character>, { [d.key]: expected } as Partial<Character>, confirmation)
+                      : onChange({ [d.key]: value } as Partial<Character>, { [d.key]: expected } as Partial<Character>)}
                   />
                 </div>
               ))}

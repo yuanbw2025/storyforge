@@ -1,3 +1,4 @@
+import { AuthorRecordSaveScopeV1 } from '../components/shared/AuthorRecordSaveScope'
 import { createPortal } from 'react-dom'
 import ExtensionSurface from '../components/extensions/ExtensionOutlet'
 import { canonicalPowerModule } from '../lib/workspace/module-alias'
@@ -466,7 +467,7 @@ export default function WorkspacePage({ embeddedProjectId, embeddedModule, embed
         return <PlacesWorkspace project={project} tab={tab} onTab={next => afterPendingEdits(() => navigate(`/workspace/${project.id}?module=locations&placeTab=${next}`), '地点编辑保存失败')} />
       }
       case 'history':
-        return <HistoryPanel project={project} resizableInputs={resizableInputs} />
+        return <HistoryPanel project={project} resizableInputs={resizableInputs} confirmedLocalSaves={isLongform && activeWork.id === project.activeWorkId && activeWork.projectId === project.id} />
       // ── 设定库 - 故事设计 ─────────────────────────────────────────
       case 'story-design':
         return <StoryCorePanel
@@ -742,11 +743,13 @@ export default function WorkspacePage({ embeddedProjectId, embeddedModule, embed
             {isLongform && longSection === 'versions' && <nav className="lf-subtabs" aria-label="版本与导出">{([['version-history', '版本历史'], ['export', '导出与备份']] as const).map(([id, label]) => <button key={id} aria-current={activeModule === id ? 'page' : undefined} onClick={() => selectModule(id)}>{label}</button>)}</nav>}
             {isLongform && longSection === 'versions' && <><LongformCompletion project={project}/><ShortNovelHistory project={project}/></>}
             {isLongform && longSection === 'settings' && <nav className="lf-subtabs" aria-label="通用设置">{([['settings', '通用设置'], ['usage-stats', '用量统计']] as const).map(([id, label]) => <button key={id} aria-current={activeModule === id ? 'page' : undefined} onClick={() => selectModule(id)}>{label}</button>)}</nav>}
+            <AuthorRecordSaveScopeV1.Provider value={isLongform && project.activeWorldId != null && project.activeWorkId != null ? { projectId: project.id!, worldId: project.activeWorldId, workId: project.activeWorkId } : null}>
             <WorldSettingsLayoutProvider value={compactWorldSettings ? { tools: copilotButton } : null}>
             <ExtensionSurface projectId={project.id!} owner={activeModule === 'history' || project.workspacePurpose === 'world-engine' && activeModule !== 'story-timeline' ? 'world' : 'work'} workId={activeWork?.id} target={activeModule}>
             {isLongform && ['derive', 'community'].includes(longSection) ? <LongformWorlds project={project} community={longSection === 'community'} onOpen={id => navigate(`/workspace/${id}`)} /> : isLongform && longMode === 'agent' ? <ChatCopilotPanel initialDiscussionMode={query.get('discussion') === 'free' ? 'free' : 'plan'} embedded project={project} worldGroupId={copilotWorldGroupId} worldName={copilotWorldName} onClose={() => changeLongMode('steps')} onOpenModule={(module, chapter) => afterPendingEdits(() => navigate(`/workspace/${project.id}?module=${module}${chapter ? `&chapter=${chapter}` : ''}`), '编辑保存失败')} /> : renderMainPanel()}
             </ExtensionSurface>
             </WorldSettingsLayoutProvider>
+            </AuthorRecordSaveScopeV1.Provider>
           </Suspense>
         </div>
       </main>

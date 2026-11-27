@@ -1,3 +1,4 @@
+import { AuthorRecordSaveScopeV1 } from '../../src/components/shared/AuthorRecordSaveScope'
 import { act } from 'react'
 import { createRoot } from 'react-dom/client'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
@@ -108,4 +109,36 @@ it('keeps single-line and choice controls literal even if Markdown is requested,
   </>))
   expect(host.querySelector('[data-markdown-read-view]')).toBeNull(); expect(host.querySelector('input')?.value).toBe('# 字面名称')
   expect(host.querySelector('select')?.value).toBe('# 一'); expect(host.querySelector('[role="alert"]')).not.toBeNull(); expect(save).not.toHaveBeenCalled()
+})
+
+it('050 an acknowledged draft keeps a new IME tail dirty while the old native receipt returns, then saves the completed tail', async () => {
+  const { scope } = await seedCurrentWorkspace('050 Ack IME')
+  const id = await useCharacterStore.getState().addCharacter({ projectId: scope.projectId, name: '角色', roleWeight: 'main', moralAxis: 'neutral', orderAxis: 'neutral', shortDescription: '', appearance: '', personality: '', background: '原背景', profile: '', motivation: '', abilities: '', relationships: '', arc: '' })
+  await useCharacterStore.getState().loadAll(scope)
+  let entered!: () => void, release!: () => void, first = true
+  const reached = new Promise<void>(resolve => { entered = resolve }), gate = new Promise<void>(resolve => { release = resolve })
+  function Harness() {
+    const character = useCharacterStore(state => state.characters.find(row => row.id === id)!)
+    return <AuthorRecordSaveScopeV1.Provider value={scope}><CharacterDimensionFields character={character} onChange={async (patch, expected, confirmation) => {
+      if (!confirmation) throw Error('test requires actual native proof')
+      const ack = await useCharacterStore.getState().updateCharacter(id, patch, { scope, expected, confirmation })
+      if (first) { first = false; entered(); await gate }
+      return ack
+    }} /></AuthorRecordSaveScopeV1.Provider>
+  }
+  await act(async () => root.render(<Harness />))
+  for (let i = 0; i < 100 && !host.querySelector('[data-local-save-status]'); i++) await act(async () => { await new Promise(resolve => setTimeout(resolve, 5)) })
+  await click('编辑源码'); const area = await input('第一稿')
+  let saving!: Promise<void>
+  await act(async () => { saving = flushPendingEditsV1(); await reached })
+  await act(async () => area.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true })))
+  await input('第一稿中文尾字')
+  await act(async () => { release(); await saving })
+  expect((await db.characters.get(id))!.background).toBe('第一稿')
+  expect(area.value).toBe('第一稿中文尾字')
+  const status = area.parentElement!.querySelector('[data-local-save-status]')!
+  expect(status.getAttribute('data-local-save-status')).toBe('dirty')
+  await act(async () => { area.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true })); await flushPendingEditsV1() })
+  expect((await db.characters.get(id))!.background).toBe('第一稿中文尾字')
+  expect(status.getAttribute('data-local-save-status')).toBe('saved')
 })

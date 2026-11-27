@@ -249,11 +249,11 @@ export function InlineTextarea({ value, onChange, placeholder, className, minRow
   return localSave ? <div className="min-w-0">{readView}<LocalSaveStatus status={editor.localStatus} error={editor.error} retry={editor.saveFromEvent} /></div> : readView
 }
 
-function LocalSaveStatus({ status, error, retry }: { status: string; error: string; retry: () => void }) {
+export function LocalSaveStatus({ status, error, retry, retryLabel }: { status: string; error: string; retry: () => void; retryLabel?: string }) {
   const label = status === 'saved' ? '已保存到本机' : status === 'saving' ? '正在保存' : status === 'dirty' ? '未保存'
     : status === 'failed' ? '保存失败' : '未确认'
   return <div role="status" data-local-save-status={status} className="min-h-5 mt-1 text-xs text-text-muted"
     title={error || '已保存到本机表示数据库已确认；在同一浏览器、同一站点重开可保留。云同步和外部备份需分别完成。'}>
-    {label}{status === 'failed' && <> · <button type="button" onClick={retry} className="underline">重试</button><span className="ml-1">{error}</span></>}
+    {label}{status === 'failed' && <> · <button type="button" onClick={retry} aria-label={retryLabel} className="underline">重试</button><span role="alert" className="ml-1">{error}</span></>}
   </div>
 }
