@@ -1,4 +1,5 @@
 import { CTextarea } from '../shared/CompositionInput'
+import MarkdownDraftField from '../shared/MarkdownDraftField'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Save, X, ChevronDown } from 'lucide-react'
 import { useProjectStore } from '../../stores/project'
@@ -50,6 +51,7 @@ export default function ProjectInfoPanel({ project, onUpdate }: ProjectInfoPanel
   const dirtyRef = useRef(false)
   const formRef = useRef(form)
   const pendingCount = useRef(0)
+  const saveInFlight = useRef<{ snapshot: typeof form; promise: Promise<void> } | null>(null)
   useBeforeUnload(dirty || saving)
   const changeForm = (next: typeof form) => {
     formRef.current = next
@@ -86,26 +88,34 @@ export default function ProjectInfoPanel({ project, onUpdate }: ProjectInfoPanel
       throw new Error('作品仍在加载，请稍后保存。')
     }
     const snapshot = formRef.current
-    pendingCount.current++
-    setSaving(true)
-    setError('')
-    try {
-      const savedWork = await coordinatePendingEditV1({
-        key: `work-info:${owner.scope.workId}`,
-        persist: () => updateActiveWork(owner.scope.projectId, snapshot, owner.scope),
-      })
-      lastSavedRef.current = { scope: owner.scope, fields: snapshot, updatedAt: savedWork?.updatedAt ?? Date.now() }
-      if (formRef.current === snapshot) {
-        dirtyRef.current = false
-        setDirty(false)
+    if (saveInFlight.current?.snapshot === snapshot) return saveInFlight.current.promise
+    const operation = (async () => {
+      pendingCount.current++
+      setSaving(true)
+      setError('')
+      try {
+        const savedWork = await coordinatePendingEditV1({
+          key: `work-info:${owner.scope.workId}`,
+          persist: () => updateActiveWork(owner.scope.projectId, snapshot, owner.scope),
+        })
+        lastSavedRef.current = { scope: owner.scope, fields: snapshot, updatedAt: savedWork?.updatedAt ?? Date.now() }
+        if (formRef.current === snapshot) {
+          dirtyRef.current = false
+          setDirty(false)
+        }
+      } catch (cause) {
+        setError(cause instanceof Error ? cause.message : '保存失败，请重试。')
+        throw cause
+      } finally {
+        pendingCount.current--
+        setSaving(pendingCount.current > 0)
       }
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : '保存失败，请重试。')
-      throw cause
-    } finally {
-      pendingCount.current--
-      setSaving(pendingCount.current > 0)
-    }
+    })()
+    const pending = { snapshot, promise: operation }
+    saveInFlight.current = pending
+    try { await operation }
+    finally { if (saveInFlight.current === pending) saveInFlight.current = null }
+
   }, [updateActiveWork])
 
   useEffect(() => registerPendingDraftFlusherV1(handleSave), [handleSave])
@@ -247,6 +257,8 @@ export default function ProjectInfoPanel({ project, onUpdate }: ProjectInfoPanel
 
         <div>
           <label className="block text-sm text-text-secondary mb-1.5">简介</label>
+          <MarkdownDraftField key={formOwner?.scope.workId ?? 'loading'} label="作品简介" value={form.description}
+            disabled={!ownerIsActive || !activeWork || activeWork.id !== project.activeWorkId} onCommit={handleSave}>
           <CTextarea
             aria-label="作品简介"
             value={form.description}
@@ -254,6 +266,7 @@ export default function ProjectInfoPanel({ project, onUpdate }: ProjectInfoPanel
             rows={4}
             className="w-full px-3 py-2 bg-bg-base border border-border rounded-lg text-text-primary focus:outline-none focus:border-accent transition-colors resize-none"
           />
+          </MarkdownDraftField>
         </div>
 
         <div>

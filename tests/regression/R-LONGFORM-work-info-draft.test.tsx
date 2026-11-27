@@ -19,7 +19,13 @@ const project = { id: 1, activeWorldId: 7, activeWorkId: 11, createdAt: 1, updat
 async function render(selectedProject = project) {
   await act(async () => root.render(createElement(ProjectInfoPanel, { project: selectedProject, onUpdate: () => undefined })))
 }
+function readDescription() {
+  return host.querySelector<HTMLTextAreaElement>('textarea')?.value ?? host.querySelector('[data-markdown-body]')?.textContent
+}
 async function type(label: string, value: string) {
+  if (label === '作品简介' && !host.querySelector('[aria-label="作品简介"]')) {
+    await act(async () => [...host.querySelectorAll('[data-markdown-read-view] button')].find(button => button.textContent === '编辑源码')!.click())
+  }
   await act(async () => {
     const input = host.querySelector<HTMLInputElement | HTMLTextAreaElement>(`[aria-label="${label}"]`)!
     const prototype = input instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype
@@ -55,7 +61,7 @@ describe('分步骤基本信息防丢保存', () => {
     mocks.update.mockRejectedValueOnce(new Error('磁盘空间不足'))
     await act(async () => { await vi.advanceTimersByTimeAsync(700) })
     expect(host.querySelector('[role="alert"]')?.textContent).toContain('磁盘空间不足')
-    expect(host.querySelector<HTMLTextAreaElement>('textarea')?.value).toBe('不能丢的草稿')
+    expect(readDescription()).toBe('不能丢的草稿')
     mocks.update.mockRejectedValueOnce(new Error('磁盘空间不足'))
     await act(async () => { await expect(flushPendingEditsV1()).rejects.toThrow('磁盘空间不足') })
     await act(async () => { await flushPendingEditsV1() })
@@ -70,7 +76,7 @@ describe('分步骤基本信息防丢保存', () => {
     await type('作品简介', '第二版')
     mocks.work = { ...mocks.work, description: '第一版' }
     await render()
-    expect(host.querySelector<HTMLTextAreaElement>('textarea')?.value).toBe('第二版')
+    expect(readDescription()).toBe('第二版')
     await act(async () => { finish(); await Promise.resolve() })
     expect(host.querySelector('[role="status"]')?.textContent).toContain('有修改')
     await act(async () => { await flushPendingEditsV1() })
@@ -88,14 +94,14 @@ describe('分步骤基本信息防丢保存', () => {
     await render({ ...project, id: 2, activeWorldId: 8, activeWorkId: 22 })
     await act(async () => { await flushPendingEditsV1() })
     expect(mocks.update).toHaveBeenLastCalledWith(1, expect.objectContaining({ description: '只属于雾港的未保存内容' }), { projectId: 1, worldId: 7, workId: 11 })
-    expect(host.querySelector<HTMLTextAreaElement>('textarea')?.value).toBe('盐镇原简介')
+    expect(readDescription()).toBe('盐镇原简介')
   })
 
   it('does not roll a saved form back to an older Work echo while readback is delayed', async () => {
     await render(); await type('作品名称', '已保存的新作品名'); await type('作品简介', '已保存的新简介')
     await act(async () => { await flushPendingEditsV1() })
     expect(host.querySelector<HTMLInputElement>('[aria-label="作品名称"]')?.value).toBe('已保存的新作品名')
-    expect(host.querySelector<HTMLTextAreaElement>('textarea')?.value).toBe('已保存的新简介')
+    expect(readDescription()).toBe('已保存的新简介')
   })
 
 })

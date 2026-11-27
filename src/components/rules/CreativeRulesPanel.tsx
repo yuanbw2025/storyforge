@@ -1,4 +1,6 @@
 import { CTextarea } from '../shared/CompositionInput'
+import { InlineTextarea } from '../shared/InlineEdit'
+import CandidateMarkdownField from '../agent/CandidateMarkdownField'
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { Check, Loader2, Microscope, Plus, RotateCcw, Sparkles, Trash2, X } from 'lucide-react'
 import { useCreativeRulesStore } from '../../stores/project-singletons'
@@ -95,15 +97,17 @@ function ScopedCreativeRulesPanel({ project, initialRulesId }: Props) {
     }
   }, [creativeRules])
 
-  const saveField = useCallback(async (data: Record<string, unknown>) => {
-    if (!scope || !ready) return
+  const commitField = useCallback(async (data: Record<string, unknown>) => {
+    if (!scope || !ready) throw new Error('创作规则仍在读取，请稍后保存。')
     try {
       await save({ projectId: scope.projectId, ...data }, scope)
       setSaveError(null)
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : '保存失败，当前输入已保留')
+      throw error
     }
   }, [scope, ready, save])
+  const saveField = useCallback((data: Record<string, unknown>) => { void commitField(data).catch(() => undefined) }, [commitField])
 
   const changeElements = (next: SystemFictionElementsV1) => {
     elementsDirtyRef.current = true
@@ -244,6 +248,8 @@ function ScopedCreativeRulesPanel({ project, initialRulesId }: Props) {
     </div>
   )
 
+  if (!ready) return <p role={saveError ? 'alert' : 'status'} className="text-sm text-text-muted">{saveError ?? '正在读取创作规则…'}</p>
+
   return (
     <div
       {...initialRecordTargetAttributes(creativeRules?.id === initialRulesId, creativeRules?.id)}
@@ -307,10 +313,9 @@ function ScopedCreativeRulesPanel({ project, initialRulesId }: Props) {
             <Sparkles className="w-3 h-3" /> AI 建议
           </button>
         </div>
-        <CTextarea
+        <InlineTextarea markdownRead minRows={3}
           value={writingStyle}
-          onChange={e => setWritingStyle(e.target.value)}
-          onBlur={() => saveField({ writingStyle })}
+          onChange={writingStyle => commitField({ writingStyle })}
           placeholder="描述期望的写作风格，如：简洁凌厉、文笔华丽、幽默诙谐、冷峻写实..."
           className="w-full h-24 p-3 bg-bg-surface border border-border rounded-lg text-text-primary text-sm resize-y focus:outline-none focus:border-accent"
         />
@@ -357,10 +362,9 @@ function ScopedCreativeRulesPanel({ project, initialRulesId }: Props) {
             <Sparkles className="w-3 h-3" /> AI 建议
           </button>
         </div>
-        <CTextarea
+        <InlineTextarea markdownRead minRows={3}
           value={atmosphere}
-          onChange={e => setAtmosphere(e.target.value)}
-          onBlur={() => saveField({ atmosphere })}
+          onChange={atmosphere => commitField({ atmosphere })}
           placeholder="描述作品的整体基调和氛围，如：黑暗压抑、热血激昂、温馨治愈..."
           className="w-full h-20 p-3 bg-bg-surface border border-border rounded-lg text-text-primary text-sm resize-y focus:outline-none focus:border-accent"
         />
@@ -451,10 +455,9 @@ function ScopedCreativeRulesPanel({ project, initialRulesId }: Props) {
             <Sparkles className="w-3 h-3" /> AI 建议
           </button>
         </div>
-        <CTextarea
+        <InlineTextarea markdownRead minRows={3}
           value={specialRequirements}
-          onChange={e => setSpecialRequirements(e.target.value)}
-          onBlur={() => saveField({ specialRequirements })}
+          onChange={specialRequirements => commitField({ specialRequirements })}
           placeholder="其他需要 AI 遵守的特殊创作要求..."
           className="w-full h-24 p-3 bg-bg-surface border border-border rounded-lg text-text-primary text-sm resize-y focus:outline-none focus:border-accent"
         />
@@ -504,13 +507,14 @@ function CreativeRulesCandidate({
       {parsed?.field === 'systemFictionElements' ? (
         <SystemFictionElementsEditor value={parsed.value} onChange={updateValue} disabled={copilot.busy} label="系统文元素候选" />
       ) : parsed ? (
-        <CTextarea
-          aria-label={`${candidate.payload.label}候选内容`}
-          value={parsed.value}
-          disabled={copilot.busy}
-          onChange={event => updateValue(event.target.value)}
-          className="min-h-28 w-full resize-y text-sm leading-5"
-        />
+        ['writingStyle', 'atmosphere', 'specialRequirements'].includes(parsed.field)
+          ? <CandidateMarkdownField key={candidate.event.id} value={parsed.value} disabled={copilot.busy}
+              onCommit={() => copilot.flushCandidateDraft(candidate.event.id!)}>
+              <CTextarea aria-label={`${candidate.payload.label}候选内容`} value={parsed.value} disabled={copilot.busy}
+                onChange={event => updateValue(event.target.value)} className="min-h-28 w-full resize-y text-sm leading-5" />
+            </CandidateMarkdownField>
+          : <CTextarea aria-label={`${candidate.payload.label}候选内容`} value={parsed.value} disabled={copilot.busy}
+              onChange={event => updateValue(event.target.value)} className="min-h-28 w-full resize-y text-sm leading-5" />
       ) : (
         <>
           <p className="mb-2 text-xs text-error">候选结构已损坏，可修复严格 JSON 后再确认，或直接拒绝。</p>
