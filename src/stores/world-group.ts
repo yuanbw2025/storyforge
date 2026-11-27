@@ -9,7 +9,7 @@ import { updateWorkspace } from '../lib/workspace/works'
 import { WORLD_GROUP_TYPE_LABELS } from '../lib/types/world-group'
 
 const now = () => Date.now()
-let groupReadRequest = 0
+let groupReadRequest = 0, groupWriteRevision = 0
 const GROUP_AUTHOR_FIELDS = ['name', 'description', 'type', 'icon', 'color', 'entryCondition', 'exitCondition', 'plannedChapterCount', 'powerRestriction', 'takeawayRules', 'order'] as const
 type GroupAuthorPatch = Partial<Pick<WorldGroup, typeof GROUP_AUTHOR_FIELDS[number]>>
 interface GroupSaveOptions { scope?: WorkspaceScope; expected?: WorldGroup }
@@ -71,10 +71,17 @@ export const useWorldGroupStore = create<WorldGroupStore>((set, get) => ({
     set({ loading: true })
     try {
       const scope = await resolveScopeLike(scopeInput)
-      const [groups, links] = await Promise.all([
-        readOwnedRows<WorldGroup>(scope, 'worldGroups', { owner: 'world' }).then(rows => rows.sort((a, b) => a.order - b.order)),
-        readOwnedRows<WorldGroupLink>(scope, 'worldGroupLinks', { owner: 'world' }),
-      ])
+      let groups: WorldGroup[] = [], links: WorldGroupLink[] = [], observed = -1
+      for (let attempt = 0; attempt < 3; attempt++) {
+        observed = groupWriteRevision
+        ;[groups, links] = await Promise.all([
+          readOwnedRows<WorldGroup>(scope, 'worldGroups', { owner: 'world' }).then(rows => rows.sort((a, b) => a.order - b.order)),
+          readOwnedRows<WorldGroupLink>(scope, 'worldGroupLinks', { owner: 'world' }),
+        ])
+        if (request !== groupReadRequest) return
+        if (observed === groupWriteRevision) break
+      }
+      if (observed !== groupWriteRevision) throw new Error('读取期间世界信息持续变化，请重新读取。')
       if (request !== groupReadRequest) return
       const current = get()
       const activeGroupId = sameWorld(current.loadedScope, scope) && groups.some(group => group.id === current.activeGroupId)
@@ -97,28 +104,38 @@ export const useWorldGroupStore = create<WorldGroupStore>((set, get) => ({
   },
 
   updateGroup: async (id, patch, options) => {
+    patch = structuredClone(patch)
+    const expected = options?.expected ? structuredClone(options.expected) : undefined
+    const explicitScope = options?.scope ? { ...options.scope } : undefined
     if (Object.keys(patch).some(key => !GROUP_AUTHOR_FIELDS.includes(key as typeof GROUP_AUTHOR_FIELDS[number]))) throw new Error('世界更新包含非作者字段。')
-    const selected = options?.scope ? Promise.resolve(options.scope) : db.worldGroups.get(id).then(row => {
+    const selected = explicitScope ? resolveScopeLike(explicitScope) : db.worldGroups.get(id).then(row => {
       if (!row) throw new Error('该世界已删除，草稿尚未保存。')
       return resolveScopeLike(row.projectId)
     })
     const scope = await selected
-    const updated = await db.transaction('rw', scopeTransactionTables(db.worldGroups), async () => {
+    const committed = await db.transaction('rw', scopeTransactionTables(db.worldGroups), async transaction => {
+      const table = transaction.table<WorldGroup, number>('worldGroups'), update = db.worldGroups.update.bind(table)
       await resolveScopeLike(scope)
       const current = await db.worldGroups.get(id)
       if (!current || !await assertRecordInScope(scope, 'worldGroups', current, { owner: 'world' })) throw new Error('世界已删除或作用域发生变化；草稿尚未保存。')
-      if (options?.expected && GROUP_AUTHOR_FIELDS.some(field => JSON.stringify(current[field]) !== JSON.stringify(options.expected![field]))) throw new Error('世界信息已被其他页面修改；草稿已保留，请核对后再保存。')
+      if (expected && GROUP_AUTHOR_FIELDS.some(field => JSON.stringify(current[field]) !== JSON.stringify(expected[field]))) throw new Error('世界信息已被其他页面修改；草稿已保留，请核对后再保存。')
       if (patch.name !== undefined && (typeof patch.name !== 'string' || !patch.name.trim())) throw new Error('请填写世界名称。')
       if (patch.type !== undefined && (typeof patch.type !== 'string' || !Object.prototype.hasOwnProperty.call(WORLD_GROUP_TYPE_LABELS, patch.type) || (patch.type === 'primary') !== (current.type === 'primary'))) throw new Error('世界类型无效，或试图改变主世界身份。')
       for (const field of GROUP_AUTHOR_FIELDS.filter(field => !['type', 'plannedChapterCount', 'order'].includes(field))) {
         if (patch[field] !== undefined && typeof patch[field] !== 'string') throw new Error(`世界字段 ${field} 必须是文本。`)
       }
       for (const field of ['plannedChapterCount', 'order'] as const) if (patch[field] !== undefined && (!Number.isSafeInteger(patch[field]) || patch[field]! < 0)) throw new Error('章节数和排序必须是非负整数。')
-      const next = { ...current, ...patch, updatedAt: now() }
-      if (await db.worldGroups.update(id, { ...patch, updatedAt: next.updatedAt }) !== 1) throw new Error('该世界已删除，草稿尚未保存。')
-      return next
+      if (await update(id, { ...patch, updatedAt: Math.max(now(), current.updatedAt + 1) }) !== 1) throw new Error('该世界已删除，草稿尚未保存。')
+      const actual = await table.get(id)
+      if (!actual || actual.ragDocumentId !== current.ragDocumentId || !await assertRecordInScope(scope, 'worldGroups', actual, { owner: 'world' })
+        || Object.entries(patch).some(([field, value]) => JSON.stringify(Reflect.get(actual, field)) !== JSON.stringify(value))) throw new Error('保存后未读到相同世界身份与输入原文，草稿已保留。')
+      return actual
     })
-    if (sameWorld(get().loadedScope, scope)) set({ groups: get().groups.map(group => group.id === id ? updated : group) })
+    const revision = ++groupWriteRevision
+    const updated = await db.worldGroups.get(id)
+    if (!updated || updated.ragDocumentId !== committed.ragDocumentId || !await assertRecordInScope(scope, 'worldGroups', updated, { owner: 'world' })
+      || Object.entries(patch).some(([field, value]) => JSON.stringify(Reflect.get(updated, field)) !== JSON.stringify(value))) throw new Error('提交后世界记录已变化，未确认当前草稿保存。')
+    if (revision === groupWriteRevision && sameWorld(get().loadedScope, scope)) set({ groups: get().groups.map(group => group.id === id ? updated : group) })
     return updated
   },
 

@@ -13,12 +13,12 @@ test.beforeEach(async ({ context, page, baseURL }) => {
   await page.goto('./')
 })
 test.afterEach(() => expect(modelAttempts).toBe(0))
-async function seed(page: Page) {
-  return page.evaluate(async () => {
+async function seed(page: Page, options?: { enableMultiWorld?: boolean }) {
+  return page.evaluate(async options => {
     const load = new Function('path', 'return import(path)') as <T>(path: string) => Promise<T>
     const { seedCurrentWorkspace } = await load<typeof import('../helpers/current-workspace')>('/storyforge/tests/helpers/current-workspace.ts')
-    return (await seedCurrentWorkspace('050 隔离保存验收')).scope
-  })
+    return (await seedCurrentWorkspace('050 隔离保存验收', options)).scope
+  }, options)
 }
 async function snapshot(page: Page) {
   return page.evaluate(async () => {
@@ -676,4 +676,47 @@ test('050 Character and outline native record feedback survives quota retry, lin
   expect(actual.volume).toMatchObject({ summary: '卷情节原文。  ', workId: scope.workId })
   expect(actual.node).toMatchObject({ title: '新章名', summary: '# 章节摘要\n\n完整章纲原文。  ', workId: scope.workId })
   expect(actual.chapter).toMatchObject({ title: '新章名', content: '正文不变', workId: scope.workId })
+})
+
+test('050 World group native form evidence follows IME, original commit, quota retry and reopened tab', async ({ page, context }) => {
+  const scope = await seed(page, { enableMultiWorld: true })
+  const id = await page.evaluate(async scope => {
+    const { useWorldGroupStore } = await (new Function('return import("/storyforge/src/stores/world-group.ts")'))()
+    return useWorldGroupStore.getState().createGroup({ projectId: scope.projectId, name: '表单世界050', description: '原世界描述', type: 'traversal', order: 1 }, scope)
+  }, scope)
+  const url = `./workspace/${scope.projectId}?module=world-overview`
+  const open = async (target: Page) => {
+    await target.goto(url)
+    const row = target.locator('div.group').filter({ hasText: '表单世界050' }); await row.hover()
+    await row.getByRole('button', { name: '编辑', exact: true }).click()
+    await expect(target.locator('[data-local-save-status]')).toHaveAttribute('data-local-save-status', 'saved')
+  }
+  await open(page)
+  const description = page.getByPlaceholder('这个世界的核心特征、氛围、独特之处...', { exact: true })
+  await description.dispatchEvent('compositionstart'); await description.fill('中文组合尾字🌊')
+  await expect(page.locator('[data-local-save-status]')).toHaveAttribute('data-local-save-status', 'dirty')
+  await expect(flush(page)).rejects.toThrow('输入法仍在组合')
+  await description.dispatchEvent('compositionend')
+  await page.getByPlaceholder('例如：主线触发，主角实力达到斗皇...', { exact: true }).fill('作者进入条件。  ')
+  await page.getByPlaceholder('例如：修为压制至斗者，仅保留精神力...', { exact: true }).fill('作者限制原文。  ')
+  await page.evaluate(async () => {
+    const { db } = await (new Function('return import("/storyforge/src/lib/db/schema.ts")'))()
+    const fault = () => { throw new DOMException('isolated world group quota failure', 'QuotaExceededError') }
+    db.worldGroups.hook('updating', fault)
+    Object.assign(window, { clearWorldGroup050Fault: () => db.worldGroups.hook('updating').unsubscribe(fault) })
+  })
+  await page.getByRole('button', { name: '保存', exact: true }).click()
+  await expect(page.locator('[data-local-save-status]')).toHaveAttribute('data-local-save-status', 'failed')
+  await page.getByRole('button', { name: '返回世界总览', exact: true }).click()
+  await expect(description).toBeVisible(); await expect(description).toHaveValue('中文组合尾字🌊')
+  await page.evaluate(() => (window as unknown as { clearWorldGroup050Fault: () => void }).clearWorldGroup050Fault())
+  await page.getByRole('button', { name: '重试保存世界信息', exact: true }).click()
+  await expect(page.locator('[data-local-save-status]')).toHaveAttribute('data-local-save-status', 'saved')
+  await page.close(); const reopened = await context.newPage(); await open(reopened)
+  await expect(reopened.getByPlaceholder('这个世界的核心特征、氛围、独特之处...', { exact: true })).toHaveValue('中文组合尾字🌊')
+  const saved = await reopened.evaluate(async id => {
+    const { db } = await (new Function('return import("/storyforge/src/lib/db/schema.ts")'))()
+    return db.worldGroups.get(id)
+  }, id)
+  expect(saved).toMatchObject({ name: '表单世界050', description: '中文组合尾字🌊', entryCondition: '作者进入条件。  ', powerRestriction: '作者限制原文。  ', worldId: scope.worldId })
 })
