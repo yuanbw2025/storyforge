@@ -7,7 +7,7 @@ import { useWorldviewStore, type WorldviewAuthorPatch } from '../../stores/world
 import { useWorldGroupStore } from '../../stores/world-group'
 import WorldGroupSwitcher from '../world-group/WorldGroupSwitcher'
 import { InlineTextarea, type InlineSave } from '../shared/InlineEdit'
-import type { LocalSaveContractV1 } from '../../lib/authoring/local-save-evidence'
+import type { LocalSaveAckV1, LocalSaveContractV1, LocalSaveIntentV1 } from '../../lib/authoring/local-save-evidence'
 import CodexPanel from '../codex/CodexPanel'
 import CodexSearchBar from '../codex/CodexSearchBar'
 import { useMasterCopilot, type PendingMasterCandidate } from '../agent/useMasterCopilot'
@@ -227,7 +227,12 @@ export default function WorldviewOriginPanel({ project, initialWorldviewId, init
               resizableInputs={resizableInputs}
               field={WORLDVIEW_ORIGIN_FIELDS[2]}
               divineDesign={divineDesign}
-              onDivineChange={async (next) => {
+              localSaveFor={confirmedLocalSaves ? key => ({
+                identity: { ...authorScope, table: 'worldviews', field: `divineDesign.${key}`, worldGroupId: targetWorldGroupId },
+                witness: localSaveWitnesses[`divineDesign.${key}`] ?? null,
+              }) : undefined}
+              onDivineChange={async (next, intent) => {
+                if (intent) return saveWorldview({ projectId: project.id!, worldGroupId: targetWorldGroupId, divineDesign: next }, authorScope, intent)
                 setDivineDesign(current => ({ ...current, ...next }))
                 await save({ divineDesign: next })
               }}
@@ -334,6 +339,7 @@ function DivineFieldEditor({
   field,
   divineDesign,
   onDivineChange,
+  localSaveFor,
   project,
   activeGroupId,
   copilot,
@@ -346,7 +352,8 @@ function DivineFieldEditor({
   field: typeof WORLDVIEW_ORIGIN_FIELDS[number]
   resizableInputs?: boolean
   divineDesign: DivineDesign
-  onDivineChange: (next: Partial<DivineDesign>) => Promise<void>
+  onDivineChange: (next: Partial<DivineDesign>, intent?: LocalSaveIntentV1) => Promise<void | LocalSaveAckV1>
+  localSaveFor?: (key: 'divineRank' | 'divineNames' | 'divineRules') => LocalSaveContractV1
   project: Project
   activeGroupId: number | null
   copilot: ReturnType<typeof useMasterCopilot>
@@ -406,7 +413,8 @@ function DivineFieldEditor({
                 markdownRead
                 inputAreaLayout={inputAreaLayoutV1(resizableInputs, 'world.divineRank')}
                 value={divineDesign.divineRank}
-                onChange={v => onDivineChange({ divineRank: v })}
+                localSave={localSaveFor?.('divineRank')}
+                onChange={(v, intent) => onDivineChange({ divineRank: v }, intent)}
                 placeholder="例：主神 / 次神 / 半神 / 国教 / 民间信仰 ..."
               />
             </div>
@@ -418,7 +426,8 @@ function DivineFieldEditor({
                 markdownRead
                 inputAreaLayout={inputAreaLayoutV1(resizableInputs, 'world.divineNames')}
                 value={divineDesign.divineNames}
-                onChange={v => onDivineChange({ divineNames: v })}
+                localSave={localSaveFor?.('divineNames')}
+                onChange={(v, intent) => onDivineChange({ divineNames: v }, intent)}
                 placeholder="例：天帝 · 创世神；关帝信仰；妈祖信仰 ..."
               />
             </div>
@@ -430,7 +439,8 @@ function DivineFieldEditor({
                 markdownRead
                 inputAreaLayout={inputAreaLayoutV1(resizableInputs, 'world.divineRules')}
                 value={divineDesign.divineRules}
-                onChange={v => onDivineChange({ divineRules: v })}
+                localSave={localSaveFor?.('divineRules')}
+                onChange={(v, intent) => onDivineChange({ divineRules: v }, intent)}
                 placeholder="例：不可直接干涉凡间 / 避讳字 / 祭祀风俗 ..."
               />
             </div>

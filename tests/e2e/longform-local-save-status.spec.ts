@@ -239,3 +239,57 @@ test('origin and humanity native fields show committed status through ordinary W
   const row = (await snapshot(reopened))[0]
   for (const [i, item] of cases.entries()) expect(row[item.field]).toBe(originals[i])
 })
+
+test('nested divine and resource fields confirm native leaf writes, retain siblings and recover an actual failed transaction', async ({ page, context }) => {
+  const scope = await seed(page)
+  await page.evaluate(async scope => {
+    const load = new Function('path', 'return import(path)') as <T>(path: string) => Promise<T>
+    const { useWorldviewStore } = await load<typeof import('../../src/stores/worldview')>('/storyforge/src/stores/worldview.ts')
+    await useWorldviewStore.getState().loadAll(scope)
+    await useWorldviewStore.getState().saveWorldview({ projectId: scope.projectId,
+      divineDesign: { hasDivinity: true, divineRank: '原阶序', divineNames: '# 原名', divineRules: '不可夜航' },
+      naturalResources: { rareCreatures: '原兽', herbs: '# 原药', minerals: '原矿', others: '原产' } }, scope)
+  }, scope)
+  await page.goto(`./workspace/${scope.projectId}?module=worldview-origin&originField=divine`)
+  const names = page.getByText('名号与职司', { exact: true }).locator('..')
+  await expect(names.locator('[data-local-save-status]')).toHaveAttribute('data-local-save-status', 'saved')
+  await names.getByRole('button', { name: '编辑源码', exact: true }).click()
+  const nameArea = names.locator('textarea')
+  await nameArea.fill('  # 作者神名\r\n\r\n潮汐守望者　 ')
+  const expectedName = await nameArea.inputValue()
+  await page.evaluate(async () => {
+    const load = new Function('path', 'return import(path)') as <T>(path: string) => Promise<T>
+    const { db } = await load<typeof import('../../src/lib/db/schema')>('/storyforge/src/lib/db/schema.ts')
+    const holder = window as typeof window & { __sf050LeafFault?: () => never }
+    holder.__sf050LeafFault = () => { throw new DOMException('native leaf quota', 'QuotaExceededError') }
+    db.worldviews.hook('updating', holder.__sf050LeafFault)
+  })
+  await expect(flush(page)).rejects.toThrow('native leaf quota')
+  await expect(names.locator('[data-local-save-status]')).toHaveAttribute('data-local-save-status', 'failed')
+  await expect(nameArea).toHaveValue(expectedName)
+  expect((await snapshot(page))[0].divineDesign).toEqual({ hasDivinity: true, divineRank: '原阶序', divineNames: '# 原名', divineRules: '不可夜航' })
+  await page.evaluate(async () => {
+    const load = new Function('path', 'return import(path)') as <T>(path: string) => Promise<T>
+    const { db } = await load<typeof import('../../src/lib/db/schema')>('/storyforge/src/lib/db/schema.ts')
+    const holder = window as typeof window & { __sf050LeafFault?: () => never }
+    db.worldviews.hook('updating').unsubscribe(holder.__sf050LeafFault!); delete holder.__sf050LeafFault
+  })
+  await names.getByRole('button', { name: '重试', exact: true }).click()
+  await expect(names.locator('[data-local-save-status]')).toHaveAttribute('data-local-save-status', 'saved')
+  await page.goto(`./workspace/${scope.projectId}?module=worldview-natural`)
+  await page.locator('nav button').filter({ hasText: '自然资源' }).first().click()
+  await page.getByText('自然资源分类明细（原生结构）', { exact: true }).click()
+  const herbs = page.getByText('🌿 灵药 / 粮食作物', { exact: true }).locator('..')
+  await herbs.getByRole('button', { name: '编辑源码', exact: true }).click()
+  const herbArea = herbs.locator('textarea'); await herbArea.fill('  # 潮汐药草\r\n\r\n每17年开花。  ')
+  const expectedHerbs = await herbArea.inputValue()
+  await flush(page)
+  await expect(herbs.locator('[data-local-save-status]')).toHaveAttribute('data-local-save-status', 'saved')
+  const url = page.url(); await page.close(); const reopened = await context.newPage(); await reopened.goto(url)
+  await reopened.locator('nav button').filter({ hasText: '自然资源' }).first().click()
+  await reopened.getByText('自然资源分类明细（原生结构）', { exact: true }).click()
+  await expect(reopened.getByText('🌿 灵药 / 粮食作物', { exact: true }).locator('..').locator('[data-local-save-status]')).toHaveAttribute('data-local-save-status', 'saved')
+  const row = (await snapshot(reopened))[0]
+  expect(row.divineDesign).toEqual({ hasDivinity: true, divineRank: '原阶序', divineNames: expectedName, divineRules: '不可夜航' })
+  expect(row.naturalResources).toEqual({ rareCreatures: '原兽', herbs: expectedHerbs, minerals: '原矿', others: '原产' })
+})
