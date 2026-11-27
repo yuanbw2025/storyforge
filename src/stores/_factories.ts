@@ -24,6 +24,8 @@ import { coordinatePendingEditV1 } from '../lib/authoring/pending-edit-coordinat
 import type { LocalSaveAckV1, LocalSaveIntentV1 } from '../lib/authoring/local-save-evidence'
 import { assertCreativeRuleSaveExpectedV1, creativeRuleSaveRequestV1, creativeRuleTextWitnessV1 } from '../lib/authoring/creative-rules-local-save-evidence'
 
+import { assertGeographyFormExpectedV1, assertGeographyFormWrittenV1, geographyFormRequestV1, readGeographyFormV1, type GeographyFormRecordV1, type GeographyFormSaveV1 } from '../lib/authoring/geography-local-save-evidence'
+
 import { assertHistoryTextSaveExpectedV1, historyTextSaveAckV1, historyTextSaveRequestV1 } from '../lib/authoring/history-local-save-evidence'
 
 const now = () => Date.now()
@@ -52,6 +54,7 @@ type DbTableKey = {
 interface SingletonSave<T> {
   (data: Partial<T>, scope?: WorkspaceScopeLike): Promise<void>
   (data: Partial<T>, scope: WorkspaceScope, confirmation: LocalSaveIntentV1): Promise<LocalSaveAckV1>
+  (data: Partial<T>, scope: WorkspaceScope, confirmation: GeographyFormSaveV1): Promise<T>
 }
 export type ProjectSingletonStore<K extends string, T extends ProjectScopedRecord> = {
   loading: boolean
@@ -366,12 +369,17 @@ export function createProjectSingletonStore<K extends string, T extends ProjectS
         }
       },
 
-      save: (async (input: Partial<T>, targetScope?: WorkspaceScopeLike, confirmation?: LocalSaveIntentV1) => {
+      save: (async (input: Partial<T>, targetScope?: WorkspaceScopeLike, confirmation?: LocalSaveIntentV1 | GeographyFormSaveV1) => {
         const data = { ...input }
-        const proof = confirmation ? structuredClone(confirmation) : undefined
+        const geographyProof = confirmation?.kind === 'geography-form-save-v1' ? structuredClone(confirmation) : undefined
+        const proof = confirmation?.kind === 'natural-field-local-save-v1' ? structuredClone(confirmation) : undefined
+        const confirmed = Boolean(proof || geographyProof)
+        if (geographyProof && (table !== 'geographies' || typeof targetScope !== 'object')) throw new Error('地理保存凭据无效。')
         if (proof && (table !== 'creativeRules' || typeof targetScope !== 'object')) throw new Error('本机保存字段或作用域凭据无效。')
-        if (proof && Dexie.currentTransaction) throw new Error('本机保存确认需要独立提交事务。')
+        if (confirmed && Dexie.currentTransaction) throw new Error('本机保存确认需要独立提交事务。')
         const proofRequest = proof ? creativeRuleSaveRequestV1(data as Record<string, unknown>, targetScope as WorkspaceScope, proof) : undefined
+        const geographyFields = geographyProof ? geographyFormRequestV1(data as Record<string, unknown>, targetScope as WorkspaceScope) : undefined
+        let completedGeography: T | undefined
         let completedAck: LocalSaveAckV1 | undefined
         const state = get()
         const memoryCurrent = (state as unknown as Record<string, T | null>)[key]
@@ -398,7 +406,8 @@ export function createProjectSingletonStore<K extends string, T extends ProjectS
             }
             const publish = (record: T) => {
               const current = get()
-              if (proof && historyView === null && (sameScope(current.loadedScope, scope) || sameScope(loadingScope, scope))) {
+              if (confirmed && historyView === null
+                && (current.activeWorldGroupId === groupId || (current.activeWorldGroupId == null && memoryCurrent?.id === record.id)) && (sameScope(current.loadedScope, scope) || sameScope(loadingScope, scope))) {
                 // A fresh committed record supersedes any older same-owner read.
                 loadRequest++; loadingScope = null
                 set({ [key]: record, loadedScope: scope, loading: false, loadError: null } as unknown as Partial<State> as State)
@@ -419,11 +428,16 @@ export function createProjectSingletonStore<K extends string, T extends ProjectS
                 owner: owner === 'world' || owner === 'work' ? owner : undefined,
               })
               void reading.catch(() => undefined)
-              if (proof) await resolveHistoryWorkAuthorScopeV1(scope, transaction)
+              if (confirmed) await resolveHistoryWorkAuthorScopeV1(scope, transaction)
               const all = await reading
               const current = (groupId == null
                 ? (all.find(r => ((r as { worldGroupId?: number | null }).worldGroupId ?? null) === null) ?? all[0])
                 : all.find(r => (r as { worldGroupId?: number | null }).worldGroupId === groupId)) ?? null
+              if (geographyProof) {
+                if (all.filter(row => ((row as { worldGroupId?: number | null }).worldGroupId ?? null) === groupId).length > 1) throw new Error('地理分区记录不唯一。')
+                await assertGeographyFormExpectedV1(current as unknown as GeographyFormRecordV1 | null, scope, groupId, geographyProof.expected, geographyFields!, transaction!)
+                if (!current && (data as Record<string, unknown>).overview === '' && !geographyFields!.includes('locations')) throw new Error('尚未填写：空字段未创建记录，不能确认已保存。')
+              }
               if (proof) {
                 if (all.length > 1) throw new Error('创作规则记录不唯一，已保留草稿。')
                 await assertCreativeRuleSaveExpectedV1((current ?? undefined) as unknown as CreativeRules | undefined, scope, proof, transaction!)
@@ -441,12 +455,13 @@ export function createProjectSingletonStore<K extends string, T extends ProjectS
 
               if (current?.id) {
                 const ts = now()
-                const written = await writeTable.update(
+                const update = transaction ? getTable().update.bind(writeTable) : getTable().update.bind(getTable())
+                const written = await update(
                   current.id,
                   { ...data, updatedAt: ts } as UpdateSpec<T>,
                 )
                 if (!written) throw new Error('单例保存目标已不存在，请重新读取')
-                return proof ? await writeTable.get(current.id) : { ...current, ...data, updatedAt: ts }
+                return confirmed ? await writeTable.get(current.id) : { ...current, ...data, updatedAt: ts }
               }
 
               if (data.projectId) {
@@ -463,15 +478,25 @@ export function createProjectSingletonStore<K extends string, T extends ProjectS
                   owner: owner === 'world' ? 'world' : 'work',
                 })
                 const id = (await writeTable.add(toInsert)) as number
-                return proof ? await writeTable.get(id) : { ...toInsert, id }
+                return confirmed ? await writeTable.get(id) : { ...toInsert, id }
               }
             }
-            const written = proof ? await db.transaction('rw', scopeTransactionTables(getTable()), () => Dexie.waitFor(write(Dexie.currentTransaction!).then(record => {
+            const written = confirmed ? await db.transaction('rw', scopeTransactionTables(getTable()), () => Dexie.waitFor(write(Dexie.currentTransaction!).then(record => {
+              if (geographyProof) {
+                assertGeographyFormWrittenV1(record as unknown as GeographyFormRecordV1 | undefined, scope, groupId, geographyProof.expected, data as Record<string, unknown>, geographyFields!)
+                return record
+              }
               if (!record || (record as unknown as Record<string, unknown>)[proofRequest!.field] !== proofRequest!.raw) throw new Error('事务内精确保存校验失败。')
               return creativeRuleTextWitnessV1(record as unknown as CreativeRules, scope, proofRequest!.field, 'committed-write').then(() => record)
             }))) : await write()
             if (!written) return
-            if (proof) {
+            if (geographyProof) {
+              const row = await readGeographyFormV1(scope, groupId)
+              const committed = assertGeographyFormWrittenV1(row ?? undefined, scope, groupId, geographyProof.expected, data as Record<string, unknown>, geographyFields!)
+              if (committed.id !== written.id || committed.ragDocumentId !== (written as unknown as GeographyFormRecordV1).ragDocumentId) throw new Error('地理提交后记录身份已变化。')
+              completedGeography = committed as unknown as T
+              publish(completedGeography)
+            } else if (proof) {
               await resolveScopeLike(scope)
               const rows = await readOwnedRows<CreativeRules>(scope, 'creativeRules', { owner: 'work' }), row = rows[0]
               if (rows.length !== 1 || row.id !== written.id || row.ragDocumentId !== (written as unknown as CreativeRules).ragDocumentId
@@ -491,7 +516,7 @@ export function createProjectSingletonStore<K extends string, T extends ProjectS
           persist: () => historyAdmission ?? register(),
         })
         await admitted.write
-        return completedAck
+        return geographyProof ? completedGeography : completedAck
       }) as SingletonSave<T>,
       ...(historyAuthoring ? authorActions : {}),
     } as State
