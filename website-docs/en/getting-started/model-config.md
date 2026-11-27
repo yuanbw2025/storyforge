@@ -1,5 +1,14 @@
 # Models and APIs
 
+## November 27 follow-up: complete sources and unknown capacity
+
+New tasks assemble all selected registered materials without silently clipping them by old per-source/role quotas or source proportions. Proven model capacity governs physical-window checks. Unknown capacity no longer pretends to be a 4k/8k window: a complete request may be attempted, but the service may still reject it. Actual overflow determines semantic compression; entering a larger number cannot bypass service limits.
+
+Ordinary, streaming and domain requests remove additional fixed output caps. The subsequently merged #695 also makes new requests ignore old `maxTokens` saved globally, in connection presets or per call. Output follows verified service capacity; the service decides when independent output capability is unknown. Settings no longer offer the old cap slider. Specify a desired word count in the particular creative task. Field structure, source permissions, versions, balance, author authorization and actual usage remain checked. Historical tasks recover under their frozen contracts; unknown requests are not automatically resent. Based on #681/#695; see [usage](/en/guides/token-cost) for charges and resending.
+
+Work covers use a separate Work cover image connection, currently a saved official Agnes preset with the `agnes-image-2.1-flash` recipe. A text connection does not automatically provide image permission. See [work covers](/en/features/longform/planning) for generation and local recovery.
+
+
 ## November 25: capacity follows the actual connection
 
 Multiple longform, independent-creation and interactive-product paths now allocate input from evidenced capacity of the actual routed connection, reserving output/safety space. Some unknown-capacity paths retain old values only as conservative references. Full requests must pass admission; a large reference cannot force a request into a small window. Automatic output does not fabricate a small author limit. Explicit author/template overrides, Skill governance and service limits remain. Product-specific scope is in each guide.

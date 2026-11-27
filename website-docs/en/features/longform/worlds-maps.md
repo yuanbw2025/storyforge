@@ -1,5 +1,14 @@
 # Multiple worlds, locations, and maps
 
+## November 27 follow-up: Markdown for more setting descriptions
+
+World-origin, humanity and world-engine long fields, plus resource, story-core, power/cultivation descriptions, character relations and reference key points now use safe Markdown reading with explicit source editing. Codex detailed descriptions and custom fields declared as `longtext` also support reading/editing source. Names, single-line introductions, numbers, enums and JSON retain their original inputs. Reading or switching to source does not call AI. Based on #688/#693/#694.
+
+Failed reference saves keep editing open; deleted records or records from another work cannot report successful persistence. First saves of world settings/story core preserve full raw text and whitespace and roll back together on failure. Save indicators follow actual persistence support; not every connected field has the same Saved receipt. Finish Chinese composition before leaving; retry failures without clearing the work.
+
+After returning from precise comparison, you can immediately select all and replace. Delayed restoration of the old selection no longer overrides the author's new selection. Without a new action, original cursor/scroll restoration remains. Full copying, raw text and adoption rules remain; this does not establish long-text performance or physical-IME acceptance on all devices. Based on #692.
+
+
 ## November 27: maps admit verified empty sources
 
 When geography, codex or location records do not yet exist, sources explicitly confirmed empty by the registered assembler may be omitted rather than mistaken for truncation. Missing nonempty sources, absent empty-source evidence and actual clipping still reject before model dispatch. Inspect material/errors rather than inventing records to bypass messages. Source, candidate and map-save flows remain. Based on #670.

@@ -1,5 +1,10 @@
 # Using Prompts and creative methods
 
+## November 27 follow-up: long prompts and safe source reading
+
+Shared long-content paths no longer truncate prompt examples/candidates with old count and text caps. Complete selected materials still require source permissions, structure and real service-capability checks; new requests ignore old API output caps under #695, while content-length targets in creative tasks remain. Setting, reference and Codex long text can be read as safe Markdown, with explicit source editing. Preserve full constraints, steps and output formats when editing existing prompts/methods; formatting is not permission to abbreviate them. Reading sends no model request, and failed saves retain drafts. Based on #681/#688/#693/#694; see [settings](/en/features/longform/worlds-maps) for applicable fields.
+
+
 ## November 27: default templates, fixed versions and text drafts
 
 Reverse inspiration saves separate single-/multiworld template snapshots, parameters and temperature for the current work. Expand Current template and inspect Follow default versus Fixed version. Following reads the module's latest system default; a fixed version retains its content without requiring the global template ID to exist. See [inspiration/planning](/en/features/longform/planning).

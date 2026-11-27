@@ -1,5 +1,10 @@
 # Longform: continuity, post-chapter review, and revision
 
+## November 27 follow-up: complete review content and automatic output
+
+Prose review and consistency Fast/Deep Audit remove remaining text-length and issue-count quotas, retaining complete valid results. Automatic output in shared requests follows actual service capability. #695 additionally removes old API output settings and remaining limits on long prose-copilot instructions and whole-chapter quality review/recheck lengths and counts, retaining complete long reports for saving and recovery. More output does not prove correct conclusions: inspect sources, quotations and proposed edits before deciding what to adopt. Physical-window, permission, version and original-response recovery checks remain. Based on #681/#695; new tasks and historical frozen contracts are checked separately. See [usage](/en/guides/token-cost) for cost.
+
+
 ## November 27: consistency review retains actual connection capacity
 
 Explicit consistency review retains service-address/prepared-capacity evidence from the current model configuration, using one snapshot for input assembly and dispatch. Custom/local connections no longer fall back to a small unknown-model window merely because the address was lost. Truly insufficient windows still reject full material. Check connection, material and errors; failed/interrupted requests are not automatically resent. Authors still assess review reports. Based on #672.

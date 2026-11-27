@@ -1,5 +1,16 @@
 # Longform: settings, characters, and story design
 
+## November 27 follow-up: generate and adopt a work cover
+
+In settings, select a saved official Agnes connection under Work cover image connection; the current recipe uses `agnes-image-2.1-flash`. In the longform library, expand AI cover on the work card, enter a prompt (up to 8,000 characters), inspect What information will be sent, then select Generate. Only the current work title, synopsis, genres and this prompt are sent, without reading or sending chapter prose. A successful text connection test does not prove image permission; generation may incur charges. Manual image upload remains available.
+
+The returned image is initially Not adopted. Inspect it and select Use as cover to write it to this work; Keep old cover leaves the current image unchanged. Adoptable images must meet the 5 MiB, 20-million-pixel and encoding limits. Failure retains the old cover and input. Stop waiting does not establish server-side cancellation.
+
+Use Recover returned image or Recover image from saved raw response when those records exist; local recovery does not generate again. A late image from earlier inputs first requires View saved image before adoption. When the outcome is unknown, Generate a new image is a separate request with possible charges. Full backups include cover images, candidates and provenance. Based on [#685](https://github.com/yuanbw2025/storyforge/pull/685); the reviewed offline recovery of a historical real image does not establish new online generation or visual-quality acceptance.
+
+Registered long text in story-core, character and outline candidates also supports safe Markdown reading. Click to edit through the original candidate editor. Returning to reading waits for actual candidate persistence; failure retains source with retry. Input is synchronized before switching raw structure, removing entries, adopting or rejecting. Finish Chinese composition first. A readable candidate still requires explicit adoption to enter the work; returning to reading is not adoption. Based on #696.
+
+
 ## November 27: save inspiration-template versions per work
 
 In single- or multiworld reverse inspiration, expand the initially collapsed Current template panel. Choose a built-in or personal Template version, adjust parameters/Temperature, and wait for Saving to finish before generating. Singleworld, multiworld and separate works save independently. The displayed fixed version enters the actual generation request and survives reload. Based on #581/#682.

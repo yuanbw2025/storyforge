@@ -1,5 +1,10 @@
 # Saving, backup, and recovery
 
+## November 27 follow-up: cover-generation results and complete recovery
+
+AI covers now connect work-card generation, unadopted previews, explicit adoption and local recovery of saved responses. Full backups preserve images, candidates and provenance through existing lifecycles without a new database/backup version. After import, inspect the current work, old cover and recoverable results before adoption; do not generate again to recover an existing image. Wrong identities and missing/replaced evidence remain rejected. Retain original files and errors. Based on #685; see [work covers](/en/features/longform/planning).
+
+
 ## November 27: inspiration configuration follows existing backup lifecycles
 
 Fixed inspiration-template content snapshots/parameters follow the existing Work-owned inspiration-workspace lifecycle. Import validates configuration structure/content hash before writes. Legacy rows without configuration remain readable; corrupt configuration retains originals and rejects explicitly instead of substituting a global template with the same ID. Temporary text is a local UI draft, not a fixed template or formal backup configuration. Database remains v16/backup v20 without a new format migration. Based on #581/#682.

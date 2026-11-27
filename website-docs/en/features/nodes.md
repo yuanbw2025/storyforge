@@ -1,9 +1,14 @@
 ---
 productId: authoring.nodes
 status: preview
-lastVerified: 2026-11-25
+lastVerified: 2026-11-27
 ---
 # Node authoring
+
+## November 27 follow-up: automatic node output and recovery
+
+Node output may remain Automatic without rejection by an additional old fixed output value. Complete candidates still require field, work scope, source and version checks, followed by explicit author adoption. With verified sources and matching permissions unchanged, material quantity alone no longer falsely expires a Gateway report; actual source/hash or permission changes still require review. Recovery uses the original request and candidate evidence without regenerating. Based on #681; see [model configuration](/en/getting-started/model-config) for capacity and cost.
+
 
 ## November 25: open a chapter from a prose node
 

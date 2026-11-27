@@ -1,5 +1,15 @@
 # Changelog
 
+## November 27, 2026 follow-up · AI covers, complete long content and Markdown persistence
+
+- **Work covers:** generate one image from a prompt on a longform card, preview, then Use as cover. Recover returned images/saved responses locally; unknown outcomes are not automatically resent. See [planning](/en/features/longform/planning) for connection, sent materials and charges (#685).
+- **Complete materials and automatic output:** remove shared per-source/role proportions, text/count quotas and additional fixed output caps. Unknown capacity no longer pretends to be 4k/8k; subsequent #695 removes old global/preset/per-call API output caps and remaining long-prose instruction/whole-chapter review limits, while content-length targets and real service limits remain. Node automatic output, Gateway reports and chat-response accounting recovery are updated. See [models](/en/getting-started/model-config), [nodes](/en/features/nodes), [chat](/en/features/interactive/character-chat), [review](/en/features/longform/continuity), [usage](/en/guides/token-cost) (#681/#695).
+- **Reading and saving:** world-origin, humanity, world-engine, resource/story-core/power descriptions, relations, reference key points and Codex detailed descriptions/longtext support safe Markdown and source editing. First saves retain full whitespace; reference save failures keep editing open. Returning from precise comparison no longer lets a late old selection override a new one. Story-core/character/outline long candidates support Markdown, waiting for actual draft persistence before reading/adoption. See [settings](/en/features/longform/worlds-maps), [source reading](/en/guides/using-prompts) (#688/#692/#693/#694/#696).
+- **Import and feedback:** reference import hints at same-original/same-name materials in the current work, rejecting stale confirmation after file/work changes. My feedback updates offline controls/notices immediately. See [import](/en/guides/import), [bug reports](/en/feedback/bug) (#689/#691).
+
+This review covers 13 mainline merges in `0a447f38…27d3dffc`. #684/#687 maintain lazy impact/reference-baseline loading and receipts; #686 only changes platform undo/redo shortcut tests. They are not additional product capabilities. Database v16/backup v20 remain; [formal versions](/en/updates/compatibility) and [unmerged development](/en/updates/development-status) are checked separately.
+
+
 ## November 27, 2026 · Persistent inspiration templates and prose fixes
 
 - **Reverse inspiration:** save separate single-/multiworld versions, parameters and temperature per work; follow defaults, fix versions, save-and-use, restore defaults and resolve unmatched text drafts. See [planning](/en/features/longform/planning), [templates](/en/guides/using-prompts) (#581 groundwork, #682 UI/request wiring).
