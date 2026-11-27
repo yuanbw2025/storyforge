@@ -133,6 +133,8 @@ export default function ShortNovelStudio({ project, scope, activeStage, onStageC
   const [generating, setGenerating] = useState(false)
   const [error, setError] = useState('')
   const editRevision = useRef(0)
+  const draftRead = useRef<{ identity: string } | null>(null)
+  useEffect(() => () => { draftRead.current = null }, [])
   const activeGeneration = useRef<AbortController | null>(null)
   const [tasks, setTasks] = useState<Awaited<ReturnType<typeof listShortNovelTasksV1>>>([])
   const draftPrefix = `short:${scope.projectId}:${scope.workId}:`
@@ -161,18 +163,25 @@ export default function ShortNovelStudio({ project, scope, activeStage, onStageC
   }, [reload, scope, activeStage])
 
   const draftKey = `${stage}:r${production?.revision ?? 0}`
+  const loadedOwner = production?.projectId === scope.projectId && production.worldId === scope.worldId
+    && production.workId === scope.workId && snapshot?.work.id === scope.workId
+    && snapshot.work.projectId === scope.projectId && snapshot.work.worldId === scope.worldId
   useEffect(() => {
-    if (!production || !snapshot || candidate) return
-    let cancelled = false
+    if (!production || !snapshot || !loadedOwner || candidate) { draftRead.current = null; return }
+    const identity = JSON.stringify([scope.projectId, scope.worldId, scope.workId, production.id, draftKey])
+    // A reread of the same durable revision must not initialize over author input,
+    // or cancel the still-pending draft read for that exact owner.
+    if (draftRead.current?.identity === identity) return
+    const request = { identity }
+    draftRead.current = request
     const initialEdit = editRevision.current
     setInstruction('')
     const initial = stage === 'brief' ? production.brief ?? briefDraft(snapshot) : stage === 'design' ? production.storyDesign ?? designDraft() : stage === 'plan' ? planDraft(snapshot) : stage === 'review' ? reviewDraft() : {}
     setEditorText(JSON.stringify(initial, null, 2))
     void readShortAuthorDraft(scope, draftKey).then(saved => {
-      if (!cancelled && initialEdit === editRevision.current && saved) { const draft = JSON.parse(saved); setEditorText(draft.text); setInstruction(draft.instruction ?? '') }
-    }).catch(cause => setError(String(cause)))
-    return () => { cancelled = true }
-  }, [candidate, production, snapshot, stage, draftKey, scope])
+      if (draftRead.current === request && initialEdit === editRevision.current && saved) { const draft = JSON.parse(saved); setEditorText(draft.text); setInstruction(draft.instruction ?? '') }
+    }).catch(cause => { if (draftRead.current === request) setError(String(cause)) })
+  }, [candidate, production, snapshot, stage, draftKey, scope, loadedOwner])
   const persistDraft = (key:string, text:string) => queueCandidateDraftV1({key:draftPrefix+key,draft:text,debounceMs:400,persist:value=>saveShortAuthorDraft(scope,key,value),onError:cause=>setError(cause.message)})
   const editText = (text:string) => { editRevision.current++; setEditorText(text); persistDraft(draftKey, JSON.stringify({text,instruction})) }
   const editInstruction = (value:string) => { editRevision.current++; setInstruction(value); persistDraft(draftKey, JSON.stringify({text:editorText,instruction:value})) }
@@ -277,7 +286,7 @@ export default function ShortNovelStudio({ project, scope, activeStage, onStageC
       .sort((left, right) => left.order - right.order)[ordinal - 1]?.id
   }, [selectedChapterKey, snapshot])
 
-  if (!production || !snapshot || !completion) return <div className="short-studio-loading">{error || '正在打开短篇工作台…'}</div>
+  if (!production || !snapshot || !completion || !loadedOwner) return <div className="short-studio-loading">{error || '正在打开短篇工作台…'}</div>
 
   return <div className="short-studio" data-testid="short-novel-studio">
     <header className="short-studio-top">
