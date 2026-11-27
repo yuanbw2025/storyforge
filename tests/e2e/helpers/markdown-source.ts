@@ -81,8 +81,12 @@ export async function enterRuleSourceEditorV1(page: Page, label: string, editor:
   const scope = ruleSourceScopeV1(page, label)
   if (await editor.count() === 0 && await scope.locator('[data-markdown-read-view]').count() === 0) {
     await expect(scope).toBeVisible()
-    await expect(scope).toHaveClass(/cursor-text/)
-    await scope.click()
+    // Confirmed-save fields wrap their actual empty editor and status together.
+    // Enter that editor, never the non-interactive min-w-0 wrapper.
+    const emptyEditor = scope.locator('div.cursor-text')
+    await expect(emptyEditor).toHaveCount(1)
+    await expect(emptyEditor).toBeVisible()
+    await emptyEditor.click()
   }
   return enterMarkdownSourceEditorV1(scope, editor)
 }
