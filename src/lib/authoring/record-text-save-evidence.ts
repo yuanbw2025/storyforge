@@ -14,7 +14,7 @@ export interface RecordTextRowV1 {
   id?: number; projectId: number; worldId?: number; workId?: number; worldGroupId?: number | null
   ragDocumentId?: string; updatedAt: number
 }
-const prefix = { characters: 'character', outlineNodes: 'outline-node', detailedOutlines: 'detailed-outline', storyArcs: 'story-arc', references: 'reference' } as const
+const prefix = { characters: 'character', outlineNodes: 'outline-node', detailedOutlines: 'detailed-outline', storyArcs: 'story-arc', references: 'reference', foreshadows: 'foreshadow' } as const
 const sceneTexts = ['title', 'summary', 'location', 'conflict', 'notes', ...DETAILED_SCENE_TASK_FIELDS.map(({ key }) => key)]
 const stageTexts = ['title', 'description', 'turningPoint']
 export const recordTextWitnessKeyV1 = (field: string, entryId?: string) => entryId === undefined ? field : JSON.stringify([field, entryId])

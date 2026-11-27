@@ -147,8 +147,8 @@ async function renderProject(project: Project) {
   })
 }
 
-// Original two cases retain their native actions, 2s wait, DB comparisons,
-// selected-item and complete-description assertions.
+// Native deletion, 2s wait, DB, selected-item and full source assertions remain;
+// the description is now rendered in its explicit Markdown reading surface.
 for (const damaged of [false, true])
   it(`actual ForeshadowPanel handles native deletion damaged=${damaged}`, async () => {
     const { id, d, project } = await fixture()
@@ -163,12 +163,11 @@ for (const damaged of [false, true])
         expect(card).toBeDefined();
         await act(async () => { (card as HTMLElement).click(); });
         await waitFor(() => { expect([...host.querySelectorAll('input')].some(e => e.value === '独审实际选择的伏笔')).toBe(true); });
-        const desc = [...host.querySelectorAll('textarea')].find(e => e.value === '作者最后保存的完整伏笔描述');
-        expect(desc).toBeDefined();
+        expect(host.querySelector('[data-markdown-body]')?.textContent).toBe('作者最后保存的完整伏笔描述');
         const remove = [...host.querySelectorAll('button')].find(e => e.querySelector('svg.lucide-trash2,svg.lucide-trash-2'));
         expect(remove).toBeDefined();
         const before = await snapshot();
-        await act(async () => { remove!.click(); await Promise.allSettled(observed); });
+        await act(async () => { remove!.click(); await waitFor(() => expect(observed).toHaveLength(1)); await Promise.allSettled(observed); });
         expect(observed).toHaveLength(1);
         const after = await snapshot(), visible = host.textContent ?? '', selectedStill = [...host.querySelectorAll('input')].some(e => e.value === '独审实际选择的伏笔');
         if (damaged) {
@@ -177,7 +176,7 @@ for (const damaged of [false, true])
             expect(await db.foreshadows.get(id)).toBeDefined();
             expect(visible).toContain('删除已取消');
             expect(selectedStill).toBe(true);
-            expect([...host.querySelectorAll('textarea')].some(e => e.value === '作者最后保存的完整伏笔描述')).toBe(true);
+            expect(host.querySelector('[data-markdown-body]')?.textContent).toBe('作者最后保存的完整伏笔描述');
         }
         else {
             expect(errors).toHaveLength(0);
