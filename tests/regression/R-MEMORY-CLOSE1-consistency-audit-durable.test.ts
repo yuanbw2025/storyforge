@@ -309,14 +309,19 @@ describe('MEMORY-CLOSE-1 · 显式一致性审计的 durable Harness 闭环', ()
     expect(await db.agentRuns.count()).toBe(0)
   })
 
-  it('输入预算包含完整正文；过长时零调用，不截断前段冒充全文审计', async () => {
+  it('长正文不再受 Fast Guard 旧配额拒绝，完整交付且保留原稿', async () => {
     const fixture = await seedConsistencyProject()
     const longHtml = `<p>${'资源每次消耗都需要核对。'.repeat(6000)}</p>`
     await db.chapters.update(fixture.targetChapterId, { content: longHtml })
     let calls = 0
-    await expect(runDurableConsistencyAuditV1(runInput(fixture, async () => { calls++; return '{"findings":[]}' }, { mode: 'fast', chapterContent: longHtml }))).rejects.toThrow('全文与审计资料超出 Fast Guard')
-    expect(calls).toBe(0)
-    expect(await db.agentEvents.count()).toBe(0)
+    const result = await runDurableConsistencyAuditV1(runInput(fixture, async messages => {
+      calls++
+      expect(messages.map(message => message.content).join('\n')).toContain('资源每次消耗都需要核对。'.repeat(6000))
+      return '{"findings":[]}'
+    }, { mode: 'fast', chapterContent: longHtml, budget: new AgentTeamBudgetTracker('service-capacity') }))
+    expect(calls).toBe(1)
+    expect(result.snapshot.projection.state).toBe('completed')
+    expect(result.candidate.findings).toEqual([])
     expect((await db.chapters.get(fixture.targetChapterId))?.content).toBe(longHtml)
   })
 
