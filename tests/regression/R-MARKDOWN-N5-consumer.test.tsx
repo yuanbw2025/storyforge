@@ -76,9 +76,10 @@ it('holds the same textarea for new dirty text after a prior real committed ack 
   await act(async () => { release(firstAck); await pending })
   expect(calls).toBe(2); expect(read(ui.host)).not.toBeNull(); expect((await db.worldviews.toArray())[0].worldStructure).toBe('# latest')
 })
-it('keeps non-admitted/empty/invalid fields on their existing behavior and never interprets a placeholder as source', async () => {
+it('requires an explicit Markdown opt-in, keeps save evidence separate, and never interprets empty/invalid fields or placeholders', async () => {
   const scope = await fixture(); const ui = await mount(<Consumer scope={scope} markdownRead={false} />); expect(read(ui.host)).toBeNull()
-  const save = vi.fn(); await act(async () => ui.root.render(<InlineTextarea markdownRead value="# no evidence" onChange={save} />)); expect(read(ui.host)).toBeNull()
+  const save = vi.fn(); await act(async () => ui.root.render(<InlineTextarea value="# plain field" onChange={save} />)); expect(read(ui.host)).toBeNull()
+  await act(async () => ui.root.render(<InlineTextarea markdownRead value="# explicit reading" onChange={save} />)); expect(read(ui.host)).not.toBeNull(); expect(ui.host.querySelector('[data-local-save-status]')).toBeNull(); expect(save).not.toHaveBeenCalled()
   await act(async () => ui.root.render(<InlineTextarea markdownRead value="" placeholder="# placeholder" onChange={save} />)); expect(read(ui.host)).toBeNull(); expect(ui.host.textContent).toContain('# placeholder')
   await act(async () => ui.root.render(<InlineTextarea markdownRead value={{ bad: true } as unknown as string} onChange={save} />)); expect(ui.host.querySelector('[role="alert"]')).not.toBeNull(); expect(ui.host.querySelector('textarea')).toBeNull(); expect(save).not.toHaveBeenCalled()
 })
