@@ -24,7 +24,7 @@ export const LOCAL_SAVE_STORY_CORE_FIELDS_V1 = [
 ] as const
 export type LocalSaveStoryCoreFieldV1 = typeof LOCAL_SAVE_STORY_CORE_FIELDS_V1[number]
 export const LOCAL_SAVE_CREATIVE_RULE_FIELDS_V1 = ['writingStyle', 'atmosphere', 'specialRequirements'] as const
-export type LocalSaveCreativeRuleFieldV1 = typeof LOCAL_SAVE_CREATIVE_RULE_FIELDS_V1[number]
+export type LocalSaveCreativeRuleFieldV1 = typeof LOCAL_SAVE_CREATIVE_RULE_FIELDS_V1[number] | 'systemFictionElements'
 interface LocalSaveWorldviewIdentityV1 extends WorkspaceScope {
   table: 'worldviews'
   field: LocalSaveWorldviewFieldV1

@@ -94,3 +94,56 @@ it('does not let a delayed old native read replace a committed rule', async () =
   await store.getState().save({ projectId: scope.projectId, writingStyle: raw }, scope, expected)
   release(); await older; expect(store.getState().creativeRules?.writingStyle).toBe(raw)
 })
+
+it('confirms all structured system-fiction author text as the original native object, preserving sibling fields and reopened identity', async () => {
+  const { createSystemFictionElementsV1, SYSTEM_FICTION_ELEMENT_FIELDS } = await import('../../src/lib/prose/system-fiction-contract')
+  const scope = await fixture()
+  await store.getState().save({ projectId: scope.projectId, writingStyle: '原文风' }, scope)
+  const before = await row(), elements = createSystemFictionElementsV1(); elements.enabled = true
+  for (const { key } of SYSTEM_FICTION_ELEMENT_FIELDS) elements[key] = raw + key
+  const ack = await store.getState().save({ projectId: scope.projectId, systemFictionElements: elements }, scope, await intent(scope, 'systemFictionElements'))
+  expect(ack.witness).toMatchObject({ value: JSON.stringify(elements), resourceUid: before.ragDocumentId, identity: { ...scope, field: 'systemFictionElements' } })
+  db.close(); await db.open()
+  expect(await row()).toMatchObject({ systemFictionElements: elements, writingStyle: '原文风', ragDocumentId: before.ragDocumentId })
+  expect(typeof (await row()).systemFictionElements).toBe('object')
+})
+it('rolls back failed and corrupt structured writes, then explicitly retries the original preimage', async () => {
+  const { createSystemFictionElementsV1 } = await import('../../src/lib/prose/system-fiction-contract')
+  const scope = await fixture(), elements = { ...createSystemFictionElementsV1(), systemMechanism: raw }, expected = await intent(scope, 'systemFictionElements')
+  const save = (proof = expected) => store.getState().save({ projectId: scope.projectId, systemFictionElements: elements }, scope, proof)
+  const fail = () => { throw new Error('structured quota') }; db.creativeRules.hook('creating', fail)
+  try { await expect(save()).rejects.toThrow('structured quota') } finally { db.creativeRules.hook('creating').unsubscribe(fail) }
+  expect(await db.creativeRules.count()).toBe(0); await save()
+  const latest = await intent(scope, 'systemFictionElements'), before = await row()
+  elements.limitsCosts = raw
+  const zero = vi.spyOn(db.creativeRules, 'update').mockResolvedValueOnce(0)
+  await expect(save(latest)).rejects.toThrow('已不存在'); zero.mockRestore()
+  const corrupt = () => ({ systemFictionElements: { ...elements, limitsCosts: 'wrong' } }); db.creativeRules.hook('updating', corrupt)
+  try { await expect(save(latest)).rejects.toThrow('精确保存') } finally { db.creativeRules.hook('updating').unsubscribe(corrupt) }
+  expect(await row()).toEqual(before); await save(latest); expect((await row()).systemFictionElements).toEqual(elements)
+})
+it('refuses stale structured preimages, fabricated hashes and malformed schema without laundering original data', async () => {
+  const { createSystemFictionElementsV1 } = await import('../../src/lib/prose/system-fiction-contract')
+  const scope = await fixture(), elements = { ...createSystemFictionElementsV1(), rewardGrowth: raw }, expected = await intent(scope, 'systemFictionElements')
+  await store.getState().save({ projectId: scope.projectId, systemFictionElements: elements }, scope, expected)
+  await expect(store.getState().save({ projectId: scope.projectId, systemFictionElements: elements }, scope, expected)).rejects.toThrow('已被修改')
+  const forged = await intent(scope, 'systemFictionElements'); forged.expected.valueHash = 'fake'
+  await expect(store.getState().save({ projectId: scope.projectId, systemFictionElements: elements }, scope, forged)).rejects.toThrow('预像')
+  const current = await intent(scope, 'systemFictionElements'), before = await row()
+  await expect(store.getState().save({ projectId: scope.projectId, systemFictionElements: { ...elements, version: 2 } as never }, scope, current)).rejects.toThrow('版本不受支持')
+  await expect(store.getState().save({ projectId: scope.projectId, systemFictionElements: { ...elements, hidden: 'preserve' } as never }, scope, current)).rejects.toThrow('未登记')
+  expect(await row()).toEqual(before)
+})
+it('freezes the structured author object before queueing and retains the original Work destination', async () => {
+  const { createSystemFictionElementsV1 } = await import('../../src/lib/prose/system-fiction-contract')
+  const scope = await fixture(), expected = await intent(scope, 'systemFictionElements'), elements = { ...createSystemFictionElementsV1(), protagonistIntent: raw }
+  let release!: () => void, ready!: () => void
+  const reached = new Promise<void>(resolve => { ready = resolve })
+  const held = coordinatePendingEditV1({ key: `project-singleton:creativeRules:${scope.projectId}:${scope.workId}:default`, persist: () => new Promise<void>(resolve => { release = resolve; ready() }) })
+  await reached
+  const mutable = { ...scope }, pending = store.getState().save({ projectId: scope.projectId, systemFictionElements: elements }, mutable, expected)
+  elements.protagonistIntent = 'late mutation'; mutable.workId += 999; expected.expected.valueHash = 'late hash'
+  release(); await held
+  expect((await pending).witness.identity.workId).toBe(scope.workId)
+  expect((await row()).systemFictionElements?.protagonistIntent).toBe(raw)
+})
