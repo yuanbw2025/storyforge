@@ -138,6 +138,8 @@ describe('AUDIT-6 · 历史时间线事件卡', () => {
     const title = host.querySelector<HTMLInputElement>('input[value="开元改制"]')!
     const era = host.querySelector<HTMLSelectElement>('select[aria-label="历史时期"]')!
     const year = host.querySelector<HTMLInputElement>('input[aria-label="数字化年份"]')!
+    const view = [...host.querySelectorAll('[data-markdown-read-view]')].find(view => view.textContent?.includes('王朝改用新的纪年法'))!
+    await act(async () => [...view.querySelectorAll('button')].find(button => button.textContent === '编辑源码')!.click())
     const description = host.querySelector('textarea')!
     const radios = Array.from(host.querySelectorAll('input[type="radio"]')) as HTMLInputElement[]
 
@@ -145,6 +147,7 @@ describe('AUDIT-6 · 历史时间线事件卡', () => {
     await changeValue(era, 'sui-tang')
     await changeValue(year, '-221')
     await changeValue(description, '改用新历')
+    await act(async () => description.dispatchEvent(new FocusEvent('focusout', { bubbles: true })))
     await act(async () => radios[1].click())
     await act(async () => button(host, '第二章').click())
 
