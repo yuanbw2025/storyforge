@@ -1,5 +1,5 @@
 import { selectAgentSkillIdV1 } from '../../src/lib/agent/workflow-catalog'
-import { beforeEach, afterEach, describe, it, expect } from 'vitest'
+import { beforeEach, afterEach, describe, it, expect, vi } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { seedCurrentWorkspace } from '../helpers/current-workspace'
 import { useInspirationWorkspaceStore } from '../../src/stores/inspiration-workspace'
@@ -9,12 +9,15 @@ import { parseInspirationVersions } from '../../src/lib/inspiration/workspace'
 import { exportProjectJSON, importProjectJSON } from '../../src/lib/export/json-export'
 import { cascadeDeleteProject } from '../../src/lib/registry/lifecycle'
 import { INSPIRATION_PREPARATION_MODES, inspirationDirectionIndexFromRequest, type InspirationPreparationMode } from '../../src/lib/inspiration/preparation'
+import { useAIConfigStore } from '../../src/stores/ai-config'
+import { finiteServiceConfigFixtureV1 } from '../helpers/model-capacity-fixture'
 
 const candidate = (mode: InspirationPreparationMode) => ({ summary: '阿照修船铺保留雾中归船与温暖经营。', authorMaterial: '作者原创：阿照、修船铺、雾中归船。', proposals: mode === 'organize' ? [] : mode === 'compare' || mode === 'position-open' ? [{ title: '经营', content: '围绕不同修船委托与铺子成长，重在手艺和经营。' }, { title: '离人与归客', content: '围绕船带回的关系与人的去留，重在重逢。' }] : [{ title: '委托与排期', content: '深入一次修船排期的商量，保留归船未知，不补全世界史。' }], openQuestions: [] })
 
 describe('R-PREPARATION-inspiration · 轻量准备沿原候选与版本生命周期', () => {
-  beforeEach(async () => { await db.delete(); await db.open() })
-  afterEach(() => db.close())
+  let originalAIState: ReturnType<typeof useAIConfigStore.getState>
+  beforeEach(async () => { originalAIState = useAIConfigStore.getState(); await db.delete(); await db.open() })
+  afterEach(() => { vi.unstubAllGlobals(); useAIConfigStore.setState(originalAIState); db.close() })
   it.each(INSPIRATION_PREPARATION_MODES)('%s只读取选择素材，确认前零版本，确认后按原版本库回读', async mode => {
     expect(selectAgentSkillIdV1('inspiration', `灵感准备任务=${mode}。保留阿照。`)).toBe('inspiration.prepare')
     const { project, scope } = await seedCurrentWorkspace('阿照修船铺')
@@ -72,16 +75,49 @@ describe('R-PREPARATION-inspiration · 轻量准备沿原候选与版本生命�
     expect(await db.inspirationWorkspaces.where('projectId').equals(project.id!).count()).toBe(0)
     expect(await db.inspirationWorkspaces.where('projectId').equals(importedId).count()).toBe(1)
   })
-  it('准备来源过预算时在模型前明确拒绝，不只整理前几个碎片', async () => {
+  async function largePreparationInput() {
     const { project, scope } = await seedCurrentWorkspace('完整素材预算')
     const ids: string[] = []
+    const texts: string[] = []
     for (let index = 0; index < 24; index++) {
       const fragment = await useInspirationWorkspaceStore.getState().addFragment(scope, { text: `${index}：${'原始意象不可静默丢弃'.repeat(180)}`.slice(0, 2000) })
       ids.push(fragment!.id)
+      texts.push(fragment!.text)
     }
+    return { project, scope, ids, texts, before: await db.inspirationWorkspaces.toArray() }
+  }
+
+  it('实际服务容量不足时在模型前明确拒绝，不只整理前几个碎片', async () => {
+    useAIConfigStore.setState({ config: await finiteServiceConfigFixtureV1(2000), presets: [], taskRoutes: {} })
+    const { project, scope, ids, before } = await largePreparationInput()
+    const fetcher = vi.fn(async () => { throw new Error('Unexpected model transport request') })
+    vi.stubGlobal('fetch', fetcher)
+    // A custom runAI bypasses chat's physical-window check. Exercise the real
+    // dispatch guard with evidenced service capacity and reject before fetch.
+    const prepared = await prepareInspirationCopilot({ projectId: project.id!, scope, selectedFragmentIds: ids, skillId: 'inspiration.prepare', authorRequest: '灵感准备任务=organize。整理全部所选素材。' })
+    await expect(runGenerationNode(prepared.node, prepared.prepared)).rejects.toThrow(/预算|上下文|窗口/)
+    expect(fetcher).not.toHaveBeenCalled()
+    expect(await db.inspirationWorkspaces.toArray()).toEqual(before)
+  })
+
+  it('实际服务容量充足时把全部所选原文送入候选，不沿用旧11k应用配额', async () => {
+    useAIConfigStore.setState({ config: await finiteServiceConfigFixtureV1(128_000), presets: [], taskRoutes: {} })
+    const { project, scope, ids, texts, before } = await largePreparationInput()
     let calls = 0
-    await expect(prepareInspirationCopilot({ projectId: project.id!, scope, selectedFragmentIds: ids, skillId: 'inspiration.prepare', authorRequest: '灵感准备任务=organize。整理全部所选素材。' }, { runAI: async () => { calls++; return JSON.stringify(candidate('organize')) } })).rejects.toThrow('超过本次上下文预算')
+    let prompt = ''
+    const prepared = await prepareInspirationCopilot({ projectId: project.id!, scope, selectedFragmentIds: ids, skillId: 'inspiration.prepare', authorRequest: '灵感准备任务=organize。整理全部所选素材。' }, { runAI: async messages => {
+      calls++
+      prompt = messages.map(message => message.content).join('\n')
+      return JSON.stringify(candidate('organize'))
+    } })
     expect(calls).toBe(0)
+    expect(prepared.selectedFragmentIds).toEqual(ids)
+    const generated = await runGenerationNode(prepared.node, prepared.prepared)
+    expect(generated.gate?.status).toBe('pass')
+    expect(calls).toBe(1)
+    for (const text of texts) expect(prompt).toContain(text)
+    expect(await db.inspirationWorkspaces.toArray()).toEqual(before)
+    expect(parseInspirationVersions(before[0].versions)).toHaveLength(0)
   })
 
   it.each([{ compareMode: 'compare', deepenMode: 'deepen' }, { compareMode: 'position-open', deepenMode: 'position-defined' }] as const)('$compareMode向$deepenMode显式交接，备选方向不自动成为世界事实', async ({ compareMode, deepenMode }) => {
