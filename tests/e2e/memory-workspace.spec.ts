@@ -1,3 +1,4 @@
+import { enterRuleSourceEditorV1, expectRuleSourceValueV1 } from './helpers/markdown-source'
 import { openLongformLeaf } from './helpers/longform-navigation'
 import { expect, test, type Page } from '@playwright/test'
 
@@ -64,9 +65,10 @@ test('本地记忆工作区以真实浏览器文件系统完成手动双向核�
 
   await openWorkspaceLeaf(page, '创作规则')
   const writingStyle = page.getByPlaceholder(/描述期望的写作风格/)
+  await enterRuleSourceEditorV1(page, '写作风格', writingStyle)
   await writingStyle.fill('浏览器创建的克制证据文风')
   await writingStyle.press('Tab')
-  await expect(writingStyle).toHaveValue('浏览器创建的克制证据文风')
+  await expectRuleSourceValueV1(page, '写作风格', writingStyle, '浏览器创建的克制证据文风')
 
   await openWorkspaceLeaf(page, '数据管理')
   await expect(page.getByRole('heading', { name: '数据管理', exact: true })).toBeVisible()
@@ -138,7 +140,7 @@ test('本地记忆工作区以真实浏览器文件系统完成手动双向核�
   await openWorkspaceLeaf(page, '故事设计')
   await expect(page.getByText('硬盘修订的潮汐记忆故事', { exact: true })).toBeVisible()
   await openWorkspaceLeaf(page, '创作规则')
-  await expect(page.getByPlaceholder(/描述期望的写作风格/)).toHaveValue('硬盘修订的克制证据文风')
+  await expectRuleSourceValueV1(page, '写作风格', page.getByPlaceholder(/描述期望的写作风格/), '硬盘修订的克制证据文风')
   await openWorkspaceLeaf(page, '数据管理')
 
   await page.evaluate(async ({ workPath }) => {

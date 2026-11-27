@@ -1,3 +1,4 @@
+import { enterMarkdownSourceEditorV1, expectMarkdownSourceValueV1 } from './helpers/markdown-source'
 import { expect, test, type Page } from '@playwright/test'
 import type { WorkspaceScope } from '../../src/lib/types'
 type SeedFixture = { scope: WorkspaceScope; result: { runId: number } }
@@ -145,6 +146,7 @@ test('047 native story core, history blur, and rule native inputs preserve real 
   await page.goto(`./workspace/${ids.projectId}?module=history`)
   await page.getByRole('button', { name: '历史总述与纪年', exact: true }).click()
   const history = page.locator('[data-input-area-layout="history.overview/current"]')
+  await enterMarkdownSourceEditorV1(page.getByText('历史总述', { exact: true }).locator('..'), history.locator('textarea'), '例如：大唐开元盛世，表面歌舞升平，实则暗流涌动。藩镇割据之势已成，朝堂之上牛李党争初露端倪...')
   await history.locator('textarea').fill('历史原稿：灯塔建立。')
   await nudge(page, 'history.overview/current')
   const historyBeforeLeave = await snapshot(page)
@@ -154,7 +156,7 @@ test('047 native story core, history blur, and rule native inputs preserve real 
   await expect.poll(async () => (await snapshot(page)).includes('历史原稿：灯塔建立。')).toBe(true)
   await page.reload()
   await page.getByRole('button', { name: '历史总述与纪年', exact: true }).click()
-  await expect(history.locator('textarea')).toHaveValue('历史原稿：灯塔建立。')
+  await expectMarkdownSourceValueV1(page.getByText('历史总述', { exact: true }).locator('..'), history.locator('textarea'), '历史原稿：灯塔建立。')
   await page.goto(`./workspace/${ids.projectId}?module=world-rules`)
   const note = page.locator('[data-input-area-layout="rules.note/current"]')
   await note.locator('textarea').fill('作者规则：遵循既有盐约。')
@@ -337,6 +339,8 @@ test('047 native StoryCore raw toggle preserves the governed candidate and has a
   })
   await page.goto(`./workspace/${seed.scope.projectId}?module=story-design`)
   const candidate = page.locator('[data-input-area-layout="story.logline/candidate"]')
+  await expect(page.locator('[data-candidate-local-save-status]').locator('..').locator('[data-markdown-read-view]')).toHaveCount(1)
+  await enterMarkdownSourceEditorV1(page.locator('[data-candidate-local-save-status]').locator('..'), candidate.locator('textarea'))
   await expect(candidate).toBeVisible()
   const before = await snapshot(page), text = await candidate.locator('textarea').inputValue()
   await nudge(page, 'story.logline/candidate')
@@ -349,9 +353,11 @@ test('047 native StoryCore raw toggle preserves the governed candidate and has a
   await raw.getByRole('button', { name: '恢复自适应', exact: true }).click()
   expect(await snapshot(page)).toBe(before)
   await page.getByRole('button', { name: '返回内容编辑', exact: true }).click()
+  await expect(page.locator('[data-candidate-local-save-status]').locator('..').locator('[data-markdown-read-view]')).toHaveCount(1)
+  await enterMarkdownSourceEditorV1(page.locator('[data-candidate-local-save-status]').locator('..'), candidate.locator('textarea'))
   await expect(candidate.locator('textarea')).toHaveValue(text)
   await page.reload()
-  await expect(candidate.locator('textarea')).toHaveValue(text)
+  await expectMarkdownSourceValueV1(page.locator('[data-candidate-local-save-status]').locator('..'), candidate.locator('textarea'), text)
   expect(await snapshot(page)).toBe(before)
 })
 
