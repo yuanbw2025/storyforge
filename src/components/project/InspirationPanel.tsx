@@ -1,4 +1,5 @@
 import PromptRunPanel from '../shared/PromptRunPanel'
+import type { GovernedPromptModuleKeyV1 } from '../../lib/agent/prompt-execution'
 import { INSPIRATION_PREPARATION_MODULES } from '../../lib/inspiration/preparation-contract'
 import { INSPIRATION_PREPARATION_LABELS, isInspirationPreparationMode } from '../../lib/inspiration/preparation'
 /**
@@ -23,6 +24,7 @@ import InspirationSingleResult from './InspirationSingleResult'
 import InspirationFusionReview from './InspirationFusionReview'
 import type { InspirationSourceKind } from '../../lib/types/inspiration-workspace'
 import { useIncrementalInspiration } from '../../hooks/useIncrementalInspiration'
+import { useInspirationPromptConfig } from '../../hooks/useInspirationPromptConfig'
 import { MAX_INSPIRATION_FRAGMENT_CHARS, MAX_INSPIRATION_FRAGMENTS } from '../../lib/inspiration/workspace'
 import { useActiveWork } from '../../hooks/useActiveWork'
 
@@ -31,6 +33,10 @@ interface Props {
 }
 
 export default function InspirationPanel({ project }: Props) {
+  return <InspirationPanelContent key={`${project.id}:${project.activeWorldId}:${project.activeWorkId}`} project={project} />
+}
+
+function InspirationPanelContent({ project }: Props) {
   const activeWork = useActiveWork(project)
   const wgStore = useWorldGroupStore()
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['worldview', 'storyCore', 'characters']))
@@ -70,16 +76,24 @@ export default function InspirationPanel({ project }: Props) {
     copilot,
     pendingCandidate,
   } = fusion
-  const preparationModuleKey = isInspirationPreparationMode(mode) ? INSPIRATION_PREPARATION_MODULES[mode] : isMW ? 'inspiration.reverse.multiworld' : 'inspiration.reverse'
+  const preparationModuleKey: GovernedPromptModuleKeyV1 = isInspirationPreparationMode(mode) ? INSPIRATION_PREPARATION_MODULES[mode] : isMW ? 'inspiration.reverse.multiworld' : 'inspiration.reverse'
+  const reversePrompt = useInspirationPromptConfig(project, isInspirationPreparationMode(mode) ? null : isMW ? 'inspiration.reverse.multiworld' : 'inspiration.reverse')
+  const [promptError, setPromptError] = useState('')
   const [promptEdits, setPromptEdits] = useState<Record<string, { parameters: Record<string, unknown>; system: string | null; user: string | null }>>({})
   const promptEdit = promptEdits[preparationModuleKey ?? ''] ?? { parameters: {}, system: null, user: null }
   const updatePromptEdit = (patch: Partial<typeof promptEdit>) => {
     if (preparationModuleKey) setPromptEdits(current => ({ ...current, [preparationModuleKey]: { ...(current[preparationModuleKey] ?? { parameters: {}, system: null, user: null }), ...patch } }))
   }
-  const generateWithPrompt = () => handleGenerate(preparationModuleKey ? {
-    version: 1, moduleKey: preparationModuleKey, parameterValues: promptEdit.parameters,
-    systemOverride: promptEdit.system, userOverride: promptEdit.user,
-  } : undefined)
+  const generateWithPrompt = async () => {
+    setPromptError('')
+    try {
+      const request = reversePrompt.enabled ? await reversePrompt.prepareRequest() : preparationModuleKey ? {
+        version: 1 as const, moduleKey: preparationModuleKey, parameterValues: promptEdit.parameters,
+        systemOverride: promptEdit.system, userOverride: promptEdit.user,
+      } : undefined
+      await handleGenerate(request)
+    } catch (cause) { setPromptError(cause instanceof Error ? cause.message : String(cause)) }
+  }
   const hasOtherPendingCandidates = copilot.pendingCandidates.some(candidate => (
     candidate !== pendingCandidate
       && (candidate.payload.agentId !== 'inspiration' || !['inspiration.reverse', 'inspiration.prepare'].includes(candidate.payload.skillId))
@@ -489,10 +503,20 @@ export default function InspirationPanel({ project }: Props) {
 
         {preparationModuleKey && <PromptRunPanel
           key={preparationModuleKey} moduleKey={preparationModuleKey}
-          parameterValues={promptEdit.parameters} onParamChange={parameters => updatePromptEdit({ parameters })}
-          systemOverride={promptEdit.system} onSystemOverrideChange={system => updatePromptEdit({ system })}
-          userOverride={promptEdit.user} onUserOverrideChange={user => updatePromptEdit({ user })}
+          configuration={reversePrompt.enabled ? reversePrompt.configuration : undefined}
+          parameterValues={reversePrompt.enabled ? reversePrompt.parameters : promptEdit.parameters}
+          onParamChange={parameters => reversePrompt.enabled ? reversePrompt.onParamChange(parameters) : updatePromptEdit({ parameters })}
+          systemOverride={reversePrompt.enabled ? reversePrompt.system : promptEdit.system}
+          onSystemOverrideChange={system => reversePrompt.enabled ? reversePrompt.editText('system', system) : updatePromptEdit({ system })}
+          userOverride={reversePrompt.enabled ? reversePrompt.user : promptEdit.user}
+          onUserOverrideChange={user => reversePrompt.enabled ? reversePrompt.editText('user', user) : updatePromptEdit({ user })}
         />}
+        {reversePrompt.enabled && reversePrompt.unapplied && <p className="text-xs text-warning" role="alert">
+          保留了一份其他模板版本的文字草稿，尚未应用。
+          <button className="ml-2 text-accent" onClick={reversePrompt.reuseDraft}>应用到当前模板</button>
+          <button className="ml-2 text-accent" onClick={reversePrompt.clearDraft}>清除文字草稿</button>
+        </p>}
+        {promptError && <p role="alert" className="text-xs text-warning">{promptError}</p>}
 
         {/* ── 补充说明 ────────────────────────────── */}
         <section>
@@ -516,6 +540,7 @@ export default function InspirationPanel({ project }: Props) {
               || ai.isStreaming
               || copilot.loading
               || inspirationWorkspace.loading
+              || (reversePrompt.enabled && !reversePrompt.ready)
               || copilot.pendingCandidates.length > 0
             }
             className="flex items-center gap-1.5 px-4 py-2 bg-accent text-white rounded-lg text-sm font-medium hover:bg-accent-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
