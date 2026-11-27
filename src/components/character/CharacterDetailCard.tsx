@@ -16,6 +16,7 @@ import CharacterLifecycleAction from './CharacterLifecycleAction'
 import CharacterWorldAffiliations from './CharacterWorldAffiliations'
 import { flushPendingEditsV1, registerPendingDraftFlusherV1 } from '../../lib/authoring/pending-edit-coordinator'
 import { useBeforeUnload } from '../../hooks/useBeforeUnload'
+import { useAuthorRecordSavesV1 } from '../shared/AuthorRecordSaveScope'
 
 interface Props {
   char: Character
@@ -24,7 +25,7 @@ interface Props {
   multiWorld?: boolean
   worldGroups?: WorldGroup[]
   activeWorldGroupId?: number | null
-  onUpdateField: (field: keyof Character, value: string) => void | Promise<void>
+  onUpdateField: (field: keyof Character, value: string, confirmation?: LocalSaveIntentV1) => void | Promise<void | LocalSaveAckV1>
   onPatch: (patch: Partial<Character>, expected?: Partial<Character>, confirmation?: LocalSaveIntentV1) => void | Promise<void | LocalSaveAckV1>
   onReload: () => void
   onDelete: () => void
@@ -42,6 +43,7 @@ export default function CharacterDetailCard({
   onReload,
   onDelete,
 }: Props) {
+  const localSave = useAuthorRecordSavesV1('characters', char)
   const [expanded, setExpanded] = useState(true)
   const [patchError, setPatchError] = useState('')
   const [patchSaving, setPatchSaving] = useState(false)
@@ -114,13 +116,17 @@ export default function CharacterDetailCard({
           </div>
 
           <InlineInput
+            label="角色姓名"
+            localSave={localSave('name')}
             value={char.name}
-            onChange={value => onUpdateField('name', value)}
+            onChange={(value, confirmation) => confirmation ? onUpdateField('name', value, confirmation) : onUpdateField('name', value)}
             className="text-2xl font-bold font-serif text-text-primary"
           />
           <InlineInput
-            value={char.shortDescription || ''}
-            onChange={value => onUpdateField('shortDescription', value)}
+            label="角色一句话简介"
+            localSave={localSave('shortDescription')}
+            value={char.shortDescription ?? ''}
+            onChange={(value, confirmation) => confirmation ? onUpdateField('shortDescription', value, confirmation) : onUpdateField('shortDescription', value)}
             className={`text-sm mt-1 italic ${char.shortDescription ? 'text-text-secondary' : 'text-text-muted'}`}
             prefix={char.shortDescription ? '“' : undefined}
             suffix={char.shortDescription ? '”' : undefined}
