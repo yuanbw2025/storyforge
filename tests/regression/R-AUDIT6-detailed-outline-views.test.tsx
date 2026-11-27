@@ -28,6 +28,11 @@ async function mount(component: ReturnType<typeof createElement>) {
   return host
 }
 
+async function openSource(host: HTMLElement, text: string) {
+  const view = [...host.querySelectorAll('[data-markdown-read-view]')].find(view => view.textContent?.includes(text))!
+  await act(async () => [...view.querySelectorAll('button')].find(button => button.textContent === '编辑源码')!.click())
+}
+
 function setControlValue(control: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement, value: string) {
   const prototype = control instanceof HTMLTextAreaElement
     ? HTMLTextAreaElement.prototype
@@ -75,6 +80,7 @@ describe('AUDIT-6 / HEALTH-4 · 细纲受控视图', () => {
     expect(goal.value).toBe('作者尚未保存的目标')
     await expect(flushPendingEditsV1()).rejects.toThrow('模拟保存失败')
     expect(onUpdate).toHaveBeenCalledOnce()
+    await openSource(host, '保留身份悬念')
     const notes = host.querySelector<HTMLTextAreaElement>('textarea[placeholder="备注 / AI 建议..."]')!
     await act(async () => setControlValue(notes, '随后修改的备注'))
     expect(host.querySelector('[role="alert"]')).not.toBeNull()
@@ -159,9 +165,11 @@ describe('AUDIT-6 / HEALTH-4 · 细纲受控视图', () => {
     await act(async () => setControlValue(host.querySelector<HTMLInputElement>('input[placeholder="场景标题..."]')!, '雨夜闯关'))
     await act(async () => setControlValue(host.querySelector<HTMLSelectElement>('select[aria-label="场景节奏"]')!, 'fast'))
     await act(async () => setControlValue(host.querySelector<HTMLInputElement>('input[placeholder="字数"]')!, '1200'))
+    await openSource(host, '主角在雨夜回城')
     await act(async () => setControlValue(host.querySelector<HTMLTextAreaElement>('textarea[placeholder="一句话场景概要..."]')!, '主角强行入城'))
     await act(async () => setControlValue(host.querySelector<HTMLInputElement>('input[placeholder="📍 地点"]')!, '瓮城'))
     await act(async () => setControlValue(host.querySelector<HTMLInputElement>('input[placeholder="⚔ 核心冲突"]')!, '身份暴露'))
+    await openSource(host, '保留身份悬念')
     await act(async () => setControlValue(host.querySelector<HTMLTextAreaElement>('textarea[placeholder="备注 / AI 建议..."]')!, '加快动作节奏'))
     await act(async () => { await flushPendingEditsV1() })
 

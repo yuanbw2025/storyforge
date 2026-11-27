@@ -74,7 +74,8 @@ it('reads the existing durable candidate safely without changing its exact sourc
 it('keeps the original editor after failed durable synchronization and reads only after the same queue commits a retry', async () => {
   const fixtureValue = await fixture(), id = fixtureValue.candidate.event.id!
   const before = await db.agentEvents.get(id)
-  await click('编辑源码'); const area = await input('# 修订候选\n\n仍为第七年。  ')
+  await click('编辑源码'); expect(document.activeElement).toBe(host.querySelector('textarea'))
+  const area = await input('# 修订候选\n\n仍为第七年。  ')
   const reject = () => { throw Error('candidate-write-failure') }; db.agentEvents.hook('updating', reject)
   try { await act(async () => { await expect(flushPendingEditsV1()).rejects.toThrow('candidate-write-failure') }) }
   finally { db.agentEvents.hook('updating').unsubscribe(reject) }
