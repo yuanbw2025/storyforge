@@ -6,7 +6,7 @@ import { execFileSync } from 'node:child_process'
 import assert from 'node:assert/strict'
 import runtimePolicy from '../distribution/desktop-runtime.cjs'
 
-const [oldPath, nextPath, previousVersion] = process.argv.slice(2)
+const [oldPath, nextPath, previousVersion, previousSource, currentSource, candidateDirectory = '.'] = process.argv.slice(2)
 assert.ok(oldPath && nextPath && /^\d+\.\d+\.\d+$/.test(previousVersion ?? ''), 'Pass the old and new installer paths and the expected previous x.y.z version')
 const oldPackage = resolve(oldPath)
 const nextPackage = resolve(nextPath)
@@ -15,11 +15,16 @@ const installation = join(root, 'installed')
 const profile = join(root, 'profile')
 const fixture = await readFile('release/test-fixtures/native-upgrade.js', 'utf8')
 const previousFixture = await readFile('release/test-fixtures/native-upgrade-old.js', 'utf8')
-const currentVersion = JSON.parse(await readFile('package.json', 'utf8')).version
-const executablePath = process.platform === 'win32' ? join(installation, 'StoryForge.exe') : join(installation, 'StoryForge.app/Contents/MacOS/StoryForge')
+const currentVersion = JSON.parse(await readFile(join(candidateDirectory, 'package.json'), 'utf8')).version
+if (process.platform === 'linux') {
+  assert.match(previousSource ?? '', /^[a-f0-9]{40}$/, 'Arch upgrade requires the exact old fixture source')
+  assert.match(currentSource ?? '', /^[a-f0-9]{40}$/, 'Arch upgrade requires the exact candidate source')
+}
+const executablePath = process.platform === 'linux' ? '/usr/bin/storyforge' : process.platform === 'win32' ? join(installation, 'StoryForge.exe') : join(installation, 'StoryForge.app/Contents/MacOS/StoryForge')
 let app
 async function install(path) {
-  if (process.platform === 'win32') execFileSync(path, ['/S', `/D=${installation}`], { timeout: 180000 })
+  if (process.platform === 'linux') execFileSync('sudo', ['pacman', '-U', '--noconfirm', path], { timeout: 180000 })
+  else if (process.platform === 'win32') execFileSync(path, ['/S', `/D=${installation}`], { timeout: 180000 })
   else if (path.endsWith('.app')) execFileSync('/usr/bin/ditto', [path, join(installation, 'StoryForge.app')], { timeout: 60000 })
   else {
     const mount = join(root, 'mount')
@@ -31,7 +36,7 @@ async function install(path) {
   }
 }
 async function launch(source, expectedVersion) {
-  app = await electron.launch({ executablePath, args: [], env: { ...process.env, STORYFORGE_TEST_USER_DATA: profile }, timeout: 60000 })
+  app = await electron.launch({ executablePath, args: [], chromiumSandbox: process.platform === 'linux', env: { ...process.env, STORYFORGE_TEST_USER_DATA: profile }, timeout: 60000 })
   const page = await app.firstWindow()
   await page.waitForSelector('#root main, #root button', { timeout: 60000 })
   const consent = page.getByRole('button', { name: '同意协议并继续', exact: true })
@@ -41,10 +46,13 @@ async function launch(source, expectedVersion) {
   }
   assert.equal(await app.evaluate(({ app }) => app.getVersion()), expectedVersion)
   if (expectedVersion === currentVersion) {
-    console.log(JSON.stringify({ check: 'upgraded-desktop-runtime', ...await runtimePolicy.verifyRunningRuntime(app) }))
+    console.log(JSON.stringify({ check: 'upgraded-desktop-runtime', ...await runtimePolicy.verifyRunningRuntime(app, { projectDir: candidateDirectory }) }))
   }
   await page.evaluate(source => { (0, eval)(source) }, source)
   assert.equal(await page.evaluate(() => window.__nativeUpgradeSource.version), expectedVersion)
+  const expectedSource = expectedVersion === currentVersion ? currentSource : previousSource
+  if (expectedSource) assert.equal(await page.evaluate(() => window.__nativeUpgradeSource.sourceCommit), expectedSource)
+  assert.equal(await app.evaluate(({ app }) => app.getPath('userData')), profile)
   return page
 }
 async function close() {
@@ -74,7 +82,7 @@ try {
   page = await launch(fixture, currentVersion)
   const restarted = await page.evaluate(() => window.__nativeUpgrade.verify(false, undefined, true))
   assert.equal(restarted.restoredId, result.restoredId)
-  console.log(JSON.stringify({ result: 'passed', oldVersion: previousVersion, newVersion: currentVersion, platform: process.platform, checks: ['version-matched old producer and old-package restart before replacement', 'actual installer replacement', 'production workspace export unchanged after registered legacy conversion', 'OPFS file retained', 'invalid backup rejected without writes', 'production backup restored to new work', 'restored work survived process restart', 'workspace UI opened'] }))
+  console.log(JSON.stringify({ result: 'passed', oldVersion: previousVersion, newVersion: currentVersion, previousSource, currentSource, platform: process.platform, checks: ['version-matched old producer and old-package restart before replacement', 'actual installer replacement', 'production workspace export unchanged after registered legacy conversion', 'OPFS file retained', 'invalid backup rejected without writes', 'production backup restored to new work', 'restored work survived process restart', 'workspace UI opened'] }))
 } finally {
   if (app) await app.evaluate(({ app }) => app.exit(0)).catch(() => {})
   await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 500 })

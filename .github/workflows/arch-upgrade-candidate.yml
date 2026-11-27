@@ -1,0 +1,108 @@
+name: Verify immutable Arch release candidate upgrade
+on:
+  workflow_dispatch:
+    inputs:
+      candidate_run:
+        description: 'Formal release run that produced client-arch-x64'
+        required: true
+        type: string
+      candidate_source:
+        description: 'Exact 40-character source SHA of that formal release'
+        required: true
+        type: string
+  workflow_call:
+    inputs:
+      candidate_run:
+        required: true
+        type: string
+      candidate_source:
+        required: true
+        type: string
+permissions:
+  contents: read
+  actions: read
+jobs:
+  upgrade:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v7
+      - name: Verify immutable candidate run and record source
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CANDIDATE_RUN: ${{ inputs.candidate_run }}
+          CANDIDATE_SOURCE: ${{ inputs.candidate_source }}
+        run: |
+          mkdir -p release/arch
+          python3 - <<'PYTHON'
+          import os,re
+          assert re.fullmatch(r'[1-9][0-9]+',os.environ['CANDIDATE_RUN'])
+          assert re.fullmatch(r'[a-f0-9]{40}',os.environ['CANDIDATE_SOURCE'])
+          PYTHON
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$CANDIDATE_RUN" > release/arch/candidate-run.json
+          python3 - <<'PYTHON'
+          import json,os
+          d=json.load(open('release/arch/candidate-run.json'))
+          assert d['head_sha']==os.environ['CANDIDATE_SOURCE']
+          assert d['path']=='.github/workflows/release.yml'
+          assert d['repository']['full_name']==os.environ['GITHUB_REPOSITORY']
+          PYTHON
+          git rev-parse HEAD > release/arch/verification-source.txt
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.candidate_source }}
+          path: candidate-client
+      - uses: actions/checkout@v7
+        with:
+          ref: 41a6e8652499e0805f44798fbd54ca39d3c51234
+          path: previous-client
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm ci
+        working-directory: candidate-client
+      - run: npm ci
+        working-directory: previous-client
+      - name: Build each fixture from its own exact source
+        run: |
+          node scripts/desktop/build-upgrade-fixture.mjs candidate-client release/test-fixtures/native-upgrade.js
+          node scripts/desktop/build-upgrade-fixture.mjs previous-client release/test-fixtures/native-upgrade-old.js 4.0.8
+          sha256sum release/test-fixtures/native-upgrade*.js > release/arch/fixture.sha256
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.candidate_run }}
+          name: client-arch-x64
+          path: release/arch/
+      - name: Download and verify the actual previous official package
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p release/arch/previous
+          gh release download v4.0.8 --repo "$GITHUB_REPOSITORY" --pattern 'StoryForge-4.0.8-arch-x64.pkg.tar.zst' --dir release/arch/previous
+          echo 'c6a52a9381cc1da76527086f10253058ac8963dc616cf86fb054fe2504fb8c97  release/arch/previous/StoryForge-4.0.8-arch-x64.pkg.tar.zst' | sha256sum --check
+      - name: Replace the previous installed package and verify production data
+        env:
+          STORYFORGE_CURRENT_SOURCE: ${{ inputs.candidate_source }}
+        run: |
+          docker run --rm --cap-add=SYS_ADMIN --security-opt seccomp=unconfined --shm-size=2g \
+            -e STORYFORGE_PREVIOUS_VERSION=4.0.8 \
+            -e STORYFORGE_PREVIOUS_SOURCE=41a6e8652499e0805f44798fbd54ca39d3c51234 \
+            -e STORYFORGE_CURRENT_SOURCE \
+            -e STORYFORGE_CANDIDATE_DIRECTORY=candidate-client \
+            -v "$PWD:/workspace" -w /workspace archlinux:base-devel \
+            bash scripts/distribution/arch/test-upgrade.sh
+      - name: Preserve exact candidate upgrade evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: immutable-arch-upgrade-proof
+          path: |
+            release/arch/candidate-run.json
+            release/arch/verification-source.txt
+            release/arch/fixture.sha256
+            release/arch/upgrade-*
+          if-no-files-found: error
+          retention-days: 14
