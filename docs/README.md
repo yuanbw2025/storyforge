@@ -11,3 +11,8 @@
 ## 文字开放世界阶段交接
 
 - [PR134 阶段总结与接续入口（2026-10-26）](./audits/TEXT-OPEN-WORLD-PR134-STAGE-SUMMARY-20261026.md)：已合并能力、盐脊真实通关、剩余问题、代码与证据定位、下一分支接续方式。
+
+## 写作学院建设规划
+
+- [写作学院首版施工方案](./roadmap/WRITING-ACADEMY-IMPLEMENTATION-PLAN.md)：逐项施工入口，包含页面和内容契约、资料任务、工作包依赖与验收；当前为方案交付。
+- [写作学院建设方案](./roadmap/WRITING-ACADEMY-CONSTRUCTION-PLAN.md)：定位、资料搜集与编辑、内容分类、双语教学、页面结构和长期方向。

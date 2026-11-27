@@ -84,6 +84,8 @@ const activeDocs = [
   'docs/roadmap/README.md',
   'docs/roadmap/CHARACTER-CHAT-DEVELOPMENT-PLAN.md',
   'docs/roadmap/COMMUNITY-WORKS-LIBRARY-PLAN.md',
+  'docs/roadmap/WRITING-ACADEMY-CONSTRUCTION-PLAN.md',
+  'docs/roadmap/WRITING-ACADEMY-IMPLEMENTATION-PLAN.md',
   'docs/roadmap/CODEX-PROVIDER.md',
   'docs/roadmap/PLUGIN-WORKSHOP-V1.md',
   'docs/guides/PLUGIN-DEVELOPMENT.md',

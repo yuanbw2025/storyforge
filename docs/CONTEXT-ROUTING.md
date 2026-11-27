@@ -38,6 +38,7 @@
 | PR、合并、发布、交接 | branch/commit/PR/check 状态 | `COLLAB-WORKFLOW.md` 相关段、diff、验证证据 | 协作历史全文 |
 | 并行产品开发 | 产品 ID、共同基线、共享热点、各自 owner | 总纲 §12.1、`COLLAB-WORKFLOW.md` §2.1、产品契约和受影响注册表；涉及世界语义时读 `products/WORLD-ENGINE.md` §18、§20 | 其它产品内部实现；禁止多分支各改一套共享协议 |
 | 项目知识库、官网说明、用户更新日志或反馈入口 | 用户可见变化、产品 ID、当前入口与能力状态 | `website-docs/AGENTS.md`、对应 `website-docs/` 页面、`website-docs/updates/changelog.md`；反馈任务再读 `website-docs/feedback/`、`.github/ISSUE_TEMPLATE/` 和相关表单实现 | 内部工程文档正文、WPS 知识库；不得把分支内容误报为已上线 |
+| 写作学院、写作教学资料与模板网站 | 资料来源、研究卡、教程/案例/模板、分类、双语与学院入口 | 施工先读 `roadmap/WRITING-ACADEMY-IMPLEMENTATION-PLAN.md` 对应工作包；方向与研究方法读 `roadmap/WRITING-ACADEMY-CONSTRUCTION-PLAN.md`；涉及社区投稿再读其专项计划；客户端接入按三注册表路由 | 不将学院教学内容、软件使用说明和社区投稿自动混用；方案不代表网站已建成 |
 | 总纲协同、本地 API 配置与调用规则 | 治理提交 SHA、配置根目录、profile ID、用途与预算 | `COLLAB-WORKFLOW.md` §2.2、`LOCAL-API-CONFIG.md`；本机索引按需读取，真实值不回显 | 全量凭据、其他服务配置、浏览器作者密钥 |
 | 历史追溯 | 任务 ID、commit、被删文件名 | `git log` / `git blame`；必要时 WPS 已过时归档 | 把旧文档重新当现行权威 |
 | 文档或宪法冲突 | 冲突条款和代码事实 | 总纲、`DOCUMENT-AUTHORITY.md`、CLAUDE 对应节和检查器 | 无关产品材料 |
