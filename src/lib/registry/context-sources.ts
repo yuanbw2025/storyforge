@@ -52,7 +52,6 @@ import { readNarrativeCanonContextV1 } from '../world-engine/narrative-domain-co
 import { readStorylineProgressContext } from '../storyline/storyline-progress'
 import { readCodexExtractionBaselineContextV1 } from '../codex/extraction'
 import { readHistoryAgentBaselineContextV1 } from '../history/agent-baseline'
-import { readReferenceDerivedBaselineContextV1 } from '../reference-analysis/derived-agent-baseline'
 import {
   buildLongTermConsistencyDossierV1,
   formatLongTermConsistencyDossierV1,
@@ -3431,11 +3430,15 @@ export const CONTEXT_SOURCES: ContextSource[] = [
       (input.referenceDerivedMode === 'summary' || input.referenceDerivedMode === 'characters')
       && Number.isInteger(input.referenceAnalysisRunId)
     ),
-    read: input => readReferenceDerivedBaselineContextV1({
-      scope: input.scope!,
-      mode: input.referenceDerivedMode!,
-      runId: input.referenceAnalysisRunId!,
-    }),
+    read: async input => {
+      const loading = import('../reference-analysis/derived-agent-baseline')
+      const { readReferenceDerivedBaselineContextV1 } = await (Dexie.currentTransaction ? Dexie.waitFor(loading) : loading)
+      return readReferenceDerivedBaselineContextV1({
+        scope: input.scope!,
+        mode: input.referenceDerivedMode!,
+        runId: input.referenceAnalysisRunId!,
+      })
+    },
   },
   {
     key: 'styleLearningBaseline',
