@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AGENT_READ_TOOLS, executeAgentTool } from '../../src/lib/agent/tool-registry'
 import { db } from '../../src/lib/db/schema'
 import { CONTEXT_SOURCE_BY_KEY } from '../../src/lib/registry/context-sources'
@@ -95,7 +95,7 @@ describe('R-AGENT1 · 只读 Tool Registry', () => {
     await db.delete()
     await db.open()
   })
-  afterEach(() => db.close())
+  afterEach(() => { db.close(); vi.restoreAllMocks() })
 
   it('注册完整的只读工具，参数拒绝额外字段，所有读取源均已登记', () => {
     expect(AGENT_READ_TOOLS.map(tool => tool.name)).toEqual(EXPECTED_TOOLS)
@@ -211,16 +211,27 @@ describe('R-AGENT1 · 只读 Tool Registry', () => {
     expect(result.content).not.toContain('章节10')
   })
 
-  it('超长单章按工具总预算显式截断，不让 L0 绕过预算', async () => {
+  it('未提供模型容量时完整读取超长单章，旧工具配额不再截断原文', async () => {
     const projectId = await addProject('长章', false)
     const nodeId = await addOutline(projectId, null, '长章节点', 0)
-    const chapterId = await addChapter(projectId, nodeId, '长章', '汉'.repeat(60_000))
+    const content = '汉'.repeat(60_000) + '章节末段必须保留。'
+    const chapterId = await addChapter(projectId, nodeId, '长章', content)
+    const original = await db.chapters.get(chapterId)
+    const fetcher = vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('Isolated read must not call a model'))
 
     const result = await executeAgentTool('read_chapter', { projectId }, { chapterId })
     expect(result.ok).toBe(true)
-    expect(result.content).toContain('该上下文源已按预算截断')
-    expect(result.meta.totalInputTokens).toBeLessThanOrEqual(result.meta.inputBudget)
-    expect(result.meta.inputBudget).toBe(24_000)
+    expect(result.content).toBe(content)
+    expect(result.meta.trimmed).toEqual([])
+    expect(result.meta.totalInputTokens).toBeGreaterThan(24_000)
+    expect(Number.isSafeInteger(result.meta.inputBudget)).toBe(true)
+    expect(result.meta.inputBudget).toBe(result.meta.totalInputTokens)
+    expect(result.meta.sourceEvidence).toEqual([expect.objectContaining({
+      key: 'chapterContent', status: 'included', delivery: 'full', sourceHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+      originalCharacters: content.length, inputCharacters: content.length,
+    })])
+    expect(await db.chapters.get(chapterId)).toEqual(original)
+    expect(fetcher).not.toHaveBeenCalled()
   })
 
   it('执行全部只读工具不会改变任何 PROJECT_TABLES 行数', async () => {
