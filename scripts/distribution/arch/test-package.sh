@@ -38,3 +38,6 @@ timeout 300 runuser -u storyforge -- dbus-run-session -- xvfb-run -a node script
 pacman -Q > release/arch/test-environment.txt
 sha256sum "$package" > release/arch/package.sha256
 printf 'Arch pacman install, native launch, agreement, restart, reinstall, removal and data preservation passed.\n' > release/arch/test-result.txt
+
+# Same-version reinstall above does not replace actual previous-version migration.
+bash scripts/distribution/arch/test-upgrade.sh

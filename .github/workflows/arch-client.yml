@@ -1,11 +1,19 @@
 name: Build and test Arch Linux client
 on:
   workflow_dispatch:
+    inputs:
+      candidate_run:
+        description: 'Optional immutable formal run for supplemental upgrade verification'
+        type: string
+      candidate_source:
+        description: 'Exact source SHA when candidate_run is set'
+        type: string
   workflow_call:
 permissions:
   contents: read
 jobs:
   arch:
+    if: ${{ !inputs.candidate_run }}
     runs-on: ubuntu-latest
     timeout-minutes: 50
     env:
@@ -24,10 +32,27 @@ jobs:
       - run: npm ci
       - run: node --test scripts/desktop/*updater.test.mjs
       - run: npm run build:linux
-      - run: node scripts/desktop/build-upgrade-fixture.mjs
+      - uses: actions/checkout@v7
+        with:
+          ref: 41a6e8652499e0805f44798fbd54ca39d3c51234
+          path: previous-client
+      - run: npm ci
+        working-directory: previous-client
+      - name: Prepare exact previous producer and public Arch package
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          node scripts/desktop/build-upgrade-fixture.mjs
+          node scripts/desktop/build-upgrade-fixture.mjs previous-client release/test-fixtures/native-upgrade-old.js 4.0.8
+          mkdir -p release/arch/previous
+          gh release download v4.0.8 --repo "$GITHUB_REPOSITORY" --pattern 'StoryForge-4.0.8-arch-x64.pkg.tar.zst' --dir release/arch/previous
+          echo 'c6a52a9381cc1da76527086f10253058ac8963dc616cf86fb054fe2504fb8c97  release/arch/previous/StoryForge-4.0.8-arch-x64.pkg.tar.zst' | sha256sum --check
       - name: Build package and exercise the installed desktop in Arch Linux
         run: |
           docker run --rm --cap-add=SYS_ADMIN --security-opt seccomp=unconfined --shm-size=2g \
+            -e STORYFORGE_PREVIOUS_VERSION=4.0.8 \
+            -e STORYFORGE_PREVIOUS_SOURCE=41a6e8652499e0805f44798fbd54ca39d3c51234 \
+            -e STORYFORGE_CURRENT_SOURCE="$(git rev-parse HEAD)" \
             -v "$PWD:/workspace" -w /workspace archlinux:base-devel \
             bash scripts/distribution/arch/test-package.sh
       - name: Preserve Arch package verification
@@ -39,6 +64,7 @@ jobs:
             release/arch/test-environment.txt
             release/arch/test-result.txt
             release/arch/package.sha256
+            release/arch/upgrade-*
             release/native-smoke/
           if-no-files-found: ignore
           retention-days: 14
@@ -48,3 +74,13 @@ jobs:
           path: release/arch/*.pkg.tar.zst
           if-no-files-found: error
           retention-days: 14
+
+  candidate-upgrade:
+    if: ${{ inputs.candidate_run != '' }}
+    permissions:
+      contents: read
+      actions: read
+    uses: ./.github/workflows/arch-upgrade-candidate.yml
+    with:
+      candidate_run: ${{ inputs.candidate_run }}
+      candidate_source: ${{ inputs.candidate_source }}
