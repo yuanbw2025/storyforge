@@ -33,6 +33,38 @@ async function flush(page: Page) {
   })
 }
 const pane = (page: Page) => page.locator('.lf-world-field:visible').first()
+test('050 StoryCore native first-create and failed retry confirm exact registered Work fields after reload', async ({ page }) => {
+  const scope = await seed(page); await page.goto(`./workspace/${scope.projectId}?module=story-design`)
+  const state = page.locator('[data-local-save-status]:visible')
+  await expect(state).toHaveAttribute('data-local-save-status', 'unconfirmed')
+  const enter = async () => {
+    await page.getByRole('button', { name: '编辑源码', exact: true }).or(page.locator('div.cursor-text:visible')).first().click()
+    return page.locator('textarea:visible').first()
+  }
+  const area = await enter(); await area.fill('# 作者原始故事\n\n完整中文与尾空白🌊。  ')
+  const logline = await area.inputValue(); await flush(page)
+  await expect(state).toHaveAttribute('data-local-save-status', 'saved')
+  await page.getByLabel('故事字段').getByRole('button').filter({ has: page.getByText('故事主题', { exact: true }) }).click()
+  await page.evaluate(async () => {
+    const { db } = await (new Function('return import("/storyforge/src/lib/db/schema.ts")'))()
+    const fault = () => { throw new DOMException('isolated story quota failure', 'QuotaExceededError') }
+    db.storyCores.hook('updating', fault)
+    Object.assign(window, { clearStory050Fault: () => db.storyCores.hook('updating').unsubscribe(fault) })
+  })
+  const themeArea = await enter(); await themeArea.fill('主题原文不改写，失败不丢。  ')
+  await expect(flush(page)).rejects.toThrow('isolated story quota failure')
+  await expect(state).toHaveAttribute('data-local-save-status', 'failed'); await expect(themeArea).toHaveValue('主题原文不改写，失败不丢。  ')
+  await page.evaluate(() => (window as unknown as { clearStory050Fault: () => void }).clearStory050Fault())
+  await page.getByRole('button', { name: '重试', exact: true }).click()
+  await expect(state).toHaveAttribute('data-local-save-status', 'saved')
+  await page.reload(); await expect(state).toHaveAttribute('data-local-save-status', 'saved')
+  const rows = await page.evaluate(async scope => {
+    const { readOwnedRows } = await (new Function('return import("/storyforge/src/lib/workspace/scope.ts")'))()
+    return readOwnedRows(scope, 'storyCores', { owner: 'work' })
+  }, scope)
+  expect(rows).toHaveLength(1)
+  expect(rows[0]).toMatchObject({ logline, theme: '主题原文不改写，失败不丢。  ', workId: scope.workId })
+})
 test('050 Work info native saved feedback follows IME, actual DB failure, retry, reload and reopened tab', async ({ page, context }) => {
   const scope = await seed(page), url = `./workspace/${scope.projectId}?module=info`
   await page.goto(url)

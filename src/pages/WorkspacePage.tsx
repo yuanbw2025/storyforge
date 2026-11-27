@@ -472,6 +472,7 @@ export default function WorkspacePage({ embeddedProjectId, embeddedModule, embed
         return <StoryCorePanel
           resizableInputs={resizableInputs}
           project={project}
+          confirmedLocalSaves={isLongform && activeWork.id === project.activeWorkId && activeWork.projectId === project.id}
           initialStoryCoreId={impactHandoff?.targetModule === 'story-design' && impactHandoffTarget?.table === 'storyCores'
             ? impactHandoffTarget.moduleRecordId
             : null}
