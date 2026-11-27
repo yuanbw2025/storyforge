@@ -45,7 +45,7 @@ export type LocalSaveHistoryIdentityV1 = WorkspaceScope & { worldGroupId: number
   | { table: 'historicalTimelineEvents' | 'historicalKeywords'; field: 'description' | 'conceptNote'; recordId: number }
 )
 export interface LocalSaveRecordIdentityV1 extends WorkspaceScope {
-  table: 'characters' | 'outlineNodes' | 'detailedOutlines' | 'storyArcs' | 'references' | 'foreshadows'
+  table: 'characters' | 'outlineNodes' | 'detailedOutlines' | 'storyArcs' | 'references' | 'foreshadows' | 'powerSystems'
   field: string
   recordId: number
   worldGroupId: number | null

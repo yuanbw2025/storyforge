@@ -14,7 +14,7 @@ export interface RecordTextRowV1 {
   id?: number; projectId: number; worldId?: number; workId?: number; worldGroupId?: number | null
   ragDocumentId?: string; updatedAt: number
 }
-const prefix = { characters: 'character', outlineNodes: 'outline-node', detailedOutlines: 'detailed-outline', storyArcs: 'story-arc', references: 'reference', foreshadows: 'foreshadow' } as const
+const prefix = { characters: 'character', outlineNodes: 'outline-node', detailedOutlines: 'detailed-outline', storyArcs: 'story-arc', references: 'reference', foreshadows: 'foreshadow', powerSystems: 'power-system' } as const
 const sceneTexts = ['title', 'summary', 'location', 'conflict', 'notes', ...DETAILED_SCENE_TASK_FIELDS.map(({ key }) => key)]
 const stageTexts = ['title', 'description', 'turningPoint']
 export const recordTextWitnessKeyV1 = (field: string, entryId?: string) => entryId === undefined ? field : JSON.stringify([field, entryId])
@@ -39,7 +39,7 @@ function addressedValue(row: RecordTextRowV1, identity: LocalSaveRecordIdentityV
 export function recordAuthorTextFieldsV1(table: RecordTextTableV1) {
   return (FIELD_BY_TARGET.get(table) ?? []).filter(spec => !spec.adoptionPolicy && !spec.field.startsWith('statusProducer')
     && (table !== 'references' || spec.field === 'note')
-    && ['string', 'longtext'].includes(spec.type)).map(spec => spec.field)
+    && (['string', 'longtext'].includes(spec.type) || (table === 'powerSystems' && spec.textReplacement?.codec === 'text-or-json'))).map(spec => spec.field)
 }
 export function recordTextSaveRequestV1(table: RecordTextTableV1, id: number, patch: Record<string, unknown>,
   scope: WorkspaceScope | undefined, intent: LocalSaveIntentV1) {
@@ -54,7 +54,7 @@ export function recordTextSaveRequestV1(table: RecordTextTableV1, id: number, pa
 async function buildWitness(row: RecordTextRowV1 | undefined, identity: LocalSaveRecordIdentityV1,
   source: LocalSaveWitnessV1['source'], selected?: object): Promise<LocalSaveWitnessV1> {
   if (!row || row.id !== identity.recordId || row.projectId !== identity.projectId
-    || (identity.table === 'characters' ? row.worldId !== identity.worldId : row.workId !== identity.workId)
+    || (['characters', 'powerSystems'].includes(identity.table) ? row.worldId !== identity.worldId : row.workId !== identity.workId)
     || (identity.table !== 'characters' && (row.worldGroupId ?? null) !== identity.worldGroupId)
     || !validAddress(identity) || !isPortableResourceUidV1(row.ragDocumentId, prefix[identity.table]))
     throw new Error('文字记录已删除、归属或身份变化，不能确认本机保存。')
