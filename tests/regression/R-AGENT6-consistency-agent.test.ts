@@ -247,7 +247,8 @@ describe('AGENT-1 27.2c · 一致性 Agent', () => {
       call: async () => { calls++; return JSON.stringify({ findings: [], cognitionReferences: [], lifecycleReferences: [] }) },
     })
     expect(candidate.context.inputBudget).toBeGreaterThan(16_000)
-    expect(candidate.context.inputBudget).toBe(128_000 - config.maxTokens)
+    // Automatic output mode does not reserve the unused legacy application cap.
+    expect(candidate.context.inputBudget).toBe(modelCapacity.totalWindow)
     expect(calls).toBe(1)
     expect(fetcher).toHaveBeenCalledTimes(1)
   })

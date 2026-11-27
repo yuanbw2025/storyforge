@@ -469,9 +469,11 @@ describe('TOW-G5-03 · creator production preflight', () => {
     })
     expect(oversized.ready).toBe(false)
     expect(oversized.blockers.join('')).toContain('模型温度配置无效')
-    expect(oversized.blockers.join('')).toContain('模型输出上限配置无效')
-    // Legacy manual windows no longer admit or reject a request. The real
-    // temperature/output guard and endpoint checks above remain mandatory.
+    // The formal resolver uses automatic output; a legacy manual cap/window
+    // neither admits nor rejects the live request. Frozen receipt validation
+    // remains strict and is exercised below rather than deleting its guard.
+    expect(oversized.providerBinding.maxTokens).toBe(0)
+    expect(oversized.blockers.join('')).not.toContain('模型输出上限配置无效')
     expect(oversized.blockers.join('')).not.toContain('模型上下文窗口配置无效')
     expect(oversized.providerBinding.contextWindow).toBeNull()
     await expect(verifyTextOpenWorldCreatorProductionPreflightV1(oversized, {
@@ -492,6 +494,12 @@ describe('TOW-G5-03 · creator production preflight', () => {
       brief: confirmedBrief,
       ...runtime(supportedBoundary),
     })).resolves.toEqual(boundary)
+    const invalidFrozenOutput = structuredClone(boundary)
+    invalidFrozenOutput.providerBinding.maxTokens = 65_537
+    await expect(verifyTextOpenWorldCreatorProductionPreflightV1(invalidFrozenOutput, {
+      brief: confirmedBrief,
+      ...runtime(supportedBoundary),
+    })).rejects.toThrow('providerBinding.maxTokens 必须是有界有限数值')
   })
 
   it('Key 被误贴进 hostname、path、query、model 或人工报价说明时绝不进入快照', async () => {

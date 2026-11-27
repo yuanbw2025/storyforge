@@ -26,6 +26,8 @@ import {
 } from '../helpers/sfqa050-provider-dispatch-binding'
 
 const scope = { projectId: 7, category: 'product-production', requirementKey: 'text.runtime-package' }
+// The synthetic custom connection declares no verified output cap. Keep the
+// original provider/model/temperature identity, without inventing a wire limit.
 const messages = [{ role: 'user' as const, content: '只读取已确认的受控制作输入。' }]
 
 describe('SFQA050 · original frozen provider reaches the real dispatch', () => {
@@ -62,7 +64,7 @@ describe('SFQA050 · original frozen provider reaches the real dispatch', () => 
     })
     expect(requests).toEqual([{
       url: `${SFQA050_CONFIG_A.baseUrl}/chat/completions`, model: SFQA050_CONFIG_A.model,
-      temperature: SFQA050_CONFIG_A.temperature, maximumOutputTokens: 256,
+      temperature: SFQA050_CONFIG_A.temperature, maximumOutputTokens: undefined,
     }])
     expect(response.bindingReceipt.capabilityHash).toBe(frozen.receipt.capabilityHash)
     expect(response.bindingReceipt.model).toBe(requests[0]!.model)
@@ -80,7 +82,7 @@ describe('SFQA050 · original frozen provider reaches the real dispatch', () => 
     })
     expect(requests).toEqual([{
       url: `${SFQA050_CONFIG_A.baseUrl}/chat/completions`, model: SFQA050_CONFIG_A.model,
-      temperature: SFQA050_CONFIG_A.temperature, maximumOutputTokens: 256,
+      temperature: SFQA050_CONFIG_A.temperature, maximumOutputTokens: undefined,
     }])
     expect(response.bindingReceipt.capabilityHash).toBe(frozen.receipt.capabilityHash)
     expect(response.bindingReceipt.model).toBe(requests[0]!.model)
@@ -137,7 +139,7 @@ describe('SFQA050 · original frozen provider reaches the real dispatch', () => 
     expect(response.bindingReceipt).toMatchObject({ capabilityHash: frozen.receipt.capabilityHash,
       provider: SFQA050_CONFIG_A.provider, model: SFQA050_CONFIG_A.model, endpointOrigin: 'https://sfqa050-a.invalid' })
     expect(requests).toEqual([{ url: `${SFQA050_CONFIG_A.baseUrl}/chat/completions`, model: response.bindingReceipt.model,
-      temperature: SFQA050_CONFIG_A.temperature, maximumOutputTokens: 256 }])
+      temperature: SFQA050_CONFIG_A.temperature, maximumOutputTokens: undefined }])
     expect(result.usage).toMatchObject({ inputTokens: 10, outputTokens: 5 })
   })
 
@@ -154,7 +156,7 @@ describe('SFQA050 · original frozen provider reaches the real dispatch', () => 
     expect(config.model).toBe(SFQA050_CONFIG_B.model)
     expect(response.bindingReceipt.capabilityHash).toBe(frozen.receipt.capabilityHash)
     expect(requests).toEqual([{ url: `${SFQA050_CONFIG_A.baseUrl}/chat/completions`, model: SFQA050_CONFIG_A.model,
-      temperature: SFQA050_CONFIG_A.temperature, maximumOutputTokens: 256 }])
+      temperature: SFQA050_CONFIG_A.temperature, maximumOutputTokens: undefined }])
   })
 
   it.each(['preflight', 'review'] as const)('vision %s permits unchanged A and retains the original image inputs and usage', async kind => {
