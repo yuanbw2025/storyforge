@@ -21,9 +21,14 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261127-inspiration059-input-v2.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261127-cover035-runtime-v1.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261127-inspiration059-input-v2.json",
+        "sha256": "c0e0009453ba660f945f4a34b9edff1af216fb5179335d03d19c4c0eb0bc5592",
+        "note": "Preserve the inspiration059 receipt before integrating the original cover035 runtime. Remeasure registered cover context/entry types without changing deterministic narrative-world observations or known gaps."
+      },
       {
         "path": "tests/acceptance/narrative-world/baseline-20261127-inspiration059-input-v1.json",
         "sha256": "c67d502a660318297a11f6ac2d50c5f30c51d7ffd5736e86f9a3d99992c67358",

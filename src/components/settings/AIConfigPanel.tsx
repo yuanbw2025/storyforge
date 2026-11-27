@@ -19,6 +19,7 @@ import AIConfigPresetSection from './AIConfigPresetSection'
 import AITaskRoutingSection from './AITaskRoutingSection'
 import AIConnectionTestSection from './AIConnectionTestSection'
 import ThemeSelector from './ThemeSelector'
+import WorkCoverConnection from './WorkCoverConnection'
 
 export const PROVIDER_OPTIONS: { value: AIProvider; label: string; cors: boolean; hint: string }[] = [
   { value: 'codex', label: 'Codex（本机 ChatGPT 登录）', cors: true, hint: '无需 API Key；复用本机 Codex 登录，需要 StoryForge 本地服务运行。' },
@@ -215,6 +216,8 @@ function AIConfigPanelFull({ showDeveloperTools }: { showDeveloperTools: boolean
           onRenamePreset={(id, name) => { void handleRenamePreset(id, name) }}
           onDeletePreset={(id, name) => { void handleDeletePreset(id, name) }}
         />
+
+        <WorkCoverConnection />
 
         <AITaskRoutingSection
           presets={presets}
