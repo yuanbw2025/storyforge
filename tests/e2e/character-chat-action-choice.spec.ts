@@ -30,7 +30,10 @@ async function provider(page: Page, malformedReview = false, strictChoice = fals
       expect(validate(JSON.parse(chatActionResponseFixture(route, choice)))).toBe(true)
       expect(validate(JSON.parse(chatActionResponseFixture(route, {...choice, directions: [{...choice.directions[0], kind: 'own-action'}]})))).toBe(false)
     }
-    expect(request.max_tokens).toBeUndefined()
+    // The official Agnes model publishes a finite service output capacity;
+    // the unknown custom fixture has no verified wire output limit.
+    if (new URL(route.request().url()).hostname === 'apihub.agnes-ai.com') expect(request.max_tokens).toBe(65_500)
+    else expect(request.max_tokens).toBeUndefined()
     if (step !== 'review') expect(prompt).not.toContain('掌柜把铜印留在柜台下')
     if (step === 'expression') expect(prompt).toContain(privateDraft)
     const output = step === 'choice' ? choice : step === 'expression' ? action
@@ -198,7 +201,7 @@ test('a malformed review after continuation never displays expression, choice or
   await privateContentAbsent(page)
 })
 
-for (const failure of ['over-budget', 'missing-usage'] as const) test(`Codex transport ${failure} retains the response and stops without exposing or retrying the proposal`, async ({page}) => {
+for (const failure of ['service-usage', 'invalid-usage', 'missing-usage'] as const) test(`Codex transport ${failure} retains exact usage and never silently resends`, async ({page}) => {
   const requests: string[] = [], jobs = new Map<string, unknown>()
   await page.route('**/storyforge/local-codex/v1/**', async route => {
     const request = route.request(), path = new URL(request.url()).pathname
@@ -206,13 +209,17 @@ for (const failure of ['over-budget', 'missing-usage'] as const) test(`Codex tra
     if (path.endsWith('/status')) body = {state: 'ready', label: 'isolated fixture', plan: 'test'}
     else if (path.endsWith('/requests') && request.method() === 'POST') {
       const sent = request.postDataJSON()
-      expect(sent.messages[0].content).toContain('这是尚未发生的角色行动选择草稿')
+      const prompt = JSON.stringify(sent.messages)
+      const step = sent.messages[0].content.startsWith('这是尚未发生的角色行动选择草稿') ? 'choice'
+        : prompt.includes('本次持久化行动候选') ? 'review' : 'expression'
       expect(sent).not.toHaveProperty('maxTokens')
       expect(sent).not.toHaveProperty('max_output_tokens')
       requests.push(sent.id)
-      jobs.set(sent.id, {id: sent.id, model: sent.model, status: 'completed', text: JSON.stringify(choice), dispatched: true,
+      const output = step === 'choice' ? choice : step === 'expression' ? action
+        : {checks: ['continuity', 'permissions', 'player-agency', 'visibility', 'consequences', 'meaningful-direction'].map(check => ({check, passed: true, reason: '工程夹具，非模型质量验收'}))}
+      jobs.set(sent.id, {id: sent.id, model: sent.model, status: 'completed', text: chatActionResponseFixture(route, output), dispatched: true,
         providerTurn: {threadId: 'fixture-thread', turnId: sent.id, status: 'completed'},
-        ...(failure === 'over-budget' ? {usage: {inputTokens: 500, outputTokens: 2001, totalTokens: 2501}} : {})})
+        ...(failure !== 'missing-usage' ? {usage: {inputTokens: 500, outputTokens: 2001, totalTokens: failure === 'invalid-usage' ? 2500 : 2501}} : {})})
       body = {id: sent.id}
     } else {
       const id = path.split('/').slice(-1)[0]!
@@ -237,7 +244,33 @@ for (const failure of ['over-budget', 'missing-usage'] as const) test(`Codex tra
   await page.getByLabel('本轮行动角色', {exact: true}).selectOption('guard')
   await expect(page.getByRole('button', {name: '让角色开场', exact: true})).toBeEnabled()
   await page.getByRole('button', {name: '让角色开场', exact: true}).click()
-  await expect(page.getByText(failure === 'over-budget' ? /本步骤输出用量 2001 tokens 超出 2000 预算/ : /Codex 未返回实际输出用量/)).toBeVisible()
+  if (failure === 'service-usage') {
+    // 2001 exceeds the historical 2000-token forecast, not the current service
+    // capacity. All three real UI phases must complete with exact receipts.
+    await expect(page.getByText(reply, {exact: true})).toBeVisible()
+    const after = await read(page, f.sessionId)
+    expect(after.runs).toHaveLength(1)
+    expect(after.runs[0].status).toBe('completed')
+    expect(after.state.interaction.remainingDirectorBudget).toBe(0)
+    expect(requests).toHaveLength(3)
+    expect(new Set(requests).size).toBe(3)
+    const receipts = await page.evaluate(async projectId => {
+      const {db} = await (new Function('return import("/storyforge/src/lib/db/schema.ts")'))()
+      return (await db.agentRunArtifacts.where('projectId').equals(projectId).toArray())
+        .filter((row: {artifactKind: string; content: string}) => row.artifactKind === 'tool-result' && row.content.includes('storyforge.chat-action-output-budget'))
+        .map((row: {content: string}) => JSON.parse(row.content))
+    }, f.scope.projectId)
+    expect(receipts).toHaveLength(3)
+    for (const receipt of receipts) expect(receipt).toMatchObject({capacityPolicy: 'service', requestedOutputTokens: 0,
+      provider: 'codex', usage: {inputTokens: 500, outputTokens: 2001, totalTokens: 2501}})
+    await reloadWithBrowserFixtureAIConfigV1(page)
+    await expect(page.getByText(reply, {exact: true})).toBeVisible()
+    expect(requests).toHaveLength(3)
+    expect((await read(page, f.sessionId)).state).toEqual(after.state)
+    await privateContentAbsent(page)
+    return
+  }
+  await expect(page.getByText(failure === 'invalid-usage' ? /提供商用量合计无效/ : /Codex 未返回实际输出用量/)).toBeVisible()
   const after = await read(page, f.sessionId)
   expect(after.runs).toHaveLength(1)
   expect(after.runs[0].status).toBe('failed')
