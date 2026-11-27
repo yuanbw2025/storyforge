@@ -93,7 +93,10 @@ test('another page change is preserved and the stale scene field remains editabl
   })
   await page.getByLabel('场景1 · 概要', { exact: true }).fill('本页尚未保存的概要')
   await page.getByLabel('场景1 · 概要', { exact: true }).blur()
-  await expect(page.getByRole('alert').filter({ hasText: '其他页面修改' }).first()).toBeVisible()
+  // The confirmed record writer rejects the changed preimage before the
+  // legacy scene-writer fallback. Keep both raw data and draft assertions.
+  await expect(page.getByRole('alert').filter({ hasText: '文字字段已被修改' }))
+    .toHaveText('文字字段已被修改，当前输入已保留，请核对后保存。')
   expect((await details(page))[0].scenes[0].summary).toBe('另一页面已经确认的概要')
   await expect(page.getByLabel('场景1 · 概要', { exact: true })).toHaveValue('本页尚未保存的概要')
 })
