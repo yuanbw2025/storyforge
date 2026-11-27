@@ -5,6 +5,7 @@ import WorldviewAgentControls from '../../src/components/worldview/WorldviewAgen
 import WorldviewFieldCandidateReview from '../../src/components/worldview/WorldviewFieldCandidateReview'
 import { resolveTaskLengthPlanV1 } from '../../src/lib/ai/author-length-intent'
 import { observeAuthorLengthV1 } from '../../src/lib/ai/author-length-revision'
+import { computeWorldviewDiffJobV1 } from '../../src/components/worldview/worldview-diff.worker'
 import { WORLDVIEW_TEXT_COMPARISON_VERSION_V1 } from '../../src/lib/agent/worldview-text-comparison'
 import type { MasterCopilotController, PendingMasterCandidate } from '../../src/components/agent/useMasterCopilot'
 import type { Project } from '../../src/lib/types'
@@ -12,11 +13,12 @@ import type { Project } from '../../src/lib/types'
 // 5 的 DSH-054-V2显示桥授权.json 允许的窄片：V2 显示接入现有精确 diff。
 // 这里只记录 Worker job（不换实现、不发网络），用来证明左右两侧真实来源。
 class FixtureWorker {
+  static complete = false
   static jobs: Array<{ leftRaw: string; rightRaw: string; identityKey: string; baselineHash: string; rightRevision: number; sourceKind: string }> = []
   onmessage: ((event: MessageEvent) => void) | null = null
   onerror: ((event: Event) => void) | null = null
   onmessageerror: ((event: MessageEvent) => void) | null = null
-  postMessage(job: { leftRaw: string; rightRaw: string; identityKey: string; baselineHash: string; rightRevision: number; sourceKind: string }) { FixtureWorker.jobs.push(job) }
+  postMessage(job: { leftRaw: string; rightRaw: string; identityKey: string; baselineHash: string; rightRevision: number; sourceKind: string }) { FixtureWorker.jobs.push(job); if (FixtureWorker.complete) void computeWorldviewDiffJobV1(job).then(data => this.onmessage?.({ data } as MessageEvent)) }
   terminate() { /* display-only fixture */ }
 }
 
@@ -52,7 +54,7 @@ async function setValue(element: HTMLTextAreaElement, value: string) {
   })
 }
 const waitFor = vi.waitFor
-beforeEach(() => { FixtureWorker.jobs = []; vi.stubGlobal('Worker', FixtureWorker); vi.stubGlobal('fetch', vi.fn(() => { throw new Error('054 sync compat forbids network/model') })) })
+beforeEach(() => { FixtureWorker.jobs = []; FixtureWorker.complete = false; vi.stubGlobal('Worker', FixtureWorker); vi.stubGlobal('fetch', vi.fn(() => { throw new Error('054 sync compat forbids network/model') })) })
 afterEach(async () => { await cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks() })
 
 function v2Candidate(): PendingMasterCandidate {
@@ -67,6 +69,24 @@ function v1Candidate(): PendingMasterCandidate {
 }
 
 describe('054 sync recovery: main V2 preserved, frozen V1 isolated', () => {
+  it('opens Markdown source before applying a precise diff range while preserving the original callbacks', async () => {
+    FixtureWorker.complete = true
+    const candidate = v2Candidate(), value = '# 新标题\n\n新增正文🌊。'
+    candidate.event.content = JSON.stringify({ field: 'worldOrigin', value })
+    const update = vi.fn(), commit = vi.fn(async () => undefined)
+    await render(<WorldviewFieldCandidateReview candidate={candidate} busy={false} onUpdate={update} onCommit={commit} />)
+    await waitFor(() => expect(document.querySelector('[data-markdown-read-view] h1')?.textContent).toBe('新标题'))
+    await waitFor(() => expect([...document.querySelectorAll('button')].some(button => button.textContent === '在候选中定位')).toBe(true))
+    expect(FixtureWorker.jobs[0].leftRaw).toBe(String(baseline.values.worldOrigin))
+    expect(FixtureWorker.jobs[0].rightRaw).toBe(value)
+    expect(document.querySelector('[aria-label="世界来源候选内容"]')).toBeNull()
+    await act(async () => [...document.querySelectorAll('button')].find(button => button.textContent === '在候选中定位')!.click())
+    const editor = document.querySelector<HTMLTextAreaElement>('[aria-label="世界来源候选内容"]')!
+    expect(document.activeElement).toBe(editor)
+    expect(editor.value).toBe(value)
+    expect(editor.selectionEnd).toBeGreaterThan(editor.selectionStart)
+    expect(update).not.toHaveBeenCalled(); expect(commit).not.toHaveBeenCalled()
+  })
   it('routes a V2 candidate to the main V2 renderer whose edit path stays callable (not legacy-gated read-only)', async () => {
     const update = vi.fn(), invalid = vi.fn()
     await render(<WorldviewFieldCandidateReview candidate={v2Candidate()} busy={false} onUpdate={update} onInvalidEdit={invalid} />)

@@ -12,6 +12,7 @@ import WorldviewTextDiff, { worldviewLFMap } from './WorldviewTextDiff'
 import { observeAuthorLengthV1 } from '../../lib/ai/author-length-revision'
 import { worldviewTargetTextV2 } from '../../lib/agent/worldview-field-v2-contract'
 import { compareWorldviewTextBlocksV1, WORLDVIEW_TEXT_COMPARISON_VERSION_V1, type WorldviewTextBlockStatusV1 } from '../../lib/agent/worldview-text-comparison'
+import CandidateMarkdownField from '../agent/CandidateMarkdownField'
 
 export interface WorldviewReviewViewV1 {
   version: 'worldview-review-view-v1'; status: 'verified' | 'unknown'; generation: number; sessionKey: string
@@ -67,6 +68,7 @@ function WorldviewFieldCandidateReviewV1({candidate,busy,visibleDraft,onUpdate,o
   candidate:PendingMasterCandidate;busy:boolean;visibleDraft?:VisibleMasterCandidateDraftV1
   onUpdate:(content:string,rawValue:string)=>void;onInvalidEdit?:(rawValue:string,error:string)=>void;resizableInputs?:boolean
   viewBinding?:WorldviewReviewViewV1;onEditorCompositionStateChange?:(state:WorldviewEditorCompositionV1)=>void
+  onCommit?:()=>Promise<void>
 }) {
   let parsed:WorldviewFieldCopilotCandidate|null=null
   try{parsed=parseWorldviewFieldCandidateDraft(candidate.event.content)}catch{/* Original raw repair route. */}
@@ -266,6 +268,7 @@ function WorldviewFieldCandidateReviewMainV2({
   visibleDraft,
   onUpdate,
   onInvalidEdit,
+  onCommit,
   resizableInputs = false,
 }: {
   candidate: PendingMasterCandidate
@@ -273,6 +276,7 @@ function WorldviewFieldCandidateReviewMainV2({
   visibleDraft?: VisibleMasterCandidateDraftV1
   onUpdate: (content: string, rawValue: string) => void
   onInvalidEdit?: (rawValue: string, error: string) => void
+  onCommit?: () => Promise<void>
   resizableInputs?: boolean
 }) {
   const isV2 = candidate.payload.skillId === 'world-origin.worldview-field.v2'
@@ -303,6 +307,8 @@ function WorldviewFieldCandidateReviewMainV2({
   const rightRef = useRef<HTMLTextAreaElement | null>(null)
   const syncing = useRef(false)
   const composing = useRef(false)
+  const [editRequest, setEditRequest] = useState(0)
+  const pendingReadRange = useRef<{ eventId: number | undefined; value: string; start: number; end: number } | null>(null)
 
   // 054-V2-BRIDGE（DSH-054-V2显示桥授权.json）：V2 也用同一份冻结原文的精确对照。
   // 基线只取 restoreWorldviewFieldMasterV2 的 values 投影——即采纳比较用的同一原文；
@@ -464,7 +470,13 @@ function WorldviewFieldCandidateReviewMainV2({
   const applyDiffRange = (start: number, end: number) => {
     if (composing.current) return
     const element = rightRef.current
-    if (!element) return
+    if (!element) {
+      if (onCommit && !busy) {
+        pendingReadRange.current = { eventId: candidate.event.id, value: draftValue, start, end }
+        setEditRequest(value => value + 1)
+      }
+      return
+    }
     const map = worldviewLFMap(draftValue)
     if (map.domText !== element.value) return
     element.focus({ preventScroll: true })
@@ -481,7 +493,7 @@ function WorldviewFieldCandidateReviewMainV2({
     target.scrollTop = (current.scrollTop / denominator) * Math.max(0, target.scrollHeight - target.clientHeight)
     requestAnimationFrame(() => { syncing.current = false })
   }
-  const editor = (
+  const sourceEditor = (
     <CTextarea
       ref={rightRef}
       inputAreaLayout={inputAreaLayoutV1(resizableInputs, layoutField, 'candidate')}
@@ -494,6 +506,14 @@ function WorldviewFieldCandidateReviewMainV2({
       className="min-h-56 w-full resize-y text-xs leading-5"
     />
   )
+  const editor = onCommit ? <CandidateMarkdownField key={candidate.event.id} value={draftValue} disabled={busy}
+    onCommit={onCommit} editRequest={editRequest} onEditorReady={element => {
+      const range = pendingReadRange.current
+      pendingReadRange.current = null
+      if (!range || range.eventId !== candidate.event.id || range.value !== draftValue) return
+      const map = worldviewLFMap(draftValue)
+      if (map.domText === element.value) element.setSelectionRange(map.rawToDom(range.start, 'before'), map.rawToDom(range.end, 'after'))
+    }}>{sourceEditor}</CandidateMarkdownField> : sourceEditor
 
   return (
     <div className="space-y-3">

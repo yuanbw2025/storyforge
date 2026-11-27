@@ -5,12 +5,14 @@ import MarkdownReadView from './MarkdownReadView'
 
 /** Presentation around an existing editor. Original handlers own every change;
  * only their committed flush can end editing. */
-export default function MarkdownDraftField({ value, disabled, onCommit, children, label = '候选' }: {
+export default function MarkdownDraftField({ value, disabled, onCommit, children, label = '候选', editRequest, onEditorReady }: {
   value: string
   disabled: boolean
   onCommit: () => Promise<void>
   children: ReactNode
   label?: string
+  editRequest?: number
+  onEditorReady?: (editor: HTMLTextAreaElement) => void
 }) {
   const [editing, setEditing] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -19,6 +21,8 @@ export default function MarkdownDraftField({ value, disabled, onCommit, children
   const active = useRef(false), composing = useRef(false), revision = useRef(0)
   const editorRoot = useRef<HTMLDivElement>(null)
   const save = useRef(onCommit), editingSave = useRef(onCommit)
+  const editorReady = useRef(onEditorReady)
+  editorReady.current = onEditorReady
   const inFlight = useRef<Promise<void> | null>(null)
   save.current = onCommit
   useBeforeUnload(unsynced || active.current && revision.current > 0 || saving || Boolean(error))
@@ -39,12 +43,23 @@ export default function MarkdownDraftField({ value, disabled, onCommit, children
     inFlight.current = operation
     return operation.then(() => commit())
   }, [label])
-  useEffect(() => registerPendingDraftFlusherV1(commit), [commit])
-  useEffect(() => { if (editing) editorRoot.current?.querySelector('textarea')?.focus({ preventScroll: true }) }, [editing])
-  const finish = () => { void commit().catch(() => undefined) }
-  if (!editing) return <MarkdownReadView value={value} readOnly={disabled} onRequestEdit={() => {
+  const begin = useCallback(() => {
+    if (active.current) return
     editingSave.current = save.current; active.current = true; revision.current = 0; setError(''); setEditing(true)
-  }} />
+  }, [])
+  const previousRequest = useRef(editRequest)
+  useEffect(() => {
+    if (previousRequest.current === editRequest) return
+    previousRequest.current = editRequest
+    if (!disabled) begin()
+  }, [editRequest, disabled, begin])
+  useEffect(() => registerPendingDraftFlusherV1(commit), [commit])
+  useEffect(() => {
+    const editor = editing ? editorRoot.current?.querySelector('textarea') : null
+    if (editor) { editor.focus({ preventScroll: true }); editorReady.current?.(editor) }
+  }, [editing])
+  const finish = () => { void commit().catch(() => undefined) }
+  if (!editing) return <MarkdownReadView value={value} readOnly={disabled} onRequestEdit={begin} />
   return <div ref={editorRoot} className="min-w-0" onInputCapture={() => { revision.current++ }}
     onCompositionStartCapture={() => { composing.current = true; setUnsynced(true) }}
     onCompositionEndCapture={() => { composing.current = false; revision.current++ }}
