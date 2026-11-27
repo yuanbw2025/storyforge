@@ -1,6 +1,7 @@
 import { CTextarea } from '../shared/CompositionInput'
 import { InlineTextarea, LocalSaveStatus } from '../shared/InlineEdit'
 import CandidateMarkdownField from '../agent/CandidateMarkdownField'
+import CandidateSaveFeedback from '../agent/CandidateSaveFeedback'
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { Check, Loader2, Microscope, Plus, RotateCcw, Sparkles, Trash2, X } from 'lucide-react'
 import { useCreativeRulesStore } from '../../stores/project-singletons'
@@ -560,6 +561,9 @@ function CreativeRulesCandidate({
             : `${candidate.payload.contextSources.length} 个输入来源`}
         </span>
       </div>
+      <CandidateSaveFeedback event={candidate.event} scope={copilot.candidateLocalSaveScope}
+        draftState={copilot.readCandidateLocalDraftState?.(candidate.event.id!)} busy={copilot.busy}
+        onRetry={() => copilot.flushCandidateDraft(candidate.event.id!)}>
       {parsed?.field === 'systemFictionElements' ? (
         <SystemFictionElementsEditor value={parsed.value} onChange={updateValue} disabled={copilot.busy} label="系统文元素候选" />
       ) : parsed ? (
@@ -583,6 +587,7 @@ function CreativeRulesCandidate({
           />
         </>
       )}
+      </CandidateSaveFeedback>
       <HarnessEvidencePanel
         contextEvidence={candidate.payload.contextEvidence}
         lifecycle={candidate.lifecycle}

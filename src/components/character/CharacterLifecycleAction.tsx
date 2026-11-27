@@ -12,6 +12,7 @@ import { useStoryArcStore } from '../../stores/story-arc'
 import { useOutlineStore } from '../../stores/outline'
 import { useMasterCopilot } from '../agent/useMasterCopilot'
 import HarnessEvidencePanel from '../agent/HarnessEvidencePanel'
+import CandidateSaveFeedback from '../agent/CandidateSaveFeedback'
 import { CInput, CTextarea } from '../shared/CompositionInput'
 
 const STATUS_LABELS: Record<CharacterNarrativeStatus, string> = {
@@ -208,10 +209,14 @@ function LifecycleDialog({
         {(editError || copilot.error) && <p role="alert" className="mt-2 text-xs text-error">{editError ?? copilot.error}</p>}
         {candidate && parsed && (
           <div className="mt-3 space-y-2">
+            <CandidateSaveFeedback event={candidate.event} scope={copilot.candidateLocalSaveScope}
+              draftState={copilot.readCandidateLocalDraftState?.(candidate.event.id!)} busy={copilot.busy}
+              onRetry={() => copilot.flushCandidateDraft(candidate.event.id!)}>
             <p className="text-xs text-text-secondary">{STATUS_LABELS[parsed.fromStatus]} → {STATUS_LABELS[parsed.targetStatus]}</p>
             <CTextarea aria-label="角色状态变化理由" rows={4} value={parsed.reason} onChange={event => { void updateCandidate({ reason: event.target.value }) }} />
             <CTextarea aria-label="角色退场结局" rows={3} value={parsed.ending} onChange={event => { void updateCandidate({ ending: event.target.value }) }} />
             <CInput aria-label="角色活跃章节范围" value={parsed.activeChapterRange} onChange={event => { void updateCandidate({ activeChapterRange: event.target.value }) }} />
+            </CandidateSaveFeedback>
             <HarnessEvidencePanel contextEvidence={candidate.payload.contextEvidence} lifecycle={candidate.lifecycle} />
           </div>
         )}

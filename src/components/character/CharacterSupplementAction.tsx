@@ -15,6 +15,7 @@ import { useMasterCopilot, type PendingMasterCandidate } from '../agent/useMaste
 import { CTextarea } from '../shared/CompositionInput'
 import CharacterDimensionPicker from './CharacterDimensionPicker'
 import HarnessEvidencePanel from '../agent/HarnessEvidencePanel'
+import CandidateSaveFeedback from '../agent/CandidateSaveFeedback'
 
 interface Props {
   character: Character
@@ -202,6 +203,9 @@ function CharacterSupplementDialog({
                   : `${candidate.payload.contextSources.length} 个来源`}
               </span>
             </div>
+            <CandidateSaveFeedback event={candidate.event} scope={copilot.candidateLocalSaveScope}
+              draftState={copilot.readCandidateLocalDraftState?.(candidate.event.id!)} busy={copilot.busy}
+              onRetry={() => copilot.flushCandidateDraft(candidate.event.id!)}>
             {candidate.payload.characterSupplementRequest.dimensions.map(key => {
               const dimension = CHARACTER_DIMENSIONS.find(item => item.key === key)!
               return (
@@ -218,6 +222,7 @@ function CharacterSupplementDialog({
                 </label>
               )
             })}
+            </CandidateSaveFeedback>
             <HarnessEvidencePanel
               contextEvidence={candidate.payload.contextEvidence}
               lifecycle={candidate.lifecycle}
