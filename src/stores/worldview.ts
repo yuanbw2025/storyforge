@@ -10,6 +10,8 @@ import { refreshSettingAssertionSourceStatus } from '../lib/fact-ledger/setting-
 import { assertRecordInScope, scopeTransactionTables, readOwnedRows, resolveScope, resolveScopeLike, stampNewRecord, type WorkspaceScopeLike } from '../lib/workspace/scope'
 import { coordinatePendingEditV1 } from '../lib/authoring/pending-edit-coordinator'
 
+import { assertRecordTextSaveExpectedV1, recordTextSaveAckV1, recordTextSaveRequestV1, type RecordTextRowV1 } from '../lib/authoring/record-text-save-evidence'
+
 import { LOCAL_SAVE_WORLDVIEW_FIELDS_V1, LOCAL_SAVE_STORY_CORE_FIELDS_V1, type LocalSaveStoryCoreFieldV1, type LocalSaveAckV1, type LocalSaveIntentV1, type LocalSaveWitnessV1, type LocalSaveWorldviewFieldV1 } from '../lib/authoring/local-save-evidence'
 
 interface SaveWorldview {
@@ -42,12 +44,12 @@ interface WorldviewStore {
   storyCoreSaveWitnesses: Partial<Record<LocalSaveStoryCoreFieldV1, LocalSaveWitnessV1>>
   saveWorldview: SaveWorldview
   saveStoryCore: SaveStoryCore
-  savePowerSystem: (data: Partial<PowerSystem>, scope?: WorkspaceScope) => Promise<void>
+  savePowerSystem: (data: Partial<PowerSystem>, scope?: WorkspaceScope, confirmation?: LocalSaveIntentV1) => Promise<void | LocalSaveAckV1>
 }
 
 const now = () => Date.now()
 let worldviewLoadRequest = 0
-let storyCoreSaveRevision = 0
+let storyCoreSaveRevision = 0, powerSaveRevision = 0
 
 function captureScope(projectId: number, scope?: WorkspaceScope) {
   const promise = resolveScope({ projectId, scope })
@@ -318,7 +320,7 @@ export const useWorldviewStore = create<WorldviewStore>((set, get) => ({
       if (request !== worldviewLoadRequest) return
       if (!sameScope(get().loadedScope, scope)) set({ worldview: null, storyCore: null, powerSystem: null })
       set({ loadedProjectId: scope.projectId, loadedScope: scope })
-      const storyRevision = storyCoreSaveRevision
+      const storyRevision = storyCoreSaveRevision, powerRevision = powerSaveRevision
       const [wvList, scList, psList, groups] = await Promise.all([
         readOwnedRows<Worldview>(scope, 'worldviews', { owner: 'world' }),
         readOwnedRows<StoryCore>(scope, 'storyCores', { owner: 'work' }),
@@ -331,11 +333,19 @@ export const useWorldviewStore = create<WorldviewStore>((set, get) => ({
       const wv = worldGroupId == null
         ? wvList.find(w => w.worldGroupId == null) ?? wvList.find(w => w.worldGroupId === primaryId)
         : wvList.find(w => w.worldGroupId === worldGroupId)
-      const ps = worldGroupId == null
+      let ps = worldGroupId == null
         ? psList.find(p => p.worldGroupId == null) ?? psList.find(p => p.worldGroupId === primaryId)
         : psList.find(p => p.worldGroupId === worldGroupId)
       const witnesses = await worldviewTextWitnesses(wv, scope, wv?.worldGroupId ?? worldGroupId)
       const storyWitnesses = scList.length <= 1 ? await storyCoreTextWitnesses(scList[0], scope) : {}
+      let observedPowerRevision = powerRevision
+      for (let attempt = 0; observedPowerRevision !== powerSaveRevision && attempt < 3; attempt++) {
+        observedPowerRevision = powerSaveRevision
+        const fresh = await readOwnedRows<PowerSystem>(scope, 'powerSystems', { owner: 'world' })
+        ps = worldGroupId == null ? fresh.find(row => row.worldGroupId == null) ?? fresh.find(row => row.worldGroupId === primaryId)
+          : fresh.find(row => row.worldGroupId === worldGroupId)
+      }
+      if (observedPowerRevision !== powerSaveRevision) throw new Error('读取期间力量信息持续变化，请重新读取。')
       if (request !== worldviewLoadRequest || !sameScope(get().loadedScope, scope) || get().activeWorldGroupId !== worldGroupId) return
       set({
         localSaveWitnesses: witnesses,
@@ -459,48 +469,65 @@ export const useWorldviewStore = create<WorldviewStore>((set, get) => ({
     })
   }) as SaveStoryCore,
 
-  savePowerSystem: (data: Partial<PowerSystem>, frozenScope?: WorkspaceScope) => {
+  savePowerSystem: (input: Partial<PowerSystem>, frozenScope?: WorkspaceScope, confirmation?: LocalSaveIntentV1) => {
+    const data = { ...input }, proof = confirmation ? structuredClone(confirmation) : undefined
+    const explicitScope = frozenScope ? { ...frozenScope } : undefined
     const { powerSystem, activeWorldGroupId } = get()
     const projectId = data.projectId ?? powerSystem?.projectId
-    if (projectId == null) return Promise.resolve()
+    if (projectId == null) return Promise.reject(new Error('力量体系缺少工作区，未保存。'))
+    if (proof && Dexie.currentTransaction) return Promise.reject(new Error('本机保存确认需要独立提交事务。'))
     const worldGroupId = data.worldGroupId !== undefined ? data.worldGroupId : activeWorldGroupId
-    // Capture scope and field patch before the queued write; never borrow a newly
-    // selected project's/group's record from the global store inside persist().
     const patch = Object.fromEntries(
       (['name', 'description', 'levels', 'rules'] as const)
         .filter(field => data[field] !== undefined).map(field => [field, data[field]]),
     )
     if (!Object.keys(patch).length) return Promise.resolve()
-    const scopePromise = captureScope(projectId, frozenScope)
-    return coordinatePendingEditV1({
-      key: `power-system:${projectId}:${worldGroupId ?? 'default'}`,
-      persist: async () => {
-        const scope = await scopePromise
-        const list = await readOwnedRows<PowerSystem>(scope, 'powerSystems', { owner: 'world' })
-        const target = list.find(row => (row.worldGroupId ?? null) === worldGroupId)
-        let next: PowerSystem
-        if (target?.id) {
-          const updatedAt = now()
-          await db.powerSystems.update(target.id, { ...patch, updatedAt })
-          await refreshSettingAssertionSourceStatus({
-            projectId, table: 'powerSystems', recordId: target.id,
-            changedFields: Object.keys(patch),
-          })
-          next = { ...target, ...patch, updatedAt }
-        } else {
-          const row = stampNewRecord(scope, 'powerSystems', {
-            projectId, name: '', description: '', levels: '', rules: '',
-            ...patch, worldGroupId, createdAt: now(), updatedAt: now(),
-          }, { owner: 'world' }) as PowerSystem
-          const id = await db.powerSystems.add(row)
-          next = { ...row, id: id as number }
-        }
-        const current = get()
-        if ((current.activeWorldGroupId === worldGroupId || (current.activeWorldGroupId == null && current.powerSystem?.id === target?.id))
-          && sameScope(current.loadedScope, scope)) {
-          set({ powerSystem: next })
-        }
-      },
-    })
+    if (Object.values(patch).some(value => typeof value !== 'string')) return Promise.reject(new Error('力量体系字段必须是文本。'))
+    const proofId = proof?.expected?.recordId
+    const request = proof ? recordTextSaveRequestV1('powerSystems', proofId!, patch, explicitScope, proof) : undefined
+    if (proof && (Object.keys(data).some(key => !['projectId', 'worldGroupId', ...Object.keys(patch)].includes(key))
+      || request!.identity.worldGroupId !== worldGroupId || projectId !== explicitScope?.projectId)) return Promise.reject(new Error('力量保存分区或作用域凭据无效。'))
+    const scopePromise = captureScope(projectId, explicitScope)
+    return coordinatePendingEditV1({ key: `power-system:${projectId}:${worldGroupId ?? 'default'}`, persist: async () => {
+      const scope = await scopePromise
+      const next = await db.transaction('rw', scopeTransactionTables(db.powerSystems, db.worldGroups), () => {
+        const transaction = Dexie.currentTransaction!, table = transaction.table<PowerSystem, number>('powerSystems')
+        const update = db.powerSystems.update.bind(table)
+        return Dexie.waitFor((async () => {
+          if (worldGroupId != null && !await assertRecordInScope(scope, 'worldGroups', await transaction.table('worldGroups').get(worldGroupId), { owner: 'world' })) throw new Error('力量体系世界组不属于当前 World。')
+          const list = (await readOwnedRows<PowerSystem>(scope, 'powerSystems', { owner: 'world' })).filter(row => (row.worldGroupId ?? null) === worldGroupId)
+          if (list.length > 1) throw new Error('力量体系分区记录不唯一。')
+          const target = list[0]
+          if (proof) await assertRecordTextSaveExpectedV1(target as unknown as RecordTextRowV1 | undefined, proof, transaction)
+          let id: number
+          if (target?.id) {
+            if (await update(target.id, { ...patch, updatedAt: now() }) !== 1) throw new Error('力量体系记录已不存在，输入已保留。')
+            id = target.id
+          } else {
+            id = await db.powerSystems.add(stampNewRecord(scope, 'powerSystems', {
+              projectId, name: '', description: '', levels: '', rules: '', ...patch, worldGroupId, createdAt: now(), updatedAt: now(),
+            }, { owner: 'world' }) as PowerSystem) as number
+          }
+          const actual = await table.get(id)
+          if (!actual || !await assertRecordInScope(scope, 'powerSystems', actual, { owner: 'world' })
+            || !isPortableResourceUidV1(Reflect.get(actual, 'ragDocumentId'), 'power-system')
+            || (target && Reflect.get(actual, 'ragDocumentId') !== Reflect.get(target, 'ragDocumentId'))
+            || Object.entries(patch).some(([field, value]) => Reflect.get(actual, field) !== value)) throw new Error('力量体系精确保存校验失败，输入已保留。')
+          if (proof) await recordTextSaveAckV1(actual as unknown as RecordTextRowV1, proof, request!.raw)
+          return actual
+        })())
+      })
+      powerSaveRevision++
+      await refreshSettingAssertionSourceStatus({ projectId, table: 'powerSystems', recordId: next.id!, changedFields: Object.keys(patch) })
+      const committed = await db.powerSystems.get(next.id!)
+      if (!committed || Reflect.get(committed, 'ragDocumentId') !== Reflect.get(next, 'ragDocumentId')
+        || !await assertRecordInScope(scope, 'powerSystems', committed, { owner: 'world' })
+        || Object.entries(patch).some(([field, value]) => Reflect.get(committed, field) !== value)) throw new Error('力量体系提交后内容已变化，未确认保存。')
+      const ack = proof ? await recordTextSaveAckV1(committed as unknown as RecordTextRowV1, proof, request!.raw) : undefined
+      const current = get()
+      if ((current.activeWorldGroupId === worldGroupId || (current.activeWorldGroupId == null && current.powerSystem?.id === committed.id))
+        && sameScope(current.loadedScope, scope)) set({ powerSystem: committed })
+      return ack
+    } })
   },
 }))
