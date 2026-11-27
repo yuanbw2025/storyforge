@@ -1,4 +1,5 @@
 import { act } from 'react'
+import { flushSync } from 'react-dom'
 import { createRoot } from 'react-dom/client'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import CandidateSaveFeedback from '../../src/components/agent/CandidateSaveFeedback'
@@ -152,4 +153,20 @@ it('rejects another Work and a resolved void callback cannot manufacture saved s
   await act(async () => root.render(<CandidateSaveFeedback event={memory} scope={f.scope} busy={false} onRetry={retry}><span>retained draft</span></CandidateSaveFeedback>))
   await click('重试保存候选'); await waitFor(() => expect(retry).toHaveBeenCalledTimes(1))
   expect(status()).toBe('unconfirmed'); expect(await db.agentEvents.get(before.id!)).toEqual(before)
+})
+
+it('keeps the actual author input when the real parent rerenders between native input capture and bubble', async () => {
+  const f = await fixture()
+  await click('编辑源码')
+  const area = host.querySelector('textarea')!
+  // A browser may run the capture update before the controlled textarea's
+  // bubble onChange. Force precisely that existing scheduling boundary.
+  area.addEventListener('input', () => flushSync(() => root.render(<Harness />)), { capture: true })
+  const edited = '# 作者在当前候选改稿\n\n只采纳明确修改后的来源。'
+  await input(edited)
+  expect(area.value).toBe(edited)
+  await act(async () => flushPendingEditsV1())
+  await waitFor(() => expect(status()).toBe('saved'))
+  expect(JSON.parse((await db.agentEvents.get(f.candidate.event.id!))!.content).value).toBe(edited)
+  expect(await db.worldviews.count()).toBe(0)
 })

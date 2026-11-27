@@ -76,6 +76,11 @@ export const CTextarea = forwardRef<
       } : ref}
       {...rest}
       style={area ? { ...rest.style, ...area.style } : rest.style}
+      onInputCapture={event => {
+        // Keep native input through a parent render before bubble onChange.
+        setLocalValue(event.currentTarget.value)
+        rest.onInputCapture?.(event)
+      }}
       value={localValue}
       onBlur={area ? event => area.blur(event, onBlur) : onBlur}
       onCompositionStart={() => { composingRef.current = true; area?.compositionStart() }}
