@@ -2,7 +2,7 @@
  * 世界组详情面板 — 编辑单个世界的基础信息和穿越规则
  */
 import { CTextarea, CInput } from '../shared/CompositionInput'
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useContext } from 'react'
 import { ArrowLeft, Save, Loader2, Sparkles, Check, X } from 'lucide-react'
 import { useWorldGroupStore } from '../../stores/world-group'
 import { useAIConfigStore } from '../../stores/ai-config'
@@ -15,13 +15,17 @@ import {
   rejectWorldviewExpandCandidateV1,
   type WorldviewExpandCandidateV1,
 } from '../../lib/agent/run/worldview-expand-durable'
-import { resolveScopeLike } from '../../lib/workspace/scope'
+import { assertRecordInScope, resolveScopeLike } from '../../lib/workspace/scope'
 import type { WorkspaceScope, WorldGroup, WorldGroupType } from '../../lib/types'
 import { WORLD_GROUP_TYPE_LABELS } from '../../lib/types/world-group'
 import { useBeforeUnload } from '../../hooks/useBeforeUnload'
 import { coordinatePendingEditV1, flushPendingEditsV1, registerPendingDraftFlusherV1 } from '../../lib/authoring/pending-edit-coordinator'
 import { WORLDVIEW_EXPAND_FIELDS_V1 } from '../../lib/ai/world-group-ai'
 import { FIELD_BY_TARGET } from '../../lib/registry/field-registry'
+import { db } from '../../lib/db/schema'
+import { isPortableResourceUidV1 } from '../../lib/context-gateway/resource-uid'
+import { AuthorRecordSaveScopeV1 } from '../shared/AuthorRecordSaveScope'
+import { LocalSaveStatus } from '../shared/InlineEdit'
 
 const TYPE_OPTIONS: { value: WorldGroupType; label: string }[] = [
   { value: 'primary', label: '主世界' },
@@ -51,6 +55,14 @@ function groupForm(group: WorldGroup) {
 }
 
 export default function WorldGroupDetail({ group, onBack }: Props) {
+  const authorScope = useContext(AuthorRecordSaveScopeV1)
+  const authorProjectId = authorScope?.projectId, authorWorldId = authorScope?.worldId, authorWorkId = authorScope?.workId
+  const proofKey = authorScope ? JSON.stringify([authorProjectId, authorWorldId, authorWorkId, group.id]) : null
+  const activeProofKey = useRef(proofKey); activeProofKey.current = proofKey
+  const proofRevision = useRef(0)
+  const [confirmedForm, setConfirmedForm] = useState<{ key: string; resourceUid: string; value: string } | null>(null)
+  const composingRef = useRef(false)
+  const [composing, setComposing] = useState(false)
   const { updateGroup } = useWorldGroupStore()
   const aiConfig = useAIConfigStore(state => state.config)
   const [form, setForm] = useState(() => groupForm(group))
@@ -63,6 +75,7 @@ export default function WorldGroupDetail({ group, onBack }: Props) {
   dirtyRef.current = dirty
   const pendingSave = useRef<Promise<void> | null>(null)
   const [saveError, setSaveError] = useState('')
+  const saveErrorRef = useRef('')
   const [saving, setSaving] = useState(false)
   const [scope, setScope] = useState<WorkspaceScope | null>(null)
   const [candidate, setCandidate] = useState<WorldviewExpandCandidateV1 | null>(null)
@@ -73,7 +86,21 @@ export default function WorldGroupDetail({ group, onBack }: Props) {
   const [expandError, setExpandError] = useState<string | null>(null)
   const [expanded, setExpanded] = useState(false)
 
-  useBeforeUnload(dirty || saving)
+  useBeforeUnload(dirty || saving || composing || Boolean(saveError))
+  useEffect(() => {
+    if (!proofKey || authorProjectId == null || authorWorldId == null || authorWorkId == null || group.id == null) return
+    let active = true
+    const revision = ++proofRevision.current
+    const owner = { projectId: authorProjectId, worldId: authorWorldId, workId: authorWorkId }
+    void (async () => {
+      await resolveScopeLike(owner)
+      const actual = await db.worldGroups.get(group.id!)
+      if (!actual || !isPortableResourceUidV1(actual.ragDocumentId, 'world-group') || actual.ragDocumentId !== group.ragDocumentId
+        || !await assertRecordInScope(owner, 'worldGroups', actual, { owner: 'world' })) throw new Error('世界保存尚未确认。')
+      if (active && revision === proofRevision.current) setConfirmedForm({ key: proofKey, resourceUid: actual.ragDocumentId, value: JSON.stringify(groupForm(actual)) })
+    })().catch(() => { if (active && revision === proofRevision.current) setConfirmedForm(null) })
+    return () => { active = false }
+  }, [proofKey, authorProjectId, authorWorldId, authorWorkId, group.id, group.ragDocumentId, group.updatedAt])
   useEffect(() => {
     if (dirtyRef.current || pendingSave.current) return
     const next = groupForm(group)
@@ -125,17 +152,20 @@ export default function WorldGroupDetail({ group, onBack }: Props) {
     return () => { cancelled = true }
   }, [group.id, group.projectId])
 
-  const handleSave = useCallback(async function saveGroupDraft(): Promise<void> {
+  const handleSave = useCallback(async function saveGroupDraft(retry = false): Promise<void> {
+    if (composingRef.current) throw new Error('输入法仍在组合文字，请完成后保存。')
+    if (saveErrorRef.current && !retry) throw new Error(saveErrorRef.current)
     if (pendingSave.current) {
       await pendingSave.current
-      if (dirtyRef.current) return saveGroupDraft()
+      if (dirtyRef.current) return saveGroupDraft(retry)
       return
     }
     if (!dirtyRef.current) return
-    if (!scope || !editBase.current.id) throw new Error('世界仍在加载，请稍后保存。')
-    const snapshot = formRef.current, baseline = editBase.current, frozenScope = scope
+    const saveScope = authorScope ?? scope
+    if (!saveScope || !editBase.current.id) throw new Error('世界仍在加载，请稍后保存。')
+    const snapshot = formRef.current, baseline = editBase.current, frozenScope = { ...saveScope }, saveKey = proofKey
     const operation = (async () => {
-      setSaving(true); setSaveError('')
+      setSaving(true); setSaveError(''); saveErrorRef.current = ''
       try {
         const saved = await coordinatePendingEditV1({ key: `world-group:${baseline.id}`, persist: () => updateGroup(baseline.id!, {
           ...snapshot,
@@ -146,15 +176,21 @@ export default function WorldGroupDetail({ group, onBack }: Props) {
           takeawayRules: snapshot.takeawayRules || undefined,
         }, { scope: frozenScope, expected: baseline }) })
         editBase.current = saved; baseForm.current = groupForm(saved)
+        if (saveKey && activeProofKey.current === saveKey) {
+          proofRevision.current++
+          setConfirmedForm(isPortableResourceUidV1(saved.ragDocumentId, 'world-group')
+            ? { key: saveKey, resourceUid: saved.ragDocumentId, value: JSON.stringify(groupForm(saved)) } : null)
+        }
         if (formRef.current === snapshot) dirtyRef.current = false
       } catch (cause) {
-        setSaveError(cause instanceof Error ? cause.message : String(cause))
+        saveErrorRef.current = cause instanceof Error ? cause.message : String(cause)
+        setSaveError(saveErrorRef.current)
         throw cause
       } finally { pendingSave.current = null; setSaving(false) }
     })()
     pendingSave.current = operation
     return operation
-  }, [scope, updateGroup])
+  }, [authorScope, scope, proofKey, updateGroup])
   useEffect(() => registerPendingDraftFlusherV1(handleSave), [handleSave])
   const back = async () => {
     try { await flushPendingEditsV1(); onBack() }
@@ -267,9 +303,11 @@ export default function WorldGroupDetail({ group, onBack }: Props) {
   }
 
   const isPrimary = group.type === 'primary'
+  const saveStatus = saveError ? 'failed' : saving ? 'saving' : dirty || composing ? 'dirty'
+    : confirmedForm?.key === proofKey && confirmedForm.resourceUid === group.ragDocumentId && confirmedForm.value === JSON.stringify(form) ? 'saved' : 'unconfirmed'
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-5" onCompositionStartCapture={() => { composingRef.current = true; setComposing(true) }} onCompositionEndCapture={() => { composingRef.current = false; setComposing(false) }}>
       {/* 返回 + 标题 */}
       <div className="flex items-center justify-between">
         <button
@@ -290,7 +328,7 @@ export default function WorldGroupDetail({ group, onBack }: Props) {
             {expandBusy ? '记录可恢复运行...' : expanded ? '已写入世界观' : 'AI 扩写世界观'}
           </button>
           <button
-            onClick={() => { void handleSave().catch(() => undefined) }}
+            onClick={() => { void handleSave(true).catch(() => undefined) }}
             disabled={saving || !scope}
             className="flex items-center gap-2 px-4 py-2 bg-accent text-white rounded-lg hover:bg-accent-hover disabled:opacity-50 transition-colors text-sm font-medium"
           >
@@ -300,7 +338,8 @@ export default function WorldGroupDetail({ group, onBack }: Props) {
         </div>
       </div>
 
-      {saveError && <p role="alert" className="text-sm text-error">未保存：{saveError}。草稿仍保留，请核对或重试。</p>}
+      {authorScope ? <LocalSaveStatus status={saveStatus} error={saveError} retryLabel="重试保存世界信息" retry={() => { void handleSave(true).catch(() => undefined) }} />
+        : saveError && <p role="alert" className="text-sm text-error">未保存：{saveError}。草稿仍保留，请核对或重试。</p>}
 
       {expandError && (
         <div className="rounded-lg border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-400">

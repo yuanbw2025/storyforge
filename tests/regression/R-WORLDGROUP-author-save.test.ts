@@ -3,6 +3,7 @@ import { db } from '../../src/lib/db/schema'
 import { seedCurrentWorkspace, addCurrentWorldFixtureV1, addCurrentWorkFixtureV1 } from '../helpers/current-workspace'
 import { useWorldGroupStore } from '../../src/stores/world-group'
 import type { WorldGroup } from '../../src/lib/types'
+import * as scopeModule from '../../src/lib/workspace/scope'
 
 beforeEach(async () => {
   await db.delete(); await db.open()
@@ -67,4 +68,41 @@ it('a failed group read releases loading without falsely changing its scope', as
   await expect(useWorldGroupStore.getState().loadAll(scope)).rejects.toThrow('group read failed')
   expect(useWorldGroupStore.getState().loading).toBe(false)
   expect(useWorldGroupStore.getState().groups).toEqual([group])
+})
+
+it('returns the exact committed row, freezes caller values and retains Unicode/whitespace after reopen', async () => {
+  const { scope, id, group } = await fixture(), raw = '  # 原文\r\n\r\n🌊 尾空白。　 '
+  const patch = { description: raw }, owner = { ...scope }, expected = { ...group }
+  const saving = useWorldGroupStore.getState().updateGroup(id, patch, { scope: owner, expected })
+  patch.description = '调用后篡改'; owner.worldId = 999; expected.name = '调用后篡改'
+  const saved = await saving
+  db.close(); await db.open()
+  expect(await db.worldGroups.get(id)).toEqual(saved)
+  expect(saved).toMatchObject({ description: raw, worldId: scope.worldId, ragDocumentId: group.ragDocumentId })
+})
+it('rolls back quota, zero rows and a wrong native poststate before an explicit retry', async () => {
+  const { scope, id, group } = await fixture()
+  const save = () => useWorldGroupStore.getState().updateGroup(id, { description: '作者新稿' }, { scope, expected: group })
+  const quota = () => { throw new DOMException('world group quota failure', 'QuotaExceededError') }
+  db.worldGroups.hook('updating', quota)
+  try { await expect(save()).rejects.toThrow('world group quota failure') } finally { db.worldGroups.hook('updating').unsubscribe(quota) }
+  vi.spyOn(db.worldGroups, 'update').mockResolvedValueOnce(0)
+  await expect(save()).rejects.toThrow('已删除'); vi.restoreAllMocks()
+  const corrupt = () => ({ description: '错误结果' }); db.worldGroups.hook('updating', corrupt)
+  try { await expect(save()).rejects.toThrow('未读到相同世界身份与输入原文') } finally { db.worldGroups.hook('updating').unsubscribe(corrupt) }
+  expect(await db.worldGroups.get(id)).toEqual(group)
+  expect((await save()).description).toBe('作者新稿')
+})
+it('rereads a delayed precommit group load after the original writer commits', async () => {
+  const { scope, id, group } = await fixture(), original = scopeModule.readOwnedRows
+  let release!: () => void, entered!: () => void, first = true
+  const gate = new Promise<void>(resolve => { release = resolve }), reached = new Promise<void>(resolve => { entered = resolve })
+  vi.spyOn(scopeModule, 'readOwnedRows').mockImplementation(async (...args) => {
+    const rows = await original(...args)
+    if (first && args[1] === 'worldGroups') { first = false; entered(); await gate }
+    return rows
+  })
+  const loading = useWorldGroupStore.getState().loadAll(scope)
+  try { await reached; await useWorldGroupStore.getState().updateGroup(id, { description: '已提交的新稿' }, { scope, expected: group }) } finally { release() }
+  await loading; expect(useWorldGroupStore.getState().groups.find(row => row.id === id)?.description).toBe('已提交的新稿')
 })
