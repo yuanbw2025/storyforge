@@ -3317,7 +3317,11 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
           onRejectImpactStoryTimelineRegeneration={() => { void handleRejectImpactStoryTimelineRegeneration() }}
           onToggleOutlinePreview={() => setShowOutlinePreview(!showOutlinePreview)}
           onToggleReviewPanel={() => setShowReviewPanel(!showReviewPanel)}
-          onToggleNotePanel={() => setShowNotePanel(!showNotePanel)}
+          onToggleNotePanel={() => {
+            if (!showNotePanel) { setShowNotePanel(true); return }
+            void flushPendingEditsV1().then(() => setShowNotePanel(false))
+              .catch(cause => setManualSaveError(cause instanceof Error ? cause.message : '便签尚未保存，输入已保留。'))
+          }}
           onToggleSettingsLookup={() => setShowSettingsLookup(!showSettingsLookup)}
           onCustomInstructionChange={setCustomInstruction}
           onPerspectiveCharacterChange={characterId => {

@@ -45,12 +45,14 @@ export type LocalSaveHistoryIdentityV1 = WorkspaceScope & { worldGroupId: number
   | { table: 'historicalTimelineEvents' | 'historicalKeywords'; field: 'description' | 'conceptNote'; recordId: number }
 )
 export interface LocalSaveRecordIdentityV1 extends WorkspaceScope {
-  table: 'characters' | 'outlineNodes' | 'detailedOutlines' | 'storyArcs' | 'references' | 'foreshadows' | 'powerSystems' | 'cultivationSystems' | 'chapters'
+  table: 'characters' | 'outlineNodes' | 'detailedOutlines' | 'storyArcs' | 'references' | 'foreshadows' | 'powerSystems' | 'cultivationSystems' | 'chapters' | 'notes'
   field: string
   recordId: number
   worldGroupId: number | null
   /** Stable scene/stage identity, never its mutable position in an array. */
   entryId?: string
+  /** Work-local notes have no registered portable UID; retain their original creation identity. */
+  recordCreatedAt?: number
 }
 export type LocalSaveIdentityV1 = LocalSaveWorldviewIdentityV1 | LocalSaveStoryCoreIdentityV1 | LocalSaveCreativeRuleIdentityV1 | LocalSaveHistoryIdentityV1 | LocalSaveRecordIdentityV1
 export interface LocalSaveWitnessV1 {
@@ -84,13 +86,16 @@ export function localSaveIdentityKeyV1(identity: LocalSaveIdentityV1): string {
   return JSON.stringify([identity.projectId, identity.worldId, identity.workId,
     identity.worldGroupId, identity.table, identity.field,
     ...('recordId' in identity ? [identity.recordId] : []),
-    ...('entryId' in identity ? [identity.entryId] : [])])
+    ...('entryId' in identity ? [identity.entryId] : []),
+    ...('recordCreatedAt' in identity ? [identity.recordCreatedAt] : [])])
 }
 export function matchingLocalSaveAckV1(ack: unknown, intent: LocalSaveIntentV1, raw: string): ack is LocalSaveAckV1 {
   const value = ack as LocalSaveAckV1 | undefined
   return value?.kind === 'natural-field-local-save-ack-v1' && value.session === intent.session
     && value.generation === intent.generation && value.witness?.source === 'committed-write'
-    && value.witness.version === 1 && value.witness.recordId != null && value.witness.resourceUid != null
+    && value.witness.version === 1 && value.witness.recordId != null
+    && (value.witness.resourceUid != null || value.witness.identity.table === 'notes'
+      && 'recordCreatedAt' in value.witness.identity && Number.isSafeInteger(value.witness.identity.recordCreatedAt))
     && value.witness.present && value.witness.value === raw && typeof value.witness.valueHash === 'string'
     && value.witness.valueHash.length > 0
     && localSaveIdentityKeyV1(value.witness.identity) === localSaveIdentityKeyV1(intent.expected.identity)
