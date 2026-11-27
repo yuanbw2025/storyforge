@@ -340,6 +340,7 @@ export default function WorldviewAgentControls({
               </p>
               <button type="button" className="text-text-secondary underline disabled:opacity-50"
                 disabled={candidateBlocked || visibleDraft.status === 'discarding'}
+                onMouseDown={event => { if (event.button === 0) event.preventDefault() }}
                 onClick={() => { if (candidateEventId != null && currentSession()) void copilot.discardVisibleCandidateDraft(candidateEventId) }}>
                 放弃未保存修改
               </button>
@@ -358,6 +359,7 @@ export default function WorldviewAgentControls({
             <button
               type="button"
               disabled={candidateBlocked}
+              onMouseDown={event => { if (event.button === 0) event.preventDefault() }}
               onClick={() => { if (currentSession()) void copilot.rejectCandidate(candidate) }}
               className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-text-muted hover:bg-bg-hover hover:text-text-primary rounded disabled:opacity-50"
             >
@@ -367,6 +369,7 @@ export default function WorldviewAgentControls({
             <button
               type="button"
               disabled={candidateBlocked || Boolean(visibleDraft)}
+              onMouseDown={event => { if (event.button === 0) event.preventDefault() }}
               onClick={() => { if (currentSession(false, false)) void onAdopted(candidate) }}
               className="flex items-center gap-1 bg-accent px-3 py-1.5 text-xs text-white hover:opacity-90 rounded disabled:opacity-50"
             >

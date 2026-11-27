@@ -587,6 +587,7 @@ export default function ChatCopilotPanel({
                 <button
                   type="button"
                   disabled={copilot.busy}
+                  onMouseDown={event => { if (event.button === 0) event.preventDefault() }}
                   onClick={() => {
                     void copilot.rejectCandidate(candidate)
                   }}
@@ -602,6 +603,7 @@ export default function ChatCopilotPanel({
                     (candidate.payload.creativeArtifact != null &&
                       !creativeArtifactCanAdoptV1(candidate.payload.creativeArtifact))
                   }
+                  onMouseDown={event => { if (event.button === 0) event.preventDefault() }}
                   onClick={() => {
                     void copilot.adoptCandidate(candidate)
                   }}

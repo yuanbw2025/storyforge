@@ -1,3 +1,4 @@
+import { enterRuleSourceEditorV1, expectRuleSourceValueV1 } from './helpers/markdown-source'
 import { installBrowserServiceCapacityFixtureV1 } from './helpers/browser-ai-config'
 import { expect, test } from '@playwright/test'
 import { createLongform } from './helpers/product-entry'
@@ -15,13 +16,14 @@ test('系统文元素保留原文风；原生候选刷新恢复、编辑确认�
   })
   await createLongform(page, '系统文元素隔离验收')
   await openLongformLeaf(page, '创作规则')
+  await enterRuleSourceEditorV1(page, '写作风格', page.getByPlaceholder('描述期望的写作风格', { exact: false }))
   await page.getByPlaceholder('描述期望的写作风格', { exact: false }).fill('作者自己的轻松文风')
   await page.getByLabel('系统文元素 · 系统机制', { exact: true }).fill('人工设定：一次免费签到')
   await page.getByRole('button', { name: '保存元素', exact: true }).click()
   await expect(page.getByText('元素已保存', { exact: true })).toBeVisible()
   await page.reload()
   await expect(page.getByLabel('系统文元素 · 系统机制', { exact: true })).toHaveValue('人工设定：一次免费签到')
-  await expect(page.getByPlaceholder('描述期望的写作风格', { exact: false })).toHaveValue('作者自己的轻松文风')
+  await expectRuleSourceValueV1(page, '写作风格', page.getByPlaceholder('描述期望的写作风格', { exact: false }), '作者自己的轻松文风')
   const section = page.getByRole('region', { name: '系统文元素配置', exact: true })
   await section.getByRole('button', { name: 'AI 建议', exact: true }).click()
   const draft = page.getByLabel('系统文元素候选 · 系统机制', { exact: true })
@@ -35,7 +37,7 @@ test('系统文元素保留原文风；原生候选刷新恢复、编辑确认�
   await expect(page.getByLabel('系统文元素 · 系统机制', { exact: true })).toHaveValue('作者修订：每天首次签到才免费')
   await page.reload()
   await expect(page.getByLabel('系统文元素 · 系统机制', { exact: true })).toHaveValue('作者修订：每天首次签到才免费')
-  await expect(page.getByPlaceholder('描述期望的写作风格', { exact: false })).toHaveValue('作者自己的轻松文风')
+  await expectRuleSourceValueV1(page, '写作风格', page.getByPlaceholder('描述期望的写作风格', { exact: false }), '作者自己的轻松文风')
   await page.setViewportSize({ width: 390, height: 844 })
   expect(await page.locator('main').evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true)
   expect(calls).toBe(1)
