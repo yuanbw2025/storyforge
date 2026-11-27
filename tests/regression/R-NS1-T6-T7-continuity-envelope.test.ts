@@ -1,3 +1,4 @@
+import { finiteServiceConfigFixtureV1 } from '../helpers/model-capacity-fixture'
 import { syntheticFrozenAllocationV1 } from '../helpers/model-capacity-fixture'
 import { afterEach, describe, expect, it } from 'vitest'
 import { buildChapterContentPrompt } from '../../src/lib/ai/adapters/chapter-adapter'
@@ -173,7 +174,7 @@ describe('NS-1 T6/T7 · minimum continuity envelope and template contract', () =
     const result = await assembleContext({
       projectId,
       chapterId: 2,
-      inputBudgetTokens: 200,
+      modelConfig: await finiteServiceConfigFixtureV1(200), inputBudgetTokens: 200,
       continuitySnapshot: {
         current: null,
         predecessor: null,

@@ -35,6 +35,7 @@ import type {
 import type { WorkspaceScope } from '../types'
 import type { ContextSelectorResultV1 } from './selector'
 import type { ContextGatewayToolSessionV1 } from './tool-session'
+import { contextAccessPolicyHashV1 } from './contracts'
 
 const HASH = /^[a-f0-9]{64}$/
 
@@ -766,7 +767,8 @@ export async function inspectContextGatewayManifestFreshnessV1(input: {
   const resources: ContextGatewayFreshnessReportV1['resources'] = []
   const reasonCodes = new Set<string>()
   if (input.manifest.gateway.scopeFingerprint !== input.session.scopeFingerprint) reasonCodes.add('scope-fingerprint-stale')
-  if (input.manifest.gateway.policyHash !== input.session.policyHash) reasonCodes.add('policy-binding-stale')
+  if (input.manifest.gateway.policyHash !== input.session.policyHash
+    && input.manifest.gateway.policyHash !== await contextAccessPolicyHashV1({ ...input.session.policy, retrievalBudgetMode: 'model-capacity' })) reasonCodes.add('policy-binding-stale')
   const unique = new Map(retrievalDecisions(input.manifest.gateway.retrievalTrace).map(item => [item.resourceKey, item]))
   const metadata = new Map<string, ReturnType<typeof lookupContextResourceMetadataV1>>()
   for (const decision of [...unique.values()].sort((left, right) => left.resourceKey.localeCompare(right.resourceKey))) {

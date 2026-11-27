@@ -715,8 +715,7 @@ async function* loggedCodex(
   let refusedBeforeDispatch = false
   const log = createLog({ type: 'chat', provider: 'codex', model: config.model, url: CODEX_BASE_URL, status: 'pending' })
   try {
-    yield* streamCodex(messages, config.model, signal, receipt, schema, responseFormat,
-      preparedRequestV2 ? capacityPolicy : capacityPolicy ?? 'reference-service', preparedRequestV2)
+    yield* streamCodex(messages, config.model, signal, receipt, schema, responseFormat, capacityPolicy, preparedRequestV2)
     updateLog(log.id, { status: 'success', duration: Date.now() - startedAt, usage: receipt.usage })
   } catch (error) {
     updateLog(log.id, { status: 'error', duration: Date.now() - startedAt, errorMessage: error instanceof Error ? error.message : 'Codex 连接失败' })

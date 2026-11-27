@@ -1,4 +1,4 @@
-import { syntheticFrozenAllocationV1 } from '../helpers/model-capacity-fixture'
+import { finiteServiceConfigFixtureV1 } from '../helpers/model-capacity-fixture'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { chat, type ChatResult } from '../../src/lib/ai/client'
 import { AICompletionResponseErrorV1, requireCompletionTextV1 } from '../../src/lib/ai/completion-response'
@@ -87,7 +87,7 @@ describe('HTTP 200 is not sufficient evidence of a usable model answer', () => {
   it('marks context-window rejection as pre-dispatch and never invokes fetch', async () => {
     const fetch = vi.fn()
     vi.stubGlobal('fetch', fetch)
-    const constrained = syntheticFrozenAllocationV1({ ...config, maxTokens: 64 }, 512, 128)
+    const constrained = await finiteServiceConfigFixtureV1(512, 64)
     useAIConfigStore.setState({ config: constrained, taskRoutes: {} })
     const result: ChatResult = {}
     await expect(chat(

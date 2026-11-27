@@ -1,3 +1,4 @@
+import { finiteServiceConfigFixtureV1 } from '../helpers/model-capacity-fixture'
 import { beforeEach, afterEach, describe, it, expect, vi } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { setupAudioRuntimeV1 } from '../helpers/open-audio-runtime'
@@ -53,7 +54,7 @@ describe('R-TTRPGOPEN10 verified voice intent and exact registered context', { t
       { ...c, ttrpgVoiceRequest: { ...c.ttrpgVoiceRequest, intentReceiptHash: 'f'.repeat(64) } },
       { ...c, ttrpgVoiceRequest: { ...c.ttrpgVoiceRequest, viewerKey: OPEN_HUMAN_VIEWER } },
       { ...c, scope: { ...c.scope, projectId: c.scope.projectId + 999 } },
-      { ...c, inputBudgetTokens: 64 },
+      { ...c, modelConfig: await finiteServiceConfigFixtureV1(64), inputBudgetTokens: 64 },
     ]) await expect(assembleContext(changed)).rejects.toThrow()
     await cancelTtrpgOpenVoiceRequestV1({ ...s.owner, requestKey: requested.requestKey, decision: 'cancel-this-unsent-voice-request' })
     const events = await db.agentRunEvents.count()

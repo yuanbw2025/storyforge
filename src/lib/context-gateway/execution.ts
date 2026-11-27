@@ -442,7 +442,7 @@ export async function executeContextGatewayV1(
     excludedRecordResourceKeys: input.excludedRecordResourceKeys,
   })
   const catalog = await collectCatalog(session)
-  if (proseTask || prepared) {
+  if (proseTask || prepared && !input.accessPolicyOverride) {
     // Quantities come from this frozen catalog, including its actual reference
     // and framing metadata. This is a local collection forecast, not a model
     // window or a replacement project quota. Provider guards/scope stay exact.
@@ -450,7 +450,8 @@ export async function executeContextGatewayV1(
       + Math.max(0, ...Object.values(descriptor.tokenEstimate).filter((value): value is number => typeof value === 'number'))
       + estimateTokens(canonicalStringify(descriptor)), 0)
     if (!Number.isSafeInteger(collectionTokens)) fail('material-size', '当前资料量无法可靠计数，请保留来源。')
-    const policy = Object.freeze({ ...session.policy, maxRetrievedTokens: Math.max(1,
+    const policy = Object.freeze({ ...session.policy,
+      ...(prepared ? { retrievalBudgetMode: 'model-capacity' as const } : {}), maxRetrievedTokens: Math.max(1,
       Math.min(collectionTokens, physicalInput ?? Infinity,
         input.accessPolicyOverride?.maxRetrievedTokens ?? Infinity)) })
     // Metadata discovery has issued no read capabilities. Reuse the same frozen
@@ -816,7 +817,7 @@ export async function assertContextGatewayCandidateAdoptableV1(input: {
   if (verified.manifest.manifestHash !== input.contextManifestHash) {
     fail('candidate-manifest-mismatch', '候选声明的 Context Manifest 与 exact evidence 不一致')
   }
-  let session = await createContextGatewayToolSessionV1({
+  const session = await createContextGatewayToolSessionV1({
     scope: {
       projectId: input.scope.projectId,
       worldId: input.scope.worldId,
@@ -827,16 +828,6 @@ export async function assertContextGatewayCandidateAdoptableV1(input: {
     },
     policy: createContextAccessPolicyForExecutionV1(input.skill, input.excludedResourceKinds),
   })
-  // Reconstruct the recorded material forecast after refresh. Only the text
-  // quantity may differ from the Skill's historical default; every permission,
-  // owner and version field must still reproduce the exact recorded hash.
-  if (session.policyHash !== verified.manifest.gateway.policyHash) {
-    const selectorRef = verified.manifest.artifacts.find(ref => ref.role === 'selector-result')!
-    const selector = JSON.parse(verified.artifactBodies[`${selectorRef.artifactKind}:${selectorRef.contentHash}`]) as ContextSelectorResultV1
-    const policy = { ...session.policy, maxRetrievedTokens: selector.budgetTokens }
-    const policyHash = await contextAccessPolicyHashV1(policy)
-    if (policyHash === verified.manifest.gateway.policyHash) session = { ...session, policy, policyHash }
-  }
   const freshness = await inspectContextGatewayManifestFreshnessV1({ manifest: verified.manifest, session })
   if (freshness.status !== 'fresh') fail('candidate-context-stale', freshness.reasonCodes.join(','))
   return {

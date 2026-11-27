@@ -1,3 +1,4 @@
+import { finiteServiceConfigFixtureV1 } from '../helpers/model-capacity-fixture'
 import { readTextOpenWorldSceneScriptsRepairCandidatesV1, readTextOpenWorldCraftingEconomyRepairCandidatesV1, readTextOpenWorldNpcRuntimeRepairCandidatesV1 } from '../../src/lib/open-world/catalog-author-repair'
 import { readTextOpenWorldItemRewardRepairCandidatesV1 } from '../../src/lib/open-world/item-reward-author-repair'
 import { readTextOpenWorldAuthorRepairPageV1 } from '../../src/lib/open-world/author-repair-context'
@@ -6872,7 +6873,7 @@ describe('R-OPEN-WORLD3 · P8F QuestFinalize / EncounterFinalize', () => {
       projectId: input.scope.projectId, scope: input.scope,
       sourceKeys: ['text-open-world.quest-finalize-input'],
       productProductionId: input.production.id!, productBuildId: input.build.id!,
-      inputBudgetTokens: 1_000,
+      modelConfig: await finiteServiceConfigFixtureV1(1_000), inputBudgetTokens: 1_000,
     })).rejects.toThrow(/完整输入含提示词.*未调用模型/)
     expect(input.questFinalizeContext.objectiveBindingDemands).toHaveLength(input.questFinalizeContext.questSkeletons.objectives.length)
     expect(input.questFinalizeContext.combatMechanicsContract).toBe('governed-v17')
@@ -7196,7 +7197,7 @@ describe('R-OPEN-WORLD3 · P9 SceneScripts / ChoiceContract / ActionBindings', (
       projectId: input.scope.projectId, scope: input.scope,
       sourceKeys: ['text-open-world.scene-scripts-input'],
       productProductionId: input.production.id!, productBuildId: input.build.id!,
-      inputBudgetTokens: 1_000,
+      modelConfig: await finiteServiceConfigFixtureV1(1_000), inputBudgetTokens: 1_000,
     })).rejects.toThrow(/原子来源 text-open-world\.scene-scripts-input 超出预算/)
 
     const result = await executeSceneScripts(input)

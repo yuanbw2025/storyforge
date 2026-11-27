@@ -75,7 +75,7 @@ describe('B10d · 主 Agent 计划/重规划派发不再带固定输出配额', 
     expect(plan.tasks.map(task => task.id)).toEqual(['world', 'hero', 'prose-1', 'prose-2'])
   })
 
-  it('自由讨论保持其专用应答上限（非任务规划路径不受本片影响）', async () => {
+  it('自由讨论自动输出不再注入专用固定上限', async () => {
     await putCurrentWorkspaceFixtureV1(project)
     const seenMeta: { configOverrides?: { maxTokens?: number } }[] = []
     vi.mocked(chat).mockImplementation(async (_messages, _config, meta) => {
@@ -89,7 +89,7 @@ describe('B10d · 主 Agent 计划/重规划派发不再带固定输出配额', 
       freeDiscussion: true,
     })
     expect(chat).toHaveBeenCalledOnce()
-    expect(seenMeta[0]!.configOverrides?.maxTokens).toBe(8192)
+    expect(seenMeta[0]!.configOverrides?.maxTokens).toBe(0)
     expect(plan.tasks).toHaveLength(0)
   })
 

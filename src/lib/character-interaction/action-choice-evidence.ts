@@ -13,7 +13,7 @@ import {chatActionChoiceVersionForContractV1} from './action-choice-budget'
 import {readChatActionChoiceInputBudgetV1} from './action-choice-input-budget'
 import {readChatActionOutputBudgetV1} from './action-choice-output-budget'
 import {appendChatActionChoiceProposalV1, buildChatActionChoiceMessagesV1, parseChatActionChoiceV1,
-  CHAT_ACTION_CHOICE_STEP_V1, CHAT_ACTION_CHOICE_INPUT_TOKENS_V1, CHAT_ACTION_CHOICE_OUTPUT_TOKENS_V1} from './action-choice-contract'
+  CHAT_ACTION_CHOICE_STEP_V1, CHAT_ACTION_CHOICE_OUTPUT_TOKENS_V1} from './action-choice-contract'
 import {formatInteractionRuntimeContextV1} from './context-format'
 import {chatActionContextVersionsV1} from './context-selection'
 import {assertChatChoiceExpressionV1} from './action-choice-continuation'
@@ -45,9 +45,9 @@ async function contextPacket(scope: WorkspaceScope, snapshot: AgentRunSnapshotV1
     || !await verifyContextManifestIntegrityV1(manifest) || manifest.stepId !== stepId || manifest.attempt !== 1
     || manifest.runId !== snapshot.run.id || manifest.scope.projectId !== scope.projectId
     || manifest.scope.worldGroupId !== (snapshot.run.worldGroupId ?? null) || manifest.manifestHash !== assembled.payload.manifestHash
-    || assembled.sequence >= saved.event.sequence || manifest.inputBudget > CHAT_ACTION_CHOICE_INPUT_TOKENS_V1
+    || assembled.sequence >= saved.event.sequence
     || manifest.totalInputTokens > manifest.inputBudget
-    || manifest.totalInputTokens > CHAT_ACTION_CHOICE_INPUT_TOKENS_V1 || manifest.sources.length !== 1
+    || manifest.sources.length !== 1
     || manifest.sources[0].key !== 'interactionRuntime' || manifest.sources[0].status !== 'included'
     || manifest.sources[0].readerVersion !== chatActionContextVersionsV1(snapshot.contract.executionBindings?.find(binding => binding.stepId === expressionStep)?.promptVersion).readerVersion
     || manifest.sources[0].contentHash !== await sha256Text(packet.text)) fail('选择或表达来源证据不一致')

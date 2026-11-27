@@ -1,3 +1,4 @@
+import { finiteServiceConfigFixtureV1 } from '../helpers/model-capacity-fixture'
 import {afterEach, beforeEach, expect, it, vi} from 'vitest'
 import {db} from '../../src/lib/db/schema'
 import * as artifacts from '../../src/lib/memory/artifact-store'
@@ -120,7 +121,8 @@ it('distinguishes saved preparation from an actually sent request', async () => 
 })
 
 it('stops before sending when the protected role input cannot fit its atomic budget', async () => {
-  vi.spyOn(context, 'assembleContext').mockImplementation(input => assemble(input.sourceKeys?.includes('interactionRuntime') ? {...input, sourceBudgetScale: 0.1} : input))
+  const modelConfig = await finiteServiceConfigFixtureV1(64)
+  vi.spyOn(context, 'assembleContext').mockImplementation(input => assemble(input.sourceKeys?.includes('interactionRuntime') ? {...input, modelConfig} : input))
   const f = await start()
   await expect(generate(f)).rejects.toThrow('原子来源 interactionRuntime 超出预算')
   const [row] = await listChatContextInspectionsV1(f.scope, f.sessionId)

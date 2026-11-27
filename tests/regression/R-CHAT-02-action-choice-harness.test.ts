@@ -143,16 +143,15 @@ function codexBudgetInput(f: Awaited<ReturnType<typeof start>>, outputTokens: nu
   return {transport, request: {...request, aiConfig: {provider: 'codex' as const, model: 'budget-test', baseUrl: '/storyforge/local-codex/v1', apiKey: '', maxTokens: 0, temperature: 0}}}
 }
 
-it.each([0, 1, 2])('retains an over-budget Codex response at step %i and never dispatches the next step or adopts', async index => {
-  const f = await start(), before = await readProductRuntimeState(f.sessionId), tokens = [100, 100, 100]
+it.each([0, 1, 2])('retains a response beyond the historical step %i quota and completes the remaining steps without auto-adoption', async index => {
+  const f = await start(), before = await readProductRuntimeState(f.sessionId), tokens = [1000, 1000, 1000]
   tokens[index] = [2000, 4000, 8000][index] + 1
   const run = codexBudgetInput(f, tokens)
-  await expect(generateInteractionRuntimeCandidateV1(run.request)).rejects.toThrow('超出')
-  expect(run.transport).toHaveBeenCalledTimes(index + 1)
-  const saved = await current(f)
-  expect(saved.projection.state).toBe('failed')
-  expect(saved.events.filter(e => e.type === 'evidence.artifact.recorded' && e.payload.artifactKind === 'raw-response')).toHaveLength(index + 1)
-  await expect(adoptInteractionRuntimeCandidateV1({scope: f.scope, runId: saved.run.id})).rejects.toThrow()
+  const generated = await generateInteractionRuntimeCandidateV1(run.request)
+  expect(run.transport).toHaveBeenCalledTimes(3)
+  const saved = generated.snapshot
+  expect(saved.events.filter(e => e.type === 'evidence.artifact.recorded' && e.payload.artifactKind === 'raw-response')).toHaveLength(3)
+  expect((await readChatActionOutputBudgetV1(f.scope, saved))!.accountedOutputTokens).toBe(tokens.reduce((sum, value) => sum + value, 0))
   expect(await readProductRuntimeState(f.sessionId)).toEqual(before)
 })
 
@@ -175,12 +174,13 @@ it('stops after a missing native Codex usage receipt without pretending visible 
   expect(saved.events.filter(e => e.type === 'evidence.artifact.recorded' && e.payload.artifactKind === 'raw-response')).toHaveLength(2)
 })
 
-it('rechecks retained output after a host interruption instead of regenerating or spending a review call', async () => {
+it('reuses retained output beyond the old quota after interruption and continues without regenerating choice', async () => {
   const f = await start(), run = codexBudgetInput(f, [2001, 100, 100])
   await expect(generateInteractionRuntimeCandidateV1({...run.request, onActionChoiceBoundary: name => {if (name === 'raw-response.saved') throw Error('host-interrupted')}})).rejects.toThrow('host-interrupted')
   const saved = await current(f)
-  await expect(resumeChatNarrativeActionV1({scope: f.scope, runId: saved.run.id, aiConfig: run.request.aiConfig})).rejects.toThrow('超出')
-  expect(run.transport).toHaveBeenCalledTimes(1)
+  await resumeChatNarrativeActionV1({scope: f.scope, runId: saved.run.id, aiConfig: run.request.aiConfig})
+  expect(run.transport).toHaveBeenCalledTimes(3)
+  expect((await current(f)).events.filter(event => event.type === 'model.requested' && event.payload.stepId === CHAT_ACTION_CHOICE_STEP_V1)).toHaveLength(1)
 })
 
 it('blocks adoption if a completed output receipt is missing while retaining the candidate and raw evidence', async () => {
@@ -192,13 +192,13 @@ it('blocks adoption if a completed output receipt is missing while retaining the
   expect(run.calls).toHaveLength(2)
 })
 
-it('enforces the cumulative run output limit even when every step stays within its own limit', async () => {
+it('preserves cumulative usage above the historical Run forecast without rejecting a service-capacity response', async () => {
   vi.spyOn(runStore, 'createAgentRunV1').mockImplementation(request => createRun({...request,
     contract: {...request.contract, budget: {...request.contract.budget, maxOutputTokens: 8999}}}))
   const f = await start(), run = codexBudgetInput(f, [2000, 3000, 4000])
-  await expect(generateInteractionRuntimeCandidateV1(run.request)).rejects.toThrow('累计输出超出')
+  const generated = await generateInteractionRuntimeCandidateV1(run.request)
   expect(run.transport).toHaveBeenCalledTimes(3)
-  expect((await current(f)).projection.state).toBe('failed')
+  expect((await readChatActionOutputBudgetV1(f.scope, generated.snapshot))!.accountedOutputTokens).toBe(9000)
 })
 
 it('keeps a user output limit below the frozen step allowance and retains the actual overspend', async () => {
@@ -322,20 +322,18 @@ function freezeInputLimit(maxInputTokens: number) {
     contract: {...request.contract, budget: {...request.contract.budget, maxInputTokens}}}))
 }
 
-it.each([0, 1, 2])('stops before step %i when its complete request exceeds the remaining input budget by one', async index => {
+it.each([0, 1, 2])('delivers the complete request despite the historical Run input forecast being below step %i', async index => {
   const {f, before, budget} = await budgetBaseline(), run = input(f)
   const limit = budget.calls.slice(0, index + 1).reduce((sum, call) => sum + call.estimatedInputTokens, 0) - 1
   freezeInputLimit(limit)
-  await expect(generateInteractionRuntimeCandidateV1(run.request)).rejects.toThrow('完整请求累计预计需要')
-  const saved = await current(f), consumed = (await readChatActionChoiceInputBudgetV1(f.scope, saved))!
+  const generated = await generateInteractionRuntimeCandidateV1(run.request)
+  const saved = generated.snapshot, consumed = (await readChatActionChoiceInputBudgetV1(f.scope, saved))!
   expect(saved.contract.budget.maxInputTokens).toBe(limit)
-  expect(saved.events.filter(event => event.type === 'model.requested')).toHaveLength(index)
-  expect(saved.events.filter(event => event.type === 'evidence.artifact.recorded' && event.payload.artifactKind === 'raw-response')).toHaveLength(index)
-  // A rendered request exists for the stopped step but has not been sent.
-  expect(saved.events.filter(event => event.type === 'evidence.artifact.recorded' && event.payload.artifactKind === 'rendered-request')).toHaveLength(index + 1)
-  expect(consumed.calls).toEqual(budget.calls.slice(0, index))
-  expect(run.calls).toHaveLength(index); expect(run.reviews).not.toHaveBeenCalled()
-  await expect(adoptInteractionRuntimeCandidateV1({scope: f.scope, runId: saved.run.id})).rejects.toThrow()
+  expect(saved.events.filter(event => event.type === 'model.requested')).toHaveLength(3)
+  expect(saved.events.filter(event => event.type === 'evidence.artifact.recorded' && event.payload.artifactKind === 'raw-response')).toHaveLength(3)
+  expect(saved.events.filter(event => event.type === 'evidence.artifact.recorded' && event.payload.artifactKind === 'rendered-request')).toHaveLength(3)
+  expect(consumed.calls).toEqual(budget.calls)
+  expect(run.calls).toHaveLength(2); expect(run.reviews).toHaveBeenCalledOnce()
   expect(await readProductRuntimeState(f.sessionId)).toEqual(before)
 })
 
@@ -354,7 +352,7 @@ it('accepts the exact cumulative input limit and includes system text, objective
   expect((await readProductRuntimeState(f.sessionId)).interaction!.messages.slice(-1)[0].text).toBe(action.text)
 })
 
-it('keeps prior input consumption after reopening and stops before an unaffordable review', async () => {
+it('keeps prior input evidence after reopening and completes review beyond the historical forecast', async () => {
   const {f, before, budget} = await budgetBaseline(), run = input(f)
   freezeInputLimit(budget.estimatedInputTokens - 1)
   await expect(generateInteractionRuntimeCandidateV1({...run.request, onActionChoiceBoundary: boundary => {
@@ -362,12 +360,12 @@ it('keeps prior input consumption after reopening and stops before an unaffordab
   }})).rejects.toThrow('host-crash')
   const saved = await current(f)
   db.close(); await db.open()
-  await expect(resumeChatNarrativeActionV1({scope: f.scope, runId: saved.run.id,
-    runAI: run.request.runAI, runReviewAI: run.reviews})).rejects.toThrow('完整请求累计预计需要')
+  await resumeChatNarrativeActionV1({scope: f.scope, runId: saved.run.id,
+    runAI: run.request.runAI, runReviewAI: run.reviews})
   const resumed = await current(f)
   expect(resumed.run.id).toBe(saved.run.id)
-  expect((await readChatActionChoiceInputBudgetV1(f.scope, resumed))!.calls).toEqual(budget.calls.slice(0, 2))
-  expect(run.calls).toHaveLength(2); expect(run.reviews).not.toHaveBeenCalled()
+  expect((await readChatActionChoiceInputBudgetV1(f.scope, resumed))!.calls).toEqual(budget.calls)
+  expect(run.calls).toHaveLength(2); expect(run.reviews).toHaveBeenCalledOnce()
   expect(await readProductRuntimeState(f.sessionId)).toEqual(before)
 })
 
@@ -403,7 +401,7 @@ it('rejects stale retained choice evidence before resuming without executing the
   expect(await readProductRuntimeState(f.sessionId)).toEqual(after)
 })
 
-it('uses the frozen choice output cap and strict provider schema on the existing real transport boundary', async () => {
+it('preserves the author output setting and strict provider schema without frozen Skill caps', async () => {
   vi.spyOn(navigator, 'locks', 'get').mockReturnValue({request: async (_name: string, _options: unknown, callback: (lock: object) => unknown) => callback({})} as unknown as LockManager)
   const chat = vi.spyOn(ai, 'chat').mockImplementation(async messages => JSON.stringify(messages[0].content.startsWith('这是尚未发生的角色行动选择草稿')
     ? chatActionChoiceFixture(messages, choice) : JSON.stringify(messages).includes('本次持久化行动候选') ? chatActionReviewOutputFixture() : chatActionOutcomeFixture(messages, action)))
@@ -411,7 +409,7 @@ it('uses the frozen choice output cap and strict provider schema on the existing
   const {runAI: _runAI, runReviewAI: _runReviewAI, ...request} = run.request
   const generated = await generateInteractionRuntimeCandidateV1({...request, aiConfig: {provider: 'agnes', baseUrl: 'https://invalid.example/v1', model: 'agnes-2.5-flash', apiKey: 'fixture-only', temperature: .2, maxTokens: 9000}})
   expect(chat).toHaveBeenCalledTimes(3)
-  expect(chat.mock.calls.map(call => call[1].maxTokens)).toEqual([2000, 4000, 8000])
+  expect(chat.mock.calls.map(call => call[1].maxTokens)).toEqual([9000, 9000, 9000])
   expect(chat.mock.calls[0][5]?.jsonSchema).toMatchObject({name: 'chat_action_choice_v4', strict: true})
   const counted = (await readChatActionChoiceInputBudgetV1(f.scope, generated.snapshot))!
   for (const [index, call] of chat.mock.calls.entries()) {
@@ -660,13 +658,13 @@ it.each(['above-contract', 'below-source'] as const)('rejects a rehashed choice 
   context.payload.manifestHash = packet.manifest.manifestHash
   vi.spyOn(artifactStore, 'readAgentRunArtifactExactV1').mockImplementation(request => request.contentHash === event.payload.contentHash
     ? Promise.resolve(JSON.stringify(packet)) : actualRead(request))
-  await expect(choiceEvidence.readChatActionChoiceEvidenceV1({scope: f.scope, snapshot, participantKey: 'guard'})).rejects.toThrow('来源证据不一致')
+  await expect(choiceEvidence.readChatActionChoiceEvidenceV1({scope: f.scope, snapshot, participantKey: 'guard'})).rejects.toThrow(/来源证据不一致|选择请求、响应或完成步骤不一致/)
   expect(run.calls).toHaveLength(2); expect(run.reviews).toHaveBeenCalledTimes(1)
   expect(await readProductRuntimeState(f.sessionId)).toEqual(before)
 })
 
 it('recovers the exact saved selection after a larger service allocation without rewriting historical budgets or repeating choice', async () => {
-  const config = {provider: 'custom' as const, model: 'allocation-recovery', baseUrl: 'http://127.0.0.1:9/v1', apiKey: '', temperature: 0, maxTokens: 9000}
+  const config = {provider: 'custom' as const, model: 'allocation-recovery', baseUrl: 'http://127.0.0.1:9/v1', apiKey: '', temperature: 0, maxTokens: 1000}
   resetModelCapacityForTestsV1()
   await seedModelAllocationFixtureV1(config, 8192)
   vi.spyOn(navigator, 'locks', 'get').mockReturnValue({request: async (_name: string, _options: unknown, callback: (lock: object) => unknown) => callback({})} as unknown as LockManager)

@@ -1,6 +1,5 @@
-import { normalizeContextAccessPolicyV1 } from '../../src/lib/context-gateway/contracts'
+import { contextAccessPolicyHashV1, normalizeContextAccessPolicyV1 } from '../../src/lib/context-gateway/contracts'
 import { CONTEXT_SOURCES } from '../../src/lib/registry/context-sources'
-import { hashCanonicalValue } from '../../src/lib/agent/run/hash'
 import { resolveAgentSkillV1 } from '../../src/lib/agent/skill-registry'
 import { createContextAccessPolicyForExecutionV1 } from '../../src/lib/context-gateway/skill-policy'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -448,8 +447,9 @@ describe('R-FEEDBACK136 outline candidate Gateway policy identity', () => {
       authorRequest: chapters ? '展开第一卷章节大纲' : '规划三卷主线大纲',
     })
     const expected = normalizeContextAccessPolicyV1(createContextAccessPolicyForExecutionV1(resolveAgentSkillV1('outline', skillId)), CONTEXT_SOURCES)
-    expect(prepared.contextGatewayExecution.session.policy).toEqual(expected)
-    expect(prepared.contextGatewayExecution.contextPacket.policyHash).toBe(await hashCanonicalValue(expected))
+    const actual = prepared.contextGatewayExecution.session.policy
+    expect(actual).toEqual({...expected, retrievalBudgetMode: 'model-capacity', maxRetrievedTokens: actual.maxRetrievedTokens})
+    expect(prepared.contextGatewayExecution.contextPacket.policyHash).toBe(await contextAccessPolicyHashV1(actual))
     expect(prepared.mode).toBe(chapters ? 'chapters' : 'volumes')
   })
 })

@@ -292,7 +292,7 @@ describe.sequential('R-HARNESS11 · 批量章纲 durable 主路径', () => {
     expect(result.candidatesByVolume.get(fixture.volumes[1].id!)?.batch?.predecessorCandidateHash).toBeUndefined()
   })
 
-  it('正式前序候选源受单源预算控制，超长内容不会绕过装配器', async () => {
+  it('正式前序候选源完整交付，不再受旧单源配额截断', async () => {
     const fixture = await createWorkspace()
     const assembled = await assembleContext({
       projectId: fixture.scope.projectId,
@@ -305,8 +305,9 @@ describe.sequential('R-HARNESS11 · 批量章纲 durable 主路径', () => {
     })
 
     expect(assembled.included).toEqual(['priorOutlineCandidate'])
-    expect(assembled.totalInputTokens).toBeLessThanOrEqual(2_400)
-    expect(assembled.text).toContain('该上下文源已按预算截断')
+    expect(assembled.totalInputTokens).toBeGreaterThan(100_000)
+    expect(assembled.text).toContain('潮汐迁徙。'.repeat(20_000))
+    expect(assembled.trimmed).toEqual([])
     expect(assembled.overBudgetAfterTrim).toBe(false)
   })
 })

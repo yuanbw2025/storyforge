@@ -198,7 +198,7 @@ describe('WEH-0E structured output execution', () => {
     })
   })
 
-  it('provider、取消、scope、permission、stale 和超长错误不自动重发', async () => {
+  it('provider、取消、scope、permission、stale 错误不自动重发，长合法结果直接通过', async () => {
     const provider = createNode({ outputs: [new Error('provider unavailable')] })
     const providerBudget = new AgentTeamBudgetTracker('balanced')
     await expect(runBudgetedGenerationNode({
@@ -256,7 +256,7 @@ describe('WEH-0E structured output execution', () => {
       budget: oversizedBudget,
       callLabel: 'length',
       maxOutputTokens: 1_000,
-    })).rejects.toMatchObject({ retryable: false })
+    })).resolves.toMatchObject({ output: {field: 'races', value: '潮民'} })
     expect(oversizedBudget.snapshot().calls).toBe(1)
   })
 })
