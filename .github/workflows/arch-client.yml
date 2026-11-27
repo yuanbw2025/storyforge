@@ -1,19 +1,11 @@
 name: Build and test Arch Linux client
 on:
   workflow_dispatch:
-    inputs:
-      candidate_run:
-        description: 'Optional immutable formal run for supplemental upgrade verification'
-        type: string
-      candidate_source:
-        description: 'Exact source SHA when candidate_run is set'
-        type: string
   workflow_call:
 permissions:
   contents: read
 jobs:
   arch:
-    if: ${{ !inputs.candidate_run }}
     runs-on: ubuntu-latest
     timeout-minutes: 50
     env:
@@ -74,13 +66,3 @@ jobs:
           path: release/arch/*.pkg.tar.zst
           if-no-files-found: error
           retention-days: 14
-
-  candidate-upgrade:
-    if: ${{ inputs.candidate_run != '' }}
-    permissions:
-      contents: read
-      actions: read
-    uses: ./.github/workflows/arch-upgrade-candidate.yml
-    with:
-      candidate_run: ${{ inputs.candidate_run }}
-      candidate_source: ${{ inputs.candidate_source }}

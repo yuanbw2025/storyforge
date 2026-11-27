@@ -178,10 +178,13 @@ React 页面模块或预加载样式失败时，错误页的“重试”先等�
 
 Arch 使用同一 Electron 主进程、React 入口、三注册表与作品 owner。属于共享分发能力研发，交接物为 `StoryForge-<version>-arch-x64.pkg.tar.zst`，不新增作品表或模型写入入口。客户端默认用户目录为 `~/.config/StoryForge`（遵循系统 XDG 配置），固定 origin 为 `http://localhost:17831/storyforge/`。
 
-`npm run build:linux` 生成 Linux 桌面目录。`arch-client.yml` 在 GitHub 的 Ubuntu 构建机生成该目录，随后在 Arch Linux 容器中使用 `makepkg` 生成原生软件包，以 `pacman` 实际安装。测试使用非 root 用户、Xvfb 的 X11 显示服务和隔离用户数据，保留 Electron 沙箱。容器仅为 Chromium 沙箱开放命名空间权限。测试覆盖应用菜单与图标、窗口启动、协议确认、渲染进程崩溃恢复、重启、重复安装、卸载后重装及原生产备份/OPFS 内容保留。首次 Arch 交付验证同版本重装，后续跨版本升级另需旧版包证据。该环境不代表各桌面环境及 Wayland 的人工验收。
+`npm run build:linux` 生成 Linux 桌面目录。`arch-client.yml` 在 GitHub 的 Ubuntu 构建机生成该目录，随后在 Arch Linux 容器中使用 `makepkg` 生成原生软件包，以 `pacman` 实际安装。测试使用非 root 用户、Xvfb 的 X11 显示服务和隔离用户数据，保留 Electron 沙箱。容器仅为 Chromium 沙箱开放命名空间权限。测试覆盖应用菜单与图标、窗口启动、协议确认、渲染进程崩溃恢复、重启、重复安装、卸载后重装及原生产备份/OPFS 内容保留。正式发行同时使用准确旧生产源码、旧正式软件包与当前源码的隔离夹具完成跨版本覆盖升级；原同版本重装、卸载与恢复检查保留。该环境不代表各桌面环境及 Wayland 的人工验收。
 
 安装或更新下载的软件包时，在文件所在目录运行 `sudo pacman -U StoryForge-<version>-arch-x64.pkg.tar.zst`。启动菜单中的 StoryForge 或运行 `storyforge`。卸载使用 `sudo pacman -R storyforge`，作品保存在用户目录。便携版的浏览器作品可通过现有完整备份导入客户端。
 
 应用内更新检查只选择官方仓库、当前架构的稳定版包，下载并校验 GitHub 提供的大小和 SHA-256。用户确认后退出并定位已校验文件，由用户通过终端执行上述 `pacman` 命令。软件包的系统安装授权由操作系统处理。
 
 完整发行通过 `clients.yml` 调用 Arch 工作流，验收成功才上传 `client-arch-x64`。`release.yml` 将其纳入所有平台的发布依赖、附件上传及 `SHA256SUMS.txt`。
+
+
+对已生成的精确候选包补做 Arch 升级取证，使用独立的 `arch-upgrade-candidate.yml` 手动入口，并提供 `candidate_run` 与 `candidate_source`。它只读指定正式运行的不可变 `client-arch-x64` artifact；需要的 `actions: read` 仅属于该独立诊断。常规 `arch-client.yml` 不接受这两个诊断参数，也不嵌套诊断入口；正式调用链不因可选补验而增加权限，Arch 全部必需检查继续无条件执行。
