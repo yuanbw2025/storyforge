@@ -515,7 +515,7 @@ export async function generateHistoryAgentCandidateV1(input: {
       : chat(prepared.messages, input.aiConfig!, {
           category: input.mode === 'consult' ? 'history.consult' : 'history.storm',
           projectId: input.scope.projectId,
-          configOverrides: { maxTokens: requireFixedBudgetValueV1(getAgentSkillV1(skillId(input.mode)).maxOutputTokens) },
+          configOverrides: { maxTokens: 0 },
           contextOverflowPolicy: 'reject',
         }))
   } catch (error) {

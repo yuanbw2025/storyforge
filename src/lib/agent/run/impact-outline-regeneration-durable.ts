@@ -602,7 +602,7 @@ export async function generateImpactOutlineRegenerationCandidateV1(input: {
   const requestMeta = {
     category: 'outline.impact-regenerate' as const,
     projectId: input.scope.projectId,
-    configOverrides: { maxTokens: requireFixedBudgetValueV1(getAgentSkillV1(IMPACT_OUTLINE_REGENERATION_SKILL_ID_V1).maxOutputTokens) },
+    configOverrides: { maxTokens: 0 },
     contextOverflowPolicy: 'reject' as const,
   }
   if (!input.runAI) {
@@ -667,7 +667,7 @@ export async function generateImpactOutlineRegenerationCandidateV1(input: {
       : chat(prepared.messages, input.aiConfig!, {
           category: 'outline.impact-regenerate',
           projectId: input.scope.projectId,
-          configOverrides: { maxTokens: requireFixedBudgetValueV1(getAgentSkillV1(IMPACT_OUTLINE_REGENERATION_SKILL_ID_V1).maxOutputTokens) },
+          configOverrides: { maxTokens: 0 },
           contextOverflowPolicy: 'reject',
         }, undefined, resultMeta))
   } catch (error) {

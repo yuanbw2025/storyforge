@@ -65,9 +65,9 @@ it('sends required candidate shape, saves the exact schema request and preserves
   }
   expect(JSON.stringify(options.jsonSchema?.schema)).toContain('目标原本 active 且继续保持 active 时必须填 null')
   expect(call[0][0].content).toContain('个人暂停不自动暂停整线')
-  expect(call[1].maxTokens).toBe(4000)
-  expect(chat.mock.calls[0][1].maxTokens).toBe(2000)
-  expect(chat.mock.calls[2][1].maxTokens).toBe(8000)
+  expect(call[1].maxTokens).toBe(0)
+  expect(chat.mock.calls[0][1].maxTokens).toBe(0)
+  expect(chat.mock.calls[2][1].maxTokens).toBe(0)
   expect(result.snapshot.contract.budget.maxOutputTokens).toBe(14000)
   expect(await readProductRuntimeState(f.sessionId)).toEqual(before)
   const candidate = result.candidate
@@ -234,8 +234,8 @@ it('leaves old prompt contracts and unverified providers on the original request
   expect((await readInstanceAgentRunV1(f.scope, result.snapshot.run.id)).contract.executionBindings![0].promptVersion).toBe('chat-narrative-action-v37')
 })
 
-it('treats a user zero as the frozen cap and rejects invalid caps', () => {
-  expect([undefined, 0, 4000, 20000].map(n => boundedChatOutputTokensV1(n, 8000))).toEqual([8000, 8000, 4000, 8000])
+it('treats a user zero as automatic service capacity and rejects invalid input', () => {
+  expect([undefined, 0, 4000, 20000].map(n => boundedChatOutputTokensV1(n, 8000))).toEqual([0, 0, 4000, 20000])
   for (const n of [-1, 1.5, NaN, Infinity]) expect(() => boundedChatOutputTokensV1(n, 8000)).toThrow('预算无效')
   expect(() => boundedChatOutputTokensV1(0, 0)).toThrow('预算无效')
 })
@@ -274,7 +274,7 @@ it.each([
   expect(createHash('sha256').update(JSON.stringify(chatActionOutputRulesV1(version))).digest('hex')).toBe('852c148e07c807d1d5f70c74d583320c2433f00515342226af66ae05e8ca3957')
 })
 
-it('keeps the original review budget when registry defaults change after the run was frozen', async () => {
+it('keeps frozen review identity when registry defaults change without imposing its old output quota', async () => {
   const get = skills.getAgentSkillV1
   let upgraded = false
   vi.spyOn(skills, 'getAgentSkillV1').mockImplementation(id => id === 'character.chat-narrative-action-review'
@@ -286,7 +286,7 @@ it('keeps the original review budget when registry defaults change after the run
   })
   const result = await generate(await start())
   expect(chat).toHaveBeenCalledTimes(2)
-  expect(chat.mock.calls[1][1].maxTokens).toBe(2400)
+  expect(chat.mock.calls[1][1].maxTokens).toBe(0)
   expect(result.snapshot.contract.executionBindings).toMatchObject([{maxOutputTokens: 4000}, {maxOutputTokens: 2400}])
   expect(result.snapshot.contract.budget.maxOutputTokens).toBe(6400)
 })

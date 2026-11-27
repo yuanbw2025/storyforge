@@ -60,7 +60,7 @@ export async function consultAuthoringV1<S>(input: AuthoringConsultationInput, p
         throw new Error("会谈超过上下文容量，请先保存当前方案并开始新会谈");
     const binding = createAgentSkillExecutionBindingV1(skill);
     const resolved = input.config
-        ? resolveRequestConfig({ ...input.config, maxTokens: 8000 }, {
+        ? resolveRequestConfig({ ...input.config }, {
             category: port.category,
             projectId: input.scope.projectId,
             contextOverflowPolicy: "reject",

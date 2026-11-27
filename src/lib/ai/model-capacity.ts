@@ -167,11 +167,24 @@ export async function discoverModelCapacityV1(config: AIConfig, fetchImpl: typeo
 export function evidencedInputBudgetV1(input: { config: AIConfig; outputReservation: number }): number | null {
   if (!Number.isSafeInteger(input.outputReservation) || input.outputReservation <= 0) return null
   try {
-    const value = Math.floor(modelInputBudgetV1(freezeModelCapacityV1(input.config), input.outputReservation).inputBudget)
+    const capacity = freezeModelCapacityV1(input.config)
+    if (capacity.confidence === 'fallback') return null
+    const value = Math.floor(modelInputBudgetV1(capacity, input.outputReservation).inputBudget)
     return Number.isSafeInteger(value) && value > 0 ? value : null
   } catch {
     return null
   }
+}
+
+/** Only a service/official limit may constrain new context assembly. The old
+ * finite fallback remains readable in historical snapshots, not a model fact.
+ * Automatic output uses the space left by the complete input at dispatch. */
+export function serviceInputBudgetV1(capacity: ModelCapacityV1, requestedOutput = 0): number | null {
+  if (capacity.confidence === 'fallback') return null
+  const reserved = requestedOutput > 0 ? Math.min(requestedOutput,
+    capacity.outputLimitSource === 'policy' ? requestedOutput : capacity.outputLimit) : 0
+  return Math.max(1, Math.floor(Math.min(capacity.inputLimit ?? Infinity,
+    capacity.totalWindow == null ? Infinity : capacity.totalWindow - reserved)))
 }
 
 export async function prepareModelCapacityV1(config: AIConfig): Promise<AIConfig> {

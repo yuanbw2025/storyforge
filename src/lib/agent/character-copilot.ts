@@ -189,7 +189,7 @@ export async function readCharacterRosterSnapshot(
 function assertAuthorRequest(value: string): string {
   const request = value.trim()
   if (request.length < 2) throw new Error('请至少输入 2 个字符的角色要求。')
-  if (request.length > 1000) throw new Error('单次角色要求不能超过 1000 个字符。')
+
   return request
 }
 
@@ -203,9 +203,7 @@ function stringField(
   if (typeof raw !== 'string') throw new Error(`角色候选字段 ${field} 必须是字符串。`)
   const value = raw.trim()
   if (options.required && !value) throw new Error(`角色候选缺少 ${field}。`)
-  if (value.length > (options.max ?? MAX_CHARACTER_FIELD_CHARS)) {
-    throw new Error(`角色候选字段 ${field} 超过长度上限。`)
-  }
+
   return value
 }
 
@@ -259,9 +257,7 @@ export function parseCharacterCandidateDraft(draft: string): CharacterCopilotCan
         relationships: stringField(source, 'relationships'),
         ...dimensions,
       }
-      if (JSON.stringify(result).length > MAX_CHARACTER_CANDIDATE_CHARS) {
-        throw new Error(`角色候选超过 ${MAX_CHARACTER_CANDIDATE_CHARS} 字符。`)
-      }
+
       return result
     },
   })
@@ -620,8 +616,5 @@ export function formatCharacterGenerationRequestV1(input: {
   const hint = (input.hint ?? '').trim()
   if (hint) parts.push(`作者要求与本轮维度：${hint}`)
   const request = parts.join('\n')
-  if (request.length > 8_000) {
-    throw new Error('角色作者要求超过 8000 字符；没有截断，已在模型调用前阻止。')
-  }
   return request
 }

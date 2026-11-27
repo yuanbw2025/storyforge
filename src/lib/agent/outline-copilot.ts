@@ -214,7 +214,7 @@ async function readSnapshot(
 function assertAuthorRequest(value: string): string {
   const request = value.trim()
   if (request.length < 2) throw new Error('请至少输入 2 个字符的大纲要求。')
-  if (request.length > 2000) throw new Error('单次大纲要求不能超过 2000 个字符。')
+
   return request
 }
 
@@ -566,31 +566,7 @@ function parseOutlineCreativeOutcomeV1(
   raw: string,
   prepared: PreparedOutlineCopilot,
 ): CreativeParseOutcomeV1<GeneratedOutlineItem[]> {
-  if (raw.length > MAX_CANDIDATE_CHARS) {
-    const issue = createCreativeIssueV1({
-      code: 'outline-response-too-large',
-      path: '$',
-      message: `大纲响应超过 ${MAX_CANDIDATE_CHARS} 字符，不能安全持久化。`,
-      disposition: 'blocking',
-      action: 'replan',
-    })
-    return {
-      status: 'blocked',
-      output: [],
-      editableText: raw.slice(0, MAX_CANDIDATE_CHARS),
-      validFragments: [],
-      rejectedFragments: [{
-        version: 1,
-        id: 'outline-response',
-        path: '$',
-        text: raw.slice(0, 40_000),
-        status: 'rejected',
-        issueCodes: [issue.code],
-      }],
-      issues: [issue],
-      assumptions: prepared.input.narrativeBrief.assumptions,
-    }
-  }
+
   try {
     const output = parseOutlineCandidateDraft(raw)
     const gateIssues = candidateIssues(output, prepared.snapshot)
@@ -750,7 +726,7 @@ export function revalidateOutlineCreativeDraftV1(input: {
   return parseCreativeArtifactV1({
     ...input.previousArtifact,
     status,
-    editableText: input.draft.slice(0, MAX_CANDIDATE_CHARS),
+    editableText: input.draft,
     validFragments,
     rejectedFragments,
     issues,
@@ -781,7 +757,7 @@ export function createOutlineCopilotNode(
     category: input.routingCategory ?? (input.mode === 'volumes' ? 'outline.volume' : 'outline.chapter'),
     projectId: input.project.id!,
     configOverrides: {
-      maxTokens: input.generationOverrides?.maxTokens ?? (input.mode === 'volumes' ? 8000 : 12_000),
+      maxTokens: input.generationOverrides?.maxTokens ?? 0,
       ...(input.generationOverrides?.temperature != null
         ? { temperature: input.generationOverrides.temperature }
         : {}),

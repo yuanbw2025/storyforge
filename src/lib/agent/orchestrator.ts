@@ -895,9 +895,9 @@ export async function createMasterAgentPlan(input: {
           // B10d：整卷/全书计划可能要枚举大量逐章任务，任务规划调用的 wire 输出
           // 不再注入固定 1,800 配额（旧配额会在长计划上截断并退回确定性小计划，
           // 形成事实上的章数上限）；按连接配置执行——作者显式上限优先，否则按
-          // 已核实模型容量自动取值。自由讨论保持其专用应答上限。
+          // 已核实模型容量自动取值，自由讨论同样不叠加内部应答上限。
           configOverrides: {
-            ...(input.freeDiscussion ? { maxTokens: maxOutputTokens } : {}),
+            ...(input.freeDiscussion ? { maxTokens: config.maxTokens } : {}),
             temperature: input.freeDiscussion ? config.temperature : 0.2,
           },
           contextOverflowPolicy: 'reject',

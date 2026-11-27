@@ -559,7 +559,7 @@ export async function generateCultivationProgressExtractionCandidateV1(input: {
       : chat(prepared.messages, input.aiConfig!, {
           category: 'cultivation.progress',
           projectId: input.scope.projectId,
-          configOverrides: { maxTokens: requireFixedBudgetValueV1(getAgentSkillV1('prose.cultivation-progress-extraction').maxOutputTokens) },
+          configOverrides: { maxTokens: 0 },
           contextOverflowPolicy: 'reject',
         }))
   } catch (error) {

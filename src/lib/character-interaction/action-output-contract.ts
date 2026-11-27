@@ -219,11 +219,13 @@ export function chatActionRequestOptionsV1(version: string | undefined, provider
   return {jsonSchema: {name: wire ? 'chat_action_shape_v4' : ownEvidence ? 'chat_action_shape_v3' : usesChangeDescriptions(version) ? 'chat_action_shape_v2' : 'chat_action_shape_v1', strict: true, schema}}
 }
 
-/** A user's zero means "no user cap", never removal of the durable run cap. */
+/** Preserve the author's limit; zero requests automatic service capacity. */
 export function boundedChatOutputTokensV1(userLimit: number | undefined, frozenLimit: number): number {
   if (!Number.isSafeInteger(frozenLimit) || frozenLimit < 1
     || userLimit !== undefined && (!Number.isSafeInteger(userLimit) || userLimit < 0)) throw new Error('[chat-output] 输出预算无效')
-  return userLimit === undefined || userLimit === 0 ? frozenLimit : Math.min(userLimit, frozenLimit)
+  // The registered amount is a historical forecast, not an output quota.
+  void frozenLimit
+  return userLimit ?? 0
 }
 
 export const CHAT_ACTION_OUTPUT_CHECK_V1 = '输出完整候选对象，不能省略 goalKey、goalStatus 或示例中的数组/可空字段；无变化用 [] 或 null，不能重复原状态的 threadUpdates。kind 与实际行为一致：已经移动、查看或完成其他自身动作不能标成纯 speak，实际变化按原合同登记。pauseGoal 只保存自己的目标暂停及恢复条件，不自动暂停共同行动：若正文接受双方/整个事项暂停，且该原事项的全部知情者均在本次听众中，必须同时在 threadUpdates 中将对应的 open/blocked 原事项设为 paused，并以同一段确认原话为 evidenceExcerpt；只暂停自己时不能借此暂停他人或整条共同事项。已是 paused 的原事项不重复更新。保留原文字、事实、权限、玩家决定和独立审查；不能为凑字段虚构行动或后果。'

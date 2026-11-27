@@ -5,7 +5,7 @@ import { canonicalStringify, hashCanonicalValue } from '../agent/run/hash'
 import { sha256Text } from './chapter-memory/text-normalization'
 import { freezeNativeCodexAssessmentV2, serializeNativeCodexAssessmentV2, prepareNativeCodexRequestV2, type NativeCodexAssessmentContextV2, type NativePreparedRequestV2Handle } from './codex-transport'
 import { referenceServiceOutputLimit } from '../reference-analysis/request-capacity'
-import { inheritModelCapacityV1, prepareModelCapacityV1, freezeModelCapacityV1, modelInputBudgetV1 } from './model-capacity'
+import { inheritModelCapacityV1, prepareModelCapacityV1, freezeModelCapacityV1, serviceInputBudgetV1 } from './model-capacity'
 import { assertGenerationAvailable } from '../showcase/policy'
 import { streamCodex, CODEX_BASE_URL, assertModelDispatchGuardV1, modelDispatchWasCancelledV1, ModelDispatchGuardRejectedV1, type CodexRequestRefV1 } from './codex-transport'
 import type { CodexTerminalFailureV1 } from './codex-terminal-failure'
@@ -13,7 +13,7 @@ import type { AIConfig, ChatMessage } from '../types'
 import { AIError, CodexRequestError } from '../types'
 import { createLog, updateLog, type TokenUsage } from './logger'
 import { recordUsage } from './usage-log'
-import { estimateTokens, trimMessagesToFit } from './context-budget'
+import { estimateTokens } from './context-budget'
 import { buildOpenAIEndpoint } from './openai-endpoint'
 import { getAIConfigPresetApiKeyV1, useAIConfigStore } from '../../stores/ai-config'
 import { resolveAIConfigForTask, type AITaskKind } from './task-routing'
@@ -213,6 +213,18 @@ export function estimateChatRequestOptionsTokens(options?: ChatRequestOptions): 
 /**
  * 根据 provider 构造请求 URL 和 headers
  */
+function completeRequestContext(messages: ChatMessage[], config: AIConfig, reservedInputTokens = 0) {
+  const capacity = freezeModelCapacityV1(config)
+  const totalInputTokens = estimateTokens(JSON.stringify(messages)) + reservedInputTokens
+  try {
+    referenceServiceOutputLimit(config, messages, reservedInputTokens)
+  } catch (cause) {
+    throw Object.assign(new Error('当前模型服务的实际上下文窗口不足以容纳完整请求；已拒绝静默裁剪。'), { cause })
+  }
+  return { messages: messages.map(message => ({ ...message })), trimmed: false, protectedEnvelopePreserved: true, totalInputTokens,
+    inputBudget: serviceInputBudgetV1(capacity) ?? Math.max(1, totalInputTokens) }
+}
+
 function buildRequest(
   config: AIConfig,
   messages: ReadonlyArray<{ role: ChatMessage['role']; content: unknown }>,
@@ -221,10 +233,10 @@ function buildRequest(
   preparedOutputV2?: { tokens: number | null },
 ) {
   // 基础请求体：所有 provider 都需要的字段
-  const capacity = preparedOutputV2 ? undefined : freezeModelCapacityV1(config)
-  config = { ...config, maxTokens: preparedOutputV2 ? preparedOutputV2.tokens ?? 0 : options?.capacityPolicy === 'reference-service'
-    ? referenceServiceOutputLimit(config, messages) ?? 0
-    : modelInputBudgetV1(capacity!, config.maxTokens).outputBudget }
+  const serviceOutput = preparedOutputV2 ? null : referenceServiceOutputLimit(config, messages, estimateChatRequestOptionsTokens(options))
+  const authorOutput = options?.capacityPolicy !== 'reference-service' && config.maxTokens > 0 ? config.maxTokens : null
+  config = { ...config, maxTokens: preparedOutputV2 ? preparedOutputV2.tokens ?? 0
+    : authorOutput == null ? serviceOutput ?? 0 : Math.min(authorOutput, serviceOutput ?? Infinity) }
   const body: Record<string, unknown> = {
     model: config.model,
     messages,
@@ -350,10 +362,7 @@ export async function chatWithImagesV1(
   config = await prepareModelCapacityV1(resolved.config)
   if (config.provider === 'codex') throw new CodexRequestError('Codex 本机连接目前只支持文本；图片审查请选择支持图片的 API 提供商。')
   const imageTokenReserve = parsedImages.reduce((sum, image) => sum + (image.detail === 'high' ? 1_200 : 300), 0)
-  const trimmed = trimMessagesToFit(
-    messages, config.provider, config.model, config.maxTokens, undefined,
-    estimateChatRequestOptionsTokens(options) + imageTokenReserve, config.modelCapacity,
-  )
+  const trimmed = completeRequestContext(messages, config, estimateChatRequestOptionsTokens(options) + imageTokenReserve)
   if (trimmed.trimmed && meta?.contextOverflowPolicy === 'reject') {
     throw new Error(
       `当前模型上下文窗口不足以容纳完整多模态请求（${trimmed.totalInputTokens}/${trimmed.inputBudget} tokens）；已拒绝静默裁剪。`,
@@ -420,7 +429,7 @@ export async function* streamChat(
   const resolved = frozenResolution ?? resolveRequestConfig(config, meta)
   warnRouteFallback(resolved, meta)
   config = await prepareModelCapacityV1(resolved.config)
-  const trimmed = trimMessagesToFit(messages, config.provider, config.model, config.maxTokens, undefined, 0, config.modelCapacity)
+  const trimmed = completeRequestContext(messages, config)
   if (trimmed.trimmed && meta?.contextOverflowPolicy === 'reject') {
     throw new Error(
       `当前模型上下文窗口不足以容纳完整请求（${trimmed.totalInputTokens}/${trimmed.inputBudget} tokens）；已拒绝静默裁剪。`,
@@ -598,16 +607,7 @@ export async function chat(
   const resolved = frozenResolution ?? resolveRequestConfig(config, meta)
   warnRouteFallback(resolved, meta)
   config = await prepareModelCapacityV1(resolved.config)
-  const trimmed = options?.capacityPolicy === 'reference-service'
-    ? { messages, trimmed: false, protectedEnvelopePreserved: true, totalInputTokens: estimateTokens(JSON.stringify(messages)), inputBudget: estimateTokens(JSON.stringify(messages)) }
-    : trimMessagesToFit(
-    messages,
-    config.provider,
-    config.model,
-    config.maxTokens,
-    undefined,
-    estimateChatRequestOptionsTokens(options), config.modelCapacity,
-  )
+  const trimmed = completeRequestContext(messages, config, estimateChatRequestOptionsTokens(options))
   if (trimmed.trimmed && meta?.contextOverflowPolicy === 'reject') {
     throw new Error(
       `当前模型上下文窗口不足以容纳完整请求（${trimmed.totalInputTokens}/${trimmed.inputBudget} tokens）；已拒绝静默裁剪。`,
@@ -715,7 +715,8 @@ async function* loggedCodex(
   let refusedBeforeDispatch = false
   const log = createLog({ type: 'chat', provider: 'codex', model: config.model, url: CODEX_BASE_URL, status: 'pending' })
   try {
-    yield* streamCodex(messages, config.model, signal, receipt, schema, responseFormat, capacityPolicy, preparedRequestV2)
+    yield* streamCodex(messages, config.model, signal, receipt, schema, responseFormat,
+      preparedRequestV2 ? capacityPolicy : capacityPolicy ?? 'reference-service', preparedRequestV2)
     updateLog(log.id, { status: 'success', duration: Date.now() - startedAt, usage: receipt.usage })
   } catch (error) {
     updateLog(log.id, { status: 'error', duration: Date.now() - startedAt, errorMessage: error instanceof Error ? error.message : 'Codex 连接失败' })

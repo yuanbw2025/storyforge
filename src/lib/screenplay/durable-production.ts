@@ -515,7 +515,7 @@ export async function generateScreenplayProfessionalCandidateV1(input: {
     snapshot = await append(input.scope, snapshot, 'model.requested', { stepId: config.stepId, attempt, bindingHash: await hashCanonicalValue(snapshot.contract.executionBindings?.[0]) })
     const result: ChatResult = {}
     let output: string
-    try { output = await (runAI ? runAI.call(callbackReceiver, attemptMessages) : chat(attemptMessages, input.aiConfig!, { category: config.category, projectId: input.scope.projectId, configOverrides: { maxTokens: requireFixedBudgetValueV1(skill.maxOutputTokens) }, contextOverflowPolicy: 'reject' }, input.signal, result)) }
+    try { output = await (runAI ? runAI.call(callbackReceiver, attemptMessages) : chat(attemptMessages, input.aiConfig!, { category: config.category, projectId: input.scope.projectId, configOverrides: { maxTokens: 0 }, contextOverflowPolicy: 'reject' }, input.signal, result)) }
     catch (error) {
       const failed = await recordUnavailableCreationResponseV1({ snapshot, request: prepared.request, result, error })
       try { snapshot = await append(input.scope, failed.snapshot, 'run.paused', { reason: `screenplay-${input.stage}-model-outcome-unknown`, recoverable: false }) }

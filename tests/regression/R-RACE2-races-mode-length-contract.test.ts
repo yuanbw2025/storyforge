@@ -47,15 +47,15 @@ describe.sequential('RACE-2 · races mode and finite output contract', () => {
     expect(resolveWorldviewFieldOperationV1({ requestedMode: 'polish', currentValue: '旧设定' })).toBe('polish')
   })
 
-  it('“不限”只采用模型有限上限；default/custom 与四类 cap 可复算', () => {
+  it('自动与自填输出只受真实模型容量和作者上限约束', () => {
     const agnes = { ...useAIConfigStore.getState().config, provider: 'agnes' as const, model: 'agnes-2.5-flash', baseUrl: 'https://apihub.agnes-ai.com/v1', maxTokens: 0 }
     const defaultBudget = resolveWorldviewFieldOutputBudgetV1({
       config: agnes, targetField: 'races', skillMaxOutputTokens: 6_000,
     })
     expect(defaultBudget).toMatchObject({
-      source: 'default', requestedTokens: 6_000, effectiveMaxTokens: 6_000,
-      effectiveCapTokens: 6_000, modelCapTokens: 65_500,
-      authorConfigCapTokens: 65_500, longOutputMode: 'disabled',
+      source: 'default', requestedTokens: 0, effectiveMaxTokens: 65_500,
+      effectiveCapTokens: 65_500, modelCapTokens: 65_500,
+      authorConfigCapTokens: 0, longOutputMode: 'service-capacity',
     })
     expect(parseWorldviewFieldOutputBudgetV1(defaultBudget)).toEqual(defaultBudget)
 
@@ -68,15 +68,15 @@ describe.sequential('RACE-2 · races mode and finite output contract', () => {
       config: { ...agnes, provider: 'kimi', model: 'moonshot-v1-8k' },
       targetField: 'races', skillMaxOutputTokens: 6_000,
     })
-    expect(kimi).toMatchObject({ effectiveCapTokens: 4_000, effectiveMaxTokens: 4_000 })
-    expect(() => resolveWorldviewFieldOutputBudgetV1({
+    expect(kimi).toMatchObject({ effectiveCapTokens: 0, effectiveMaxTokens: 0 })
+    expect(resolveWorldviewFieldOutputBudgetV1({
       config: agnes, targetField: 'races', skillMaxOutputTokens: 6_000, requestedMaxTokens: 6_001,
-    })).toThrow('LONGOUT-1 尚未启用')
+    }).effectiveMaxTokens).toBe(6_001)
     expect(() => parseWorldviewFieldOutputBudgetV1({ ...custom, effectiveCapTokens: 99_999 }))
-      .toThrow('派生不一致')
+      .toThrow('证据不一致')
   })
 
-  it('实际 prepare 冻结有效模式、补充说明与有限输出值，超限在模型前拒绝', async () => {
+  it('实际 prepare 保留有效模式与补充说明，不因旧 Skill 配额拒绝', async () => {
     const fixture = await seedWorkspace()
     const config = {
       ...useAIConfigStore.getState().config,
@@ -95,7 +95,7 @@ describe.sequential('RACE-2 · races mode and finite output contract', () => {
     })
     expect(empty.input.mode).toBe('create')
     expect(empty.input.outputBudget).toMatchObject({
-      source: 'author-custom', effectiveMaxTokens: 4_500, longOutputMode: 'disabled',
+      source: 'author-custom', effectiveMaxTokens: 4_500, longOutputMode: 'service-capacity',
     })
     expect(empty.prepared.messages.map(item => item.content).join('\n')).toContain('尚未采纳的上游候选')
 
@@ -113,7 +113,7 @@ describe.sequential('RACE-2 · races mode and finite output contract', () => {
         configOverride: config,
       })
       expect(prepared.input.mode).toBe(mode)
-      expect(prepared.input.outputBudget?.effectiveMaxTokens).toBe(6_000)
+      expect(prepared.input.outputBudget?.effectiveMaxTokens).toBe(65_500)
     }
 
     await expect(prepareWorldviewFieldCopilot({
@@ -122,15 +122,15 @@ describe.sequential('RACE-2 · races mode and finite output contract', () => {
       authorRequest: request('expand'),
       configOverride: config,
       generationOverrides: { maxTokens: 6_001 },
-    })).rejects.toThrow('模型调用前明确拒绝')
+    })).resolves.toMatchObject({ input: { outputBudget: { effectiveMaxTokens: 6_001 } } })
   })
 
-  it('新普通入口的 V2 接受长字段；旧 V1 预算与解析只保历史语义', () => {
+  it('普通入口和节点旧入口都完整接收长字段', () => {
     // The real controls→host intent interaction is covered by R-WORLDVIEW-FIELD-V2-ui.
     const value = '种族条款。'.repeat(7000) + '完整尾标'
     const raw = JSON.stringify({ field: 'races', value })
     expect(parseWorldviewFieldCandidateDraftV2(raw).value).toBe(value)
-    expect(() => parseWorldviewFieldCandidateDraft(raw)).toThrow()
+    expect(parseWorldviewFieldCandidateDraft(raw).value).toBe(value)
   })
 
   it('provider 以 finish_reason=length 停止时，即使正文可解析也不能冒充完整候选', async () => {

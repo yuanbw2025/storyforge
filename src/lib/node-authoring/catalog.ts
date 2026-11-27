@@ -32,7 +32,7 @@ const contextInput = (): AuthoringPortDefinition => ({
   required: false,
   multiple: true,
   priority: 50,
-  maxTokens: 12_000,
+  maxTokens: 0,
 })
 
 const optionalControl = (

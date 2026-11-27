@@ -509,7 +509,7 @@ export async function generateConstitutionExtractionCandidateV1(input: {
       : chat(prompt.messages, input.aiConfig!, {
           category: 'canon.setting.extract',
           projectId: input.scope.projectId,
-          configOverrides: { maxTokens: requireFixedBudgetValueV1(getAgentSkillV1('world-origin.constitution-extract').maxOutputTokens) },
+          configOverrides: { maxTokens: 0 },
           contextOverflowPolicy: 'reject',
         }))
   } catch (error) {

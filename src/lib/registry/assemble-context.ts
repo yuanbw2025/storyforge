@@ -1,5 +1,5 @@
 import { canonicalStringify, hashCanonicalValue } from '../agent/run/hash'
-import { prepareModelCapacityV1, getModelCapacityV1, modelInputBudgetV1, type ModelCapacityV1 } from '../ai/model-capacity'
+import { prepareModelCapacityV1, serviceInputBudgetV1, type ModelCapacityV1 } from '../ai/model-capacity'
 /** assembleContext · 当前唯一上下文装配入口。 */
 import Dexie from 'dexie'
 import { estimateTokens, type ContextLayer, type ContextSegment } from '../ai/context-budget'
@@ -40,9 +40,6 @@ export {
   getContextSelectorPolicyV1,
   selectContextResourcesV1,
 } from '../context-gateway/selector'
-
-/** 拿不到模型时的保守默认输入预算(原固定 24K 偏紧,放宽避免内部提前裁) */
-const FALLBACK_INPUT_BUDGET = 48_000
 
 /** Local adoption may recheck registered context under an atomic write lock.
  * Only WebCrypto needs a keep-alive; wrapping DB reads in waitFor would deadlock. */
@@ -123,18 +120,10 @@ async function assertSourceTransformResult(
  * 这样上下文只在「真的接近模型窗口」时才按优先级软裁,而不是被固定小预算提前砍。
  */
 function deriveInputBudget(input: AssembleContextInput, capacity?: ModelCapacityV1): number {
-  if (!capacity && input.inputBudgetTokens && input.inputBudgetTokens > 0) return input.inputBudgetTokens
-  let modelBudget = FALLBACK_INPUT_BUDGET
-  if (capacity) {
-    modelBudget = Math.max(1, modelInputBudgetV1(capacity, input.modelConfig?.maxTokens).inputBudget - 1024)
-  } else if (input.provider && input.model) {
-    modelBudget = modelInputBudgetV1(getModelCapacityV1({ provider: input.provider, model: input.model, baseUrl: '', apiKey: '', temperature: 0, maxTokens: 0 })).inputBudget
-  }
-  if (capacity && input.inputBudgetTokens && input.inputBudgetTokens > 0) modelBudget = Math.min(modelBudget, input.inputBudgetTokens)
-  if (input.inputBudgetMaxTokens && input.inputBudgetMaxTokens > 0) {
-    return Math.min(modelBudget, input.inputBudgetMaxTokens)
-  }
-  return modelBudget
+  // Old role/source budgets are compatibility metadata, not new task quotas.
+  // Infinity is local arithmetic only; the returned manifest records actual
+  // selected material size when the connection's capacity is unknown.
+  return capacity ? serviceInputBudgetV1(capacity, input.modelConfig?.maxTokens) ?? Infinity : Infinity
 }
 
 export async function assembleContext(input: AssembleContextInput): Promise<AssembleContextResult> {
@@ -212,11 +201,7 @@ export async function assembleContext(input: AssembleContextInput): Promise<Asse
       if (selected.length !== 1) throw new Error('完整任务基线必须由专项执行器单独装配。')
       inputBudget = Math.max(1, estimateTokens(content))
     }
-    const sourceBudgetScale = Number.isFinite(input.sourceBudgetScale)
-      ? Math.max(0.1, Math.min(1, input.sourceBudgetScale!))
-      : 1
-    const scaledSourceBudget = completeTaskBaseline ? inputBudget : Math.max(64, Math.floor((source.budgetTokens ?? inputBudget) * sourceBudgetScale))
-    const sourceBudgetTokens = Math.min(scaledSourceBudget, inputBudget)
+    const sourceBudgetTokens = inputBudget
     const originalTokens = estimateTokens(content)
     if (source.atomic && originalTokens > sourceBudgetTokens) {
       // Atomic forbids partial delivery. Optional sources may still be dropped
@@ -357,7 +342,7 @@ export async function assembleContext(input: AssembleContextInput): Promise<Asse
       item.delivery === 'compressed' || item.delivery === 'truncated'
     )).map(item => ({ key: item.key, content: item.exactContent })),
     totalInputTokens,
-    inputBudget,
+    inputBudget: Number.isFinite(inputBudget) ? inputBudget : Math.max(1, totalInputTokens),
     overBudgetBeforeTrim,
     overBudgetAfterTrim: totalInputTokens > inputBudget,
   }

@@ -375,7 +375,7 @@ export async function generateMotionDramaCandidateV1(input: { scope: WorkspaceSc
     snapshot = await authorizeMotionModelRequest(roots.scope, snapshot, input.stage, attempt, contextManifest.manifestHash, roots.adaptation, roots.production)
     const result: ChatResult = {}
     let output: string
-    try { output = await (runAI ? runAI.call(callbackReceiver, messages) : chat(messages, input.aiConfig!, { category: config.category, projectId: roots.scope.projectId, configOverrides: { maxTokens: requireFixedBudgetValueV1(skill.maxOutputTokens) }, contextOverflowPolicy: 'reject' }, input.signal, result)) }
+    try { output = await (runAI ? runAI.call(callbackReceiver, messages) : chat(messages, input.aiConfig!, { category: config.category, projectId: roots.scope.projectId, configOverrides: { maxTokens: 0 }, contextOverflowPolicy: 'reject' }, input.signal, result)) }
     catch (error) {
       const failed = await recordUnavailableCreationResponseV1({ snapshot, request: prepared.request, result, error })
       unavailableResponse = failed

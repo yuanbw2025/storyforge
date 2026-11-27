@@ -253,7 +253,7 @@ async function generate(input: {
         throw new Error('有尚未结束的资料整理，请先恢复已保存结果或结束该任务')
     }
     const skill = getAgentSkillV1(SKILL), binding = createAgentSkillExecutionBindingV1(skill), formalEntry = await freezeFormalAIEntryBindingV1(ENTRY)
-    const resolved = input.config ? resolveRequestConfig({...structuredClone(input.config), maxTokens: 6000}, {category: CATEGORY, projectId: scope.projectId, contextOverflowPolicy: 'reject'}) : null
+    const resolved = input.config ? resolveRequestConfig(structuredClone(input.config), {category: CATEGORY, projectId: scope.projectId, contextOverflowPolicy: 'reject'}) : null
     if (!input.runAI && !resolved) throw new Error('请先配置全局 AI')
     const assembled = await assembleContext({...(protocol.source ? protocol.source.options(request) : {chatSourceReviewRequest: request as ChatSourceReviewRequestV1}), projectId: scope.projectId, scope, sourceKeys: [SOURCE],
       ...(!input.runAI && resolved ? {modelConfig: resolved.config, provider: resolved.config.provider, model: resolved.config.model} : {}), inputBudgetMaxTokens: 20_000})
