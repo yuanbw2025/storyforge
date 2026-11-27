@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef, useContext } from 'react'
 import { Plus, Trash2, ChevronDown, ChevronRight, MapPin, GitBranch, List, Sparkles, Image, Copy, Check, Loader2 } from 'lucide-react'
 import { useGeographyStore } from '../../stores/project-singletons'
 import { useWorldGroupStore } from '../../stores/world-group'
@@ -15,6 +15,9 @@ import { useBeforeUnload } from '../../hooks/useBeforeUnload'
 import { registerPendingDraftFlusherV1 } from '../../lib/authoring/pending-edit-coordinator'
 import ScopedWorldAuthoringBoundary, { worldAuthorViewKey } from '../world-group/ScopedWorldAuthoringBoundary'
 import { CInput, CTextarea } from '../shared/CompositionInput'
+import { AuthorRecordSaveScopeV1 } from '../shared/AuthorRecordSaveScope'
+import { LocalSaveStatus } from '../shared/InlineEdit'
+import { readGeographyFormV1, type GeographyFormRecordV1 } from '../../lib/authoring/geography-local-save-evidence'
 
 const LOCATION_TYPES: { value: LocationType; label: string }[] = [
   { value: 'continent', label: '大陆' },
@@ -53,6 +56,7 @@ export default function GeographyPanel({ project }: Props) {
 }
 
 function ScopedGeographyPanel({ project, activeGroupId }: Props & { activeGroupId: number | null }) {
+  const confirmedMode = useContext(AuthorRecordSaveScopeV1) !== null
   const activeWork = useActiveWork(project)
   const { geography, loadAll, save, loadedScope, loading, loadError } = useGeographyStore()
   const scope = useMemo(() => ({ projectId: project.id!, worldId: project.activeWorldId!, workId: project.activeWorkId! }), [project.id, project.activeWorldId, project.activeWorkId])
@@ -71,6 +75,11 @@ function ScopedGeographyPanel({ project, activeGroupId }: Props & { activeGroupI
   const [saveError, setSaveError] = useState('')
   const [readError, setReadError] = useState('')
   const [saving, setSaving] = useState(false)
+  const editBase = useRef<GeographyFormRecordV1 | null>(null)
+  const [confirmedForm, setConfirmedForm] = useState<{ overview: string; locations: string } | null>(null)
+  const [proofReady, setProofReady] = useState(false)
+  const proofRevision = useRef(0)
+  const saveErrorRef = useRef('')
   const composingRef = useRef(false)
   const [composing, setComposing] = useState(false)
   const mounted = useRef(true)
@@ -111,33 +120,61 @@ function ScopedGeographyPanel({ project, activeGroupId }: Props & { activeGroupI
     }
   }, [geography, readReady, groupId])
 
-  const persistDraft = useCallback(async function persist(): Promise<void> {
+  useEffect(() => {
+    if (!confirmedMode || !readReady || readError || dirtyFields.current.size || pendingSave.current) return
+    let active = true
+    const revision = ++proofRevision.current
+    setProofReady(false)
+    void readGeographyFormV1(scope, geography?.worldGroupId ?? groupId).then(row => {
+      if (!active || revision !== proofRevision.current || dirtyFields.current.size) return
+      if (row && (row.overview !== draft.current.overview || JSON.stringify(JSON.parse(row.locations)) !== JSON.stringify(draft.current.locations)))
+        throw new Error('地理原文已变化，请重新读取后编辑；当前显示已保留。')
+      editBase.current = row
+      setConfirmedForm(row ? { overview: row.overview, locations: row.locations } : null)
+      setProofReady(true)
+    }).catch(cause => {
+      if (!active || revision !== proofRevision.current) return
+      setConfirmedForm(null); setReadError(cause instanceof Error ? cause.message : String(cause))
+    })
+    return () => { active = false }
+  }, [confirmedMode, readReady, readError, scope, groupId, geography?.id, geography?.worldGroupId, geography?.updatedAt])
+
+  const persistDraft = useCallback(async function persist(retry = false): Promise<void> {
+    if (saveErrorRef.current && !retry) throw new Error(saveErrorRef.current)
     if (composingRef.current) throw new Error('输入法仍在组合文字，请完成输入后再保存地理内容。')
-    if (pendingSave.current) { await pendingSave.current; return persist() }
+    if (pendingSave.current) { await pendingSave.current; return persist(retry) }
     if (!dirtyFields.current.size) return
-    if (!draftReady.current) throw new Error('地理读取未完成，输入已保留')
+    if (!draftReady.current || (confirmedMode && !proofReady)) throw new Error('地理读取未完成，输入已保留')
     const before = { ...draft.current }
     const fields = [...dirtyFields.current]
     setSaving(true)
-    const operation = save({
+    const patch = {
       projectId: scope.projectId, worldGroupId: draftGroupId.current,
       ...(fields.includes('overview') ? { overview: before.overview } : {}),
       ...(fields.includes('locations') ? { locations: JSON.stringify(before.locations) } : {}),
-    }, scope)
+    }
+    const operation = confirmedMode
+      ? save(patch, scope, { kind: 'geography-form-save-v1', expected: editBase.current }).then(row => {
+        proofRevision.current++
+        editBase.current = row
+        setConfirmedForm({ overview: row.overview, locations: row.locations })
+      })
+      : save(patch, scope)
     pendingSave.current = operation
     try {
       await operation
       for (const field of fields) if (draft.current[field] === before[field]) dirtyFields.current.delete(field)
       setDirty(dirtyFields.current.size > 0)
-      setSaveError('')
+      setSaveError(''); saveErrorRef.current = ''
     } catch (cause) {
-      setSaveError(cause instanceof Error ? cause.message : '保存失败，输入已保留')
+      saveErrorRef.current = cause instanceof Error ? cause.message : '保存失败，输入已保留'
+      setSaveError(saveErrorRef.current)
       throw cause
     } finally { pendingSave.current = null; setSaving(false) }
-  }, [scope, save])
+  }, [scope, save, confirmedMode, proofReady])
   const persistRef = useRef(persistDraft)
   persistRef.current = persistDraft
-  useEffect(() => registerPendingDraftFlusherV1(() => persistRef.current()), [])
+  useEffect(() => registerPendingDraftFlusherV1(() => persistRef.current(true)), [])
   useEffect(() => () => { void persistRef.current().catch(() => undefined) }, [])
 
   useEffect(() => {
@@ -227,12 +264,15 @@ function ScopedGeographyPanel({ project, activeGroupId }: Props & { activeGroupI
         {loadError || readError}
         <button type="button" className="ml-3 underline" onClick={() => { void loadAll(scope, groupId).catch(() => undefined) }}>重新读取地理</button>
       </div>}
-      {saveError && <div role="alert" className="mb-3 text-sm text-error">
+      {!confirmedMode && saveError && <div role="alert" className="mb-3 text-sm text-error">
         未保存：{saveError} 输入已保留。
-        <button type="button" className="ml-3 underline" onClick={() => { void persistDraft().catch(() => undefined) }}>重试保存</button>
+        <button type="button" className="ml-3 underline" onClick={() => { void persistDraft(true).catch(() => undefined) }}>重试保存</button>
       </div>}
-      {saving && <p role="status" className="text-xs text-text-muted">正在保存…</p>}
-      <fieldset disabled={!readReady || !!readError} inert={!readReady || !!readError} className="contents" aria-label="地理读取保护"
+      {!confirmedMode && saving && <p role="status" className="text-xs text-text-muted">正在保存…</p>}
+      {confirmedMode && <LocalSaveStatus status={saveError ? 'failed' : saving ? 'saving' : dirty || composing ? 'dirty'
+        : confirmedForm && confirmedForm.overview === overview && confirmedForm.locations === JSON.stringify(locations) ? 'saved' : 'unconfirmed'}
+        error={saveError} retryLabel="重试保存地理" retry={() => { void persistDraft(true).catch(() => undefined) }} />}
+      <fieldset disabled={!readReady || !!readError || (confirmedMode && !proofReady)} inert={!readReady || !!readError || (confirmedMode && !proofReady)} className="contents" aria-label="地理读取保护"
         onCompositionStartCapture={() => { composingRef.current = true; setComposing(true) }}
         onCompositionEndCapture={() => { composingRef.current = false; setComposing(false) }}>
 
@@ -240,6 +280,7 @@ function ScopedGeographyPanel({ project, activeGroupId }: Props & { activeGroupI
       <div className="mb-6">
         <label className="block text-sm font-medium text-text-secondary mb-1">地理总述</label>
         <CTextarea
+          aria-label="地理总述"
           value={overview}
           onChange={e => {
             draft.current.overview = e.target.value
@@ -393,6 +434,7 @@ function ScopedGeographyPanel({ project, activeGroupId }: Props & { activeGroupI
                       <div>
                         <label className="block text-xs text-text-muted mb-1">名称</label>
                         <CInput
+                          aria-label="地点名称"
                           value={loc.name}
                           onChange={e => handleUpdateLocation(loc.id, { name: e.target.value })}
                           className="w-full px-2 py-1.5 bg-bg-base border border-border rounded text-sm text-text-primary focus:outline-none focus:border-accent"
@@ -427,6 +469,7 @@ function ScopedGeographyPanel({ project, activeGroupId }: Props & { activeGroupI
                     <div>
                       <label className="block text-xs text-text-muted mb-1">描述</label>
                       <CTextarea
+                        aria-label="地点描述"
                         value={loc.description}
                         onChange={e => handleUpdateLocation(loc.id, { description: e.target.value })}
                         className="w-full h-20 p-2 bg-bg-base border border-border rounded text-sm text-text-primary resize-y focus:outline-none focus:border-accent"
@@ -435,6 +478,7 @@ function ScopedGeographyPanel({ project, activeGroupId }: Props & { activeGroupI
                     <div>
                       <label className="block text-xs text-text-muted mb-1">剧情重要性</label>
                       <CInput
+                        aria-label="剧情重要性"
                         value={loc.significance}
                         onChange={e => handleUpdateLocation(loc.id, { significance: e.target.value })}
                         className="w-full px-2 py-1.5 bg-bg-base border border-border rounded text-sm text-text-primary focus:outline-none focus:border-accent"
