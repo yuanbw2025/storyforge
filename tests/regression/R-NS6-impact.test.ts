@@ -7,6 +7,7 @@ import { db } from '../../src/lib/db/schema'
 import { propagateChapterEditStale, analyzeEditImpact, buildEditImpactGraphV1 } from '../../src/lib/consistency/impact-analysis'
 import { seedCurrentProject } from '../helpers/current-workspace'
 import { finalizeCurrentFixtureV1 } from '../helpers/current-resource-identity'
+import { CONTEXT_SOURCES } from '../../src/lib/registry/context-sources'
 
 const now = Date.now()
 async function seed() {
@@ -77,5 +78,22 @@ describe('NS-6 · 影响分析与 stale 传播', () => {
     await db.chapters.update(chaps[0], { content: '正文发生变化。' })
     const changed = await buildEditImpactGraphV1(pid, chaps[0])
     expect(changed.graphHash).not.toBe(graph.graphHash)
+  })
+
+  it('注册的一致性摘要保留图指纹、只读与跨作品拒绝边界', async () => {
+    const { pid, chaps } = await seed()
+    await addFact(pid, chaps[0], {})
+    const source = CONTEXT_SOURCES.find(row => row.key === 'consistencyReport')!
+    const graph = await buildEditImpactGraphV1(pid, chaps[0])
+    const before = { chapters: await db.chapters.toArray(), facts: await db.temporalFacts.toArray() }
+    const input = { projectId: pid, chapterId: chaps[0] }
+    const report = await source.read(input)
+    expect(report).toContain(`【影响图指纹】${graph.graphHash}`)
+    expect(report).toContain(`后续可能受影响章节 ${graph.downstreamChapterIds.length} 个`)
+    expect(await source.read({ projectId: pid })).toBe('')
+    const other = await seed()
+    await expect(source.read({ projectId: other.pid, chapterId: chaps[0] })).rejects.toThrow('来源章节不存在或不属于当前作品')
+    expect(await db.chapters.where('projectId').equals(pid).toArray()).toEqual(before.chapters)
+    expect(await db.temporalFacts.where('projectId').equals(pid).toArray()).toEqual(before.facts)
   })
 })
