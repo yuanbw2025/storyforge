@@ -1,3 +1,4 @@
+import { enterWorkDescriptionEditorV1, expectWorkDescriptionSourceV1 } from './helpers/markdown-source'
 import { expect, test, type Page } from '@playwright/test'
 import { createLongform } from './helpers/product-entry'
 import { openLongformLeaf } from './helpers/longform-navigation'
@@ -29,6 +30,7 @@ test('all four Work info controls save, clear, reload and stay out of the worksp
   const errors: string[] = []; page.on('pageerror', error => errors.push(error.message))
   const id = await create(page, '基本信息逐项隔离验收')
   await page.getByLabel('作品名称', { exact: true }).fill('雾港与盐桥')
+  await enterWorkDescriptionEditorV1(page)
   await page.getByLabel('作品简介', { exact: true }).fill('受伤的探路人必须自己判断道路，系统只展示代价。\n第二段保留中文。')
   const option = await page.evaluate(async () => {
     const { GENRE_OPTIONS } = await (new Function('return import("/storyforge/src/lib/types/index.ts")'))()
@@ -45,8 +47,9 @@ test('all four Work info controls save, clear, reload and stay out of the worksp
   expect(current.work.genres).toContain(option.value); expect(current.work.targetWordCount).toBe(200000)
   expect(current.project).not.toHaveProperty('title'); expect(current.project).not.toHaveProperty('description')
   expect(current.project).not.toHaveProperty('genres'); expect(current.project).not.toHaveProperty('targetWordCount')
+  await enterWorkDescriptionEditorV1(page)
   await page.getByLabel('作品简介', { exact: true }).fill(''); await save(page); await page.reload(); await openLongformLeaf(page, '项目概况')
-  await expect(page.getByLabel('作品简介', { exact: true })).toHaveValue('')
+  await expectWorkDescriptionSourceV1(page, '')
   expect((await read(page, id)).work.description).toBe(''); expect(errors).toEqual([])
 })
 
@@ -62,6 +65,7 @@ test('queued info save targets the original Work when the active pointer changes
     return { a, b: b.id }
   }, id)
   await page.waitForFunction(() => Boolean((window as unknown as { releaseInfoWrite?: unknown }).releaseInfoWrite))
+  await enterWorkDescriptionEditorV1(page)
   await page.getByLabel('作品简介', { exact: true }).fill('A 的未保存内容，不许写给 B')
   await page.getByRole('button', { name: '保存', exact: true }).click()
   await page.evaluate(async ({ id, b }) => {
@@ -77,7 +81,7 @@ test('queued info save targets the original Work when the active pointer changes
   expect(selected.project.activeWorkId).toBe(fixture.b); expect(selected.work.description).toBe('B 的原简介')
   await page.reload(); await openLongformLeaf(page, '项目概况')
   await expect(page.getByLabel('作品名称', { exact: true })).toHaveValue('活动作品 B')
-  await expect(page.getByLabel('作品简介', { exact: true })).toHaveValue('B 的原简介')
+  await expectWorkDescriptionSourceV1(page, 'B 的原简介')
   expect(errors).toEqual([])
 })
 
@@ -90,14 +94,16 @@ test('failed Work persistence keeps author input and explicit retry survives rel
     db.works.update = async () => { throw new DOMException('隔离元数据配额不足', 'QuotaExceededError') }
     Object.assign(window, { restoreMetadataWrite: () => { db.works.update = original } })
   })
+  await enterWorkDescriptionEditorV1(page)
   await page.getByLabel('作品简介', { exact: true }).fill('保存失败仍应保留这份简介')
   await page.getByRole('button', { name: '保存', exact: true }).click()
-  await expect(page.getByRole('alert').filter({ hasText: '隔离元数据配额不足' })).toBeVisible()
-  await expect(page.getByLabel('作品简介', { exact: true })).toHaveValue('保存失败仍应保留这份简介')
+  await expect(page.getByRole('alert').filter({ hasText: '隔离元数据配额不足' }).filter({ hasText: '请点击保存重试' })).toBeVisible()
+  await expect(page.getByRole('alert').filter({ hasText: '隔离元数据配额不足' }).filter({ hasText: '输入已保留' })).toBeVisible()
+  await expectWorkDescriptionSourceV1(page, '保存失败仍应保留这份简介')
   expect((await read(page, id)).work.description).toBe('')
   await page.evaluate(() => { (window as unknown as { restoreMetadataWrite: () => void }).restoreMetadataWrite() })
   await save(page); await page.reload(); await openLongformLeaf(page, '项目概况')
-  await expect(page.getByLabel('作品简介', { exact: true })).toHaveValue('保存失败仍应保留这份简介')
+  await expectWorkDescriptionSourceV1(page, '保存失败仍应保留这份简介')
   expect(errors).toEqual([])
 })
 

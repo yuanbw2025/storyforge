@@ -1,3 +1,4 @@
+import { expectMarkdownSourceValueV1 } from './helpers/markdown-source'
 import { installBrowserServiceCapacityFixtureV1 } from './helpers/browser-ai-config'
 import { expect, test, type Page } from '@playwright/test'
 import { createLongform } from './helpers/product-entry'
@@ -56,12 +57,14 @@ test('a single-volume candidate survives development StrictMode reload and adopt
   expect((await snapshot(page)).nodes).toEqual(before.nodes); expect(calls()).toBe(1)
   await page.getByRole('button', { name: '预览候选', exact: true }).click()
   await page.getByRole('button', { name: '确认写入', exact: true }).click()
-  await expect(page.getByLabel('卷情节摘要', { exact: true })).toHaveValue(JSON.parse(output)[0].summary)
+  await expect.poll(async () => (await snapshot(page)).nodes[0].summary).toBe(JSON.parse(output)[0].summary)
+  await expect(page.getByLabel('卷情节摘要', { exact: true })).toHaveCount(0)
+  await expectMarkdownSourceValueV1(page.getByText('卷情节摘要', { exact: true }).locator('..'), page.getByLabel('卷情节摘要', { exact: true }), JSON.parse(output)[0].summary)
   const after = await snapshot(page)
   expect(after.nodes[0].id).toBe(before.nodes[0].id); expect(after.runs[0].id).toBe(before.runs[0].id)
   expect(after.runs[0].status).toBe('completed')
   await page.reload()
-  await expect(page.getByLabel('卷情节摘要', { exact: true })).toHaveValue(JSON.parse(output)[0].summary)
+  await expectMarkdownSourceValueV1(page.getByText('卷情节摘要', { exact: true }).locator('..'), page.getByLabel('卷情节摘要', { exact: true }), JSON.parse(output)[0].summary)
   expect(calls()).toBe(1); expect(errors).toEqual([])
 })
 

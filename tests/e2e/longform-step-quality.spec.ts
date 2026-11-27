@@ -1,3 +1,4 @@
+import { expectMarkdownSourceValueV1, enterWorkDescriptionEditorV1, expectWorkDescriptionSourceV1 } from './helpers/markdown-source'
 import { installBrowserServiceCapacityFixtureV1 } from './helpers/browser-ai-config'
 import { expect, test } from '@playwright/test'
 import { createLongform } from './helpers/product-entry'
@@ -75,13 +76,14 @@ test('scene detail editing retains Chinese composition and the caret after a mid
   expect(await summary.evaluate((element: HTMLTextAreaElement) => element.selectionStart)).toBe(4)
   await page.reload()
   await page.getByRole('button', { name: '第1章', exact: true }).click()
-  await expect(summary).toHaveValue('守灯人更变计划。')
+  await expectMarkdownSourceValueV1(page.locator('fieldset').filter({ has: page.getByRole('button', { name: '删除场景1', exact: true }) }), summary, '守灯人更变计划。')
   await input.detach()
 })
 
 test('step metadata saves before navigation and retains all edits after reload', async ({ page }) => {
   await createLongform(page, '分步骤保存验收')
   await page.getByRole('textbox', { name: '作品名称', exact: true }).fill('修订后的雾港')
+  await enterWorkDescriptionEditorV1(page)
   await page.getByRole('textbox', { name: '作品简介', exact: true }).fill('雾港午夜的钟声与失踪案。')
   await page.getByRole('slider', { name: '目标字数' }).fill('400000')
   await page.getByRole('button', { name: '故事设计', exact: true }).click()
@@ -97,12 +99,13 @@ test('step metadata saves before navigation and retains all edits after reload',
   await page.reload()
   await page.getByRole('button', { name: '作品概况', exact: true }).click()
   await expect(page.getByRole('textbox', { name: '作品名称', exact: true })).toHaveValue('修订后的雾港')
-  await expect(page.getByRole('textbox', { name: '作品简介', exact: true })).toHaveValue('雾港午夜的钟声与失踪案。')
+  await expectWorkDescriptionSourceV1(page, '雾港午夜的钟声与失踪案。')
   await expect(page.getByRole('slider', { name: '目标字数' })).toHaveValue('400000')
+  await enterWorkDescriptionEditorV1(page)
   await page.getByRole('textbox', { name: '作品简介', exact: true }).fill('自动保存后的简介。')
   await expect(page.getByRole('status')).toHaveText('修改后自动保存')
   await page.reload()
-  await expect(page.getByRole('textbox', { name: '作品简介', exact: true })).toHaveValue('自动保存后的简介。')
+  await expectWorkDescriptionSourceV1(page, '自动保存后的简介。')
 })
 
 test('step generation shows waiting and stops without adopting a late response or retrying on reload', async ({ page }) => {
