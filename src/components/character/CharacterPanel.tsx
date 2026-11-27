@@ -8,6 +8,7 @@ import { useWorldGroupStore } from '../../stores/world-group'
 import { useMasterCopilot, type PendingMasterCandidate } from '../agent/useMasterCopilot'
 import PromptRunPanel from '../shared/PromptRunPanel'
 import CandidateDraftEditor from '../agent/CandidateDraftEditor'
+import CandidateSaveFeedback from '../agent/CandidateSaveFeedback'
 import type {
   Project, Character, CharacterMoralAxis, CharacterOrderAxis, CharacterRoleWeight,
 } from '../../lib/types'
@@ -428,14 +429,18 @@ function CharacterCandidateCard({
             : `${candidate.payload.contextSources.length} 个输入来源`}
         </span>
       </div>
-      <CandidateDraftEditor
-        key={candidate.event.id}
-        payload={candidate.payload}
-        value={candidate.event.content}
-        disabled={copilot.busy}
-        onCommit={() => copilot.flushCandidateDraft(candidate.event.id!)}
-        onChange={content => { void copilot.updateCandidate(candidate.event.id!, content) }}
-      />
+      <CandidateSaveFeedback event={candidate.event} scope={copilot.candidateLocalSaveScope}
+        draftState={copilot.readCandidateLocalDraftState?.(candidate.event.id!)} busy={copilot.busy}
+        onRetry={() => copilot.flushCandidateDraft(candidate.event.id!)}>
+        <CandidateDraftEditor
+          key={candidate.event.id}
+          payload={candidate.payload}
+          value={candidate.event.content}
+          disabled={copilot.busy}
+          onCommit={() => copilot.flushCandidateDraft(candidate.event.id!)}
+          onChange={content => { void copilot.updateCandidate(candidate.event.id!, content) }}
+        />
+      </CandidateSaveFeedback>
       <HarnessEvidencePanel
         contextEvidence={candidate.payload.contextEvidence}
         lifecycle={candidate.lifecycle}

@@ -25,6 +25,7 @@ import { estimateCreativeRunPreviewV1 } from '../../lib/agent/creative-run-previ
 import { useAIConfigStore } from '../../stores/ai-config'
 import { useMasterCopilot } from './useMasterCopilot'
 import CandidateDraftEditor from './CandidateDraftEditor'
+import CandidateSaveFeedback from './CandidateSaveFeedback'
 import CreativeArtifactSummary from './CreativeArtifactSummary'
 import HarnessEvidencePanel from './HarnessEvidencePanel'
 import type { HarnessLifecycleEvidenceV1 } from '../../lib/agent/harness-evidence'
@@ -531,18 +532,19 @@ export default function ChatCopilotPanel({
                 。确认采纳前，作品原文保持不变。
               </p>
               {candidate.payload.agentId === 'prose' && <button type="button" className="mb-2 flex items-center gap-1 text-xs text-accent" onClick={() => voice.speak(candidate.event.content)}><Volume2 size={14} />朗读正文开头（最多 2000 字）</button>}
-              <CandidateDraftEditor
-                payload={candidate.payload}
-                value={candidate.event.content}
-                disabled={copilot.busy}
-                onCommit={() => copilot.flushCandidateDraft(candidate.event.id!)}
-                onChange={(draft) => {
-                  void copilot.updateCandidate(candidate.event.id!, draft)
-                }}
-              />
-              <p className="mt-1 text-[10px] text-text-muted">
-                候选保存在本地，刷新后仍会保留；只有采纳才会写入作品。
-              </p>
+              <CandidateSaveFeedback event={candidate.event} scope={copilot.candidateLocalSaveScope}
+                draftState={copilot.readCandidateLocalDraftState?.(candidate.event.id!)} busy={copilot.busy}
+                onRetry={() => copilot.flushCandidateDraft(candidate.event.id!)}>
+                <CandidateDraftEditor
+                  payload={candidate.payload}
+                  value={candidate.event.content}
+                  disabled={copilot.busy}
+                  onCommit={() => copilot.flushCandidateDraft(candidate.event.id!)}
+                  onChange={(draft) => {
+                    void copilot.updateCandidate(candidate.event.id!, draft)
+                  }}
+                />
+              </CandidateSaveFeedback>
               <details className="mt-2 text-xs text-text-muted">
                 <summary className="cursor-pointer">质量提示与运行详情</summary>
                 {candidate.payload.creativeArtifact && (
