@@ -9,7 +9,7 @@ import { adopt, hashAdoptRecordFieldsV1 } from '../lib/registry/adopt'
 import { assertRecordInScope, readOwnedRows, resolveScopeLike, scopeTransactionTables, stampNewRecord, type WorkspaceScopeLike } from '../lib/workspace/scope'
 
 const now = () => Date.now()
-let loadRequest = 0
+let loadRequest = 0, writeRevision = 0
 const sameScope = (left: WorkspaceScope | null, right: WorkspaceScope) =>
   left?.projectId === right.projectId && left.worldId === right.worldId && left.workId === right.workId
 
@@ -54,7 +54,14 @@ export const useStateCardStore = create<StateCardStore>((set, get) => ({
     set({ loading: true, loadedScope: null })
     try {
       const scope = await resolveScopeLike(scopeInput)
-      const cards = await readOwnedRows<StateCard>(scope, 'stateCards', { owner: 'work' })
+      let cards: StateCard[] = [], observed = -1
+      for (let attempt = 0; attempt < 3; attempt++) {
+        observed = writeRevision
+        cards = await readOwnedRows<StateCard>(scope, 'stateCards', { owner: 'work' })
+        if (request !== loadRequest) return
+        if (observed === writeRevision) break
+      }
+      if (observed !== writeRevision) throw new Error('读取期间状态持续变化，请重新读取。')
       if (request === loadRequest) set({ cards, loadedScope: scope })
     } catch (err) {
       console.error('[StateCard] loadAll 失败:', err)
@@ -65,8 +72,10 @@ export const useStateCardStore = create<StateCardStore>((set, get) => ({
 
   addCard: async (card, options) => {
     try {
+      card = structuredClone(card)
+      const target = typeof options?.scope === 'object' ? { ...options.scope } : options?.scope ?? card.projectId
       readStateCardFields(card)
-      const scope = await resolveScopeLike(options?.scope ?? card.projectId)
+      const scope = await resolveScopeLike(target)
       if (scope.projectId !== card.projectId) throw new Error('状态卡与指定作品不属于同一工作区，未保存。')
       const newCard = stampNewRecord(
         scope,
@@ -74,14 +83,24 @@ export const useStateCardStore = create<StateCardStore>((set, get) => ({
         { ...card, createdAt: now(), updatedAt: now() } as StateCard,
         { owner: 'work' },
       ) as StateCard
-      const id = await db.stateCards.add(newCard) as number
+      const id = await db.transaction('rw', scopeTransactionTables(db.stateCards), async () => {
+        const created = await db.stateCards.add(newCard) as number
+        const actual = await db.stateCards.get(created)
+        if (!actual || !await assertRecordInScope(scope, 'stateCards', actual, { owner: 'work' })
+          || Object.entries(newCard).some(([field, value]) => JSON.stringify(Reflect.get(actual, field)) !== JSON.stringify(value))) throw new Error('状态卡创建后未读到相同原文，输入已保留。')
+        return created
+      })
+      const saved = await db.stateCards.get(id)
+      if (!saved || !await assertRecordInScope(scope, 'stateCards', saved, { owner: 'work' })
+        || Object.entries(newCard).some(([field, value]) => JSON.stringify(Reflect.get(saved, field)) !== JSON.stringify(value))) throw new Error('状态卡提交后未读到相同原文，输入已保留。')
+      writeRevision++
       set(state => {
         const view = state.loadedScope
         const matchingView = view != null && view.projectId === scope.projectId
           && view.worldId === scope.worldId && view.workId === scope.workId
-        if (matchingView) return { cards: [...state.cards, { ...newCard, id }] }
+        if (matchingView) return { cards: [...state.cards, saved] }
         return view == null && !state.loading && options?.scope == null && state.cards.length === 0
-          ? { cards: [{ ...newCard, id }], loadedScope: scope } : state
+          ? { cards: [saved], loadedScope: scope } : state
       })
       console.log('[StateCard] 新增:', card.entityName, id)
       return id
@@ -92,27 +111,35 @@ export const useStateCardStore = create<StateCardStore>((set, get) => ({
   },
 
   updateCard: async (id, data, options) => {
+    data = structuredClone(data)
+    const expectedFields = options && 'expectedFields' in options ? structuredClone(options.expectedFields) : undefined
+    const hasExpected = options != null && 'expectedFields' in options
+    const target = typeof options?.scope === 'object' ? { ...options.scope } : options?.scope
+    const initial = await db.stateCards.get(id)
+    if (!initial) throw new Error('状态卡已不存在，未保存。')
+    const scope = await resolveScopeLike(target ?? initial.projectId)
     const current = await db.stateCards.get(id)
-    if (!current) throw new Error('状态卡已不存在，未保存。')
-    const scope = await resolveScopeLike(options?.scope ?? current.projectId)
-    if (!await assertRecordInScope(scope, 'stateCards', current, { owner: 'work' })) {
-      throw new Error('状态卡不属于当前作品，未保存。')
-    }
+    if (!current || Reflect.get(current, 'ragDocumentId') !== Reflect.get(initial, 'ragDocumentId')
+      || !await assertRecordInScope(scope, 'stateCards', current, { owner: 'work' })) throw new Error('状态卡不属于当前作品或身份已变化，未保存。')
     const result = await adopt({
       projectId: current.projectId, scope, target: 'stateCards', recordId: id,
       mode: 'replace', data,
-      ...(options && 'expectedFields' in options ? { compareAndSet: {
+      ...(hasExpected ? { compareAndSet: {
         kind: 'record-fields-value-hash' as const, fields: ['fields'],
-        expectedHash: await hashAdoptRecordFieldsV1({ fields: options.expectedFields }, ['fields']),
+        expectedHash: await hashAdoptRecordFieldsV1({ fields: expectedFields }, ['fields']),
       } } : {}),
     })
     if (!result.written.some(row => row.id === id)) {
       const reason = result.typeErrors[0]?.got || result.skipped[0]?.reason || '状态卡未保存，输入已保留。'
       throw new Error(reason.startsWith('CAS 失败') ? '状态字段已被另一页面修改，请重新打开后修复。当前输入已保留。' : reason)
     }
-    const saved = await db.stateCards.get(id)
-    if (!saved) throw new Error('状态卡保存后无法回读，请重试。')
-    set({ cards: get().cards.map(card => card.id === id ? saved : card) })
+    const revision = ++writeRevision, saved = await db.stateCards.get(id)
+    if (!saved || Reflect.get(saved, 'ragDocumentId') !== Reflect.get(current, 'ragDocumentId')
+      || !await assertRecordInScope(scope, 'stateCards', saved, { owner: 'work' })
+      || Object.entries(data).some(([field, value]) => JSON.stringify(Reflect.get(saved, field)) !== JSON.stringify(field === 'lastChapterId' && value == null ? null : value)))
+      throw new Error('状态卡精确保存校验失败，输入已保留。')
+    if (revision === writeRevision && (sameScope(get().loadedScope, scope)
+      || (get().loadedScope == null && !get().loading && get().cards.some(card => card.id === id && Reflect.get(card, 'ragDocumentId') === Reflect.get(saved, 'ragDocumentId'))))) set({ cards: get().cards.map(card => card.id === id ? saved : card) })
   },
 
   deleteCard: async (id) => {
