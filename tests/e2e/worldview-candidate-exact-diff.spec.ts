@@ -167,6 +167,7 @@ test('054 actual candidate review: exact middle insertions, native editor, 14 th
     await context.addInitScript(()=>localStorage.setItem('storyforge_guide_completed','054-isolated-native'))
     const page=await context.newPage();await observeNativeDiffWorkers(page);page.on('pageerror',error=>errors.push(error.message));page.on('worker',worker=>workers.push(worker.url()))
     await page.goto('./')
+    await expect(page.getByText('StoryForge',{exact:true}).first()).toBeVisible({timeout:60000})
     await attachJSON(info,'054-target-runtime.json',{node:process.version,platform:process.platform,arch:process.arch,cpuModel:cpus()[0]?.model,cpuCount:cpus().length,memoryGiB:totalmem()/1024**3,browserVersion:browser.version(),browser:await page.evaluate(()=>({userAgent:navigator.userAgent,hardwareConcurrency:navigator.hardwareConcurrency,dpr:devicePixelRatio,visualScale:visualViewport?.scale??null,visibility:document.visibilityState,bodyZoom:getComputedStyle(document.body).zoom,rootZoom:getComputedStyle(document.documentElement).zoom})),qualification:'Playwright isolated Chromium/Desktop Chrome profile; browser UA is recorded separately from host OS. No original Chrome/profile or API preset used.'})
     const ids=production?await page.evaluate(()=>JSON.parse(localStorage.getItem('054-isolated-fixture')!)):await page.evaluate(async({left,right})=>{
       const load=new Function('path','return import(path)') as <T>(path:string)=>Promise<T>
@@ -199,6 +200,7 @@ test('054 actual candidate review: exact middle insertions, native editor, 14 th
       localStorage.setItem('054-isolated-fixture',JSON.stringify(value));return value
     },{left,right})
     await page.goto(`./workspace/${ids.scope.projectId}?module=worldview-origin&originField=origin`)
+    await expect(page.getByText('StoryForge',{exact:true}).first()).toBeVisible({timeout:60000})
     // Bind the one real review body to the fixture's actual durable candidate.
     // Its immediate owner is the action section; ancestor sections are excluded.
     const reviewBody=page.locator('.worldview-review-v2[data-review-session]')
@@ -212,6 +214,45 @@ test('054 actual candidate review: exact middle insertions, native editor, 14 th
     await expect(diff.locator('.wv-diff-row-added .wv-diff-left .wv-diff-padding')).toHaveCount(3)
     if(failWorkerOnce){expect(intentionalWorkerAborts).toBe(1);await expect(diff.getByRole('status')).toContainText(['后台对照不可用'])}
     else expect(workers.some(url=>url.includes('worldview-diff'))).toBe(true)
+    const readNative = () => page.evaluate(async ids => {
+      if (!(await indexedDB.databases()).some(item => item.name === ids.databaseName)) throw new Error('Missing isolated fixture database')
+      const database = await new Promise<IDBDatabase>((resolve, reject) => { const request=indexedDB.open(ids.databaseName);request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error) })
+      try {
+        const tx=database.transaction(['worldviews','agentEvents','agentRuns'],'readonly')
+        const get=(store:string,id:number)=>new Promise<any>((resolve,reject)=>{const request=tx.objectStore(store).get(id);request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error)})
+        const [world,candidate,run]=await Promise.all([get('worldviews',ids.worldviewId),get('agentEvents',ids.eventId),get('agentRuns',ids.runId)])
+        return {world:JSON.stringify(world),value:world?.worldOrigin,candidate:candidate?.content,candidatePayload:candidate?.payload,run:run?.status,runEvidence:{id:run?.id,projectId:run?.projectId,workId:run?.workId,conversationId:run?.conversationId,worldGroupId:run?.worldGroupId,generation:run?.generation,contractHash:run?.contractHash,terminalReceiptHash:run?.terminalReceiptHash,status:run?.status}}
+      } finally { database.close() }
+    },ids)
+    if(perfMode==='selection'){
+      const area=review.getByRole('textbox',{name:/候选内容$/,includeHidden:true})
+      const edited=right.replace('七次','八次').replace(/\r\n?/g,'\n')
+      const short='# 星海\n原有议席每八次退潮轮换。\n'
+      const before=await readNative(),replacements:unknown[]=[]
+      for(const method of ['fill','paste'] as const){
+        await review.getByRole('button',{name:'编辑候选',exact:true}).click();await area.fill(short);await expect(area).toHaveValue(short)
+        await review.getByRole('button',{name:'采纳',exact:true}).waitFor({state:'visible'})
+        await expect(review.getByRole('button',{name:'采纳',exact:true})).toBeEnabled()
+        await review.getByRole('button',{name:'对比',exact:true}).click()
+        await expect(diff).toBeVisible();await review.getByRole('button',{name:'编辑候选',exact:true}).click()
+        if(method==='fill')await area.fill(edited)
+        else{await area.focus();await page.keyboard.press('ControlOrMeta+a');await page.evaluate(text=>navigator.clipboard.writeText(text),edited);await page.keyboard.press('ControlOrMeta+v')}
+        await expect(area).toHaveValue(edited);await expect(review.getByRole('button',{name:'采纳',exact:true})).toBeEnabled()
+        await review.getByRole('button',{name:'对比',exact:true}).click();await expect(diff).toBeVisible()
+        await review.getByRole('button',{name:'复制候选正文',exact:true}).click()
+        await expect.poll(()=>page.evaluate(()=>navigator.clipboard.readText())).toBe(edited)
+        const stored=await readNative();expect(stored.world).toBe(ids.worldviewBefore)
+        replacements.push({method,expected:edited,storedCandidate:stored.candidate})
+      }
+      await review.getByRole('button',{name:'采纳',exact:true}).click();await expect(review).toHaveCount(0)
+      await expect.poll(async()=>(await readNative()).run).toBe('completed')
+      const afterAdoption=await readNative();expect(afterAdoption.value).toBe(edited)
+      expect(afterAdoption.runEvidence.terminalReceiptHash).toMatch(/^[a-f0-9]{64}$/)
+      expect(afterAdoption.runEvidence.contractHash).toBe(before.runEvidence.contractHash)
+      expect(models).toBe(0);expect(forbidden).toBe(0);expect(errors).toEqual([])
+      await attachJSON(info,'054-selection-replacement-adoption.json',{ids,before,replacements,afterAdoption})
+      return
+    }
     if(['1','matrix'].includes(perfMode)){
       const performanceMatrix=await nativeWorkerMatrix(page,!production).catch(async error=>{await attachJSON(info,'054-native-worker-performance-failure.json',error instanceof Error?error.message:String(error));throw error})
       await attachJSON(info,'054-native-worker-performance.json',performanceMatrix)
@@ -246,16 +287,6 @@ test('054 actual candidate review: exact middle insertions, native editor, 14 th
     const folded=diff.getByRole('button',{name:/^展开 \d+ 行未改内容$/});expect(await folded.count()).toBeGreaterThan(0)
     await folded.first().click();await expect(diff.locator('.wv-diff-row-unchanged').first()).toBeVisible()
     await diff.getByRole('checkbox',{name:'只看变化',exact:true}).uncheck()
-    const readNative = () => page.evaluate(async ids => {
-      if (!(await indexedDB.databases()).some(item => item.name === ids.databaseName)) throw new Error('Missing isolated fixture database')
-      const database = await new Promise<IDBDatabase>((resolve, reject) => { const request=indexedDB.open(ids.databaseName);request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error) })
-      try {
-        const tx=database.transaction(['worldviews','agentEvents','agentRuns'],'readonly')
-        const get=(store:string,id:number)=>new Promise<any>((resolve,reject)=>{const request=tx.objectStore(store).get(id);request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error)})
-        const [world,candidate,run]=await Promise.all([get('worldviews',ids.worldviewId),get('agentEvents',ids.eventId),get('agentRuns',ids.runId)])
-        return {world:JSON.stringify(world),value:world?.worldOrigin,candidate:candidate?.content,candidatePayload:candidate?.payload,run:run?.status,runEvidence:{id:run?.id,projectId:run?.projectId,workId:run?.workId,conversationId:run?.conversationId,worldGroupId:run?.worldGroupId,generation:run?.generation,contractHash:run?.contractHash,terminalReceiptHash:run?.terminalReceiptHash,status:run?.status}}
-      } finally { database.close() }
-    },ids)
     const before=await readNative()
     expect(before.world).toBe(ids.worldviewBefore)
     expect(before.candidate).toBe(ids.candidateBefore)
