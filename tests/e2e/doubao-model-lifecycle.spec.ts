@@ -26,18 +26,20 @@ test('new Doubao configuration selects current LTS without sending a model reque
   await expect(page.getByPlaceholder('或手动输入模型名（列表中没有的型号）')).toHaveValue(active)
   expect(calls()).toBe(0)
 })
-for (const [baseUrl, showNotice] of [[official, true], ['https://example.invalid/private/v1', false]] as const) {
-  test(`saved old ID remains unchanged on ${showNotice ? 'official' : 'private'} target`, async ({ page }) => {
-    const calls = await setup(page, 'doubao', retired, baseUrl)
-    await expect(page.getByRole('combobox', { name: '模型', exact: true })).toHaveValue(retired)
-    const notice = page.getByRole('alert').filter({ hasText: '2026-09-21' })
-    if (showNotice) await expect(notice).toBeVisible()
-    else await expect(notice).toHaveCount(0)
-    const option = page.getByRole('option', { name: /doubao-1-5-pro-32k-250115/ })
-    if (showNotice) await expect(option).toBeDisabled()
-    else await expect(option).toBeEnabled()
-    await page.reload()
-    await expect(page.getByPlaceholder('或手动输入模型名（列表中没有的型号）')).toHaveValue(retired)
-    expect(calls()).toBe(0)
-  })
+for (const [model, date] of [[retired, '2026-09-21'], ['deepseek-v4-pro-260425', '2026-11-24']] as const) {
+  for (const [baseUrl, showNotice] of [[official, true], ['https://example.invalid/private/v1', false]] as const) {
+    test(`saved old ID remains unchanged on ${showNotice ? 'official' : 'private'} target: ${model}`, async ({ page }) => {
+      const calls = await setup(page, 'doubao', model, baseUrl)
+      await expect(page.getByRole('combobox', { name: '模型', exact: true })).toHaveValue(model)
+      const notice = page.getByRole('alert').filter({ hasText: date })
+      if (showNotice) await expect(notice).toBeVisible()
+      else await expect(notice).toHaveCount(0)
+      const option = page.getByRole('option', { name: new RegExp(model) })
+      if (showNotice) await expect(option).toBeDisabled()
+      else await expect(option).toBeEnabled()
+      await page.reload()
+      await expect(page.getByPlaceholder('或手动输入模型名（列表中没有的型号）')).toHaveValue(model)
+      expect(calls()).toBe(0)
+    })
+  }
 }
