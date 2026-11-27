@@ -13,14 +13,16 @@ import { parseAuthorStoryStagesV1 } from '../types/story-arc'
 export type RecordTextTableV1 = LocalSaveRecordIdentityV1['table']
 export interface RecordTextRowV1 {
   id?: number; projectId: number; worldId?: number; workId?: number; worldGroupId?: number | null
-  ragDocumentId?: string; updatedAt: number
+  ragDocumentId?: string; createdAt?: number; updatedAt: number
 }
-const prefix = { characters: 'character', outlineNodes: 'outline-node', detailedOutlines: 'detailed-outline', storyArcs: 'story-arc', references: 'reference', foreshadows: 'foreshadow', powerSystems: 'power-system', cultivationSystems: 'cultivation-system', chapters: 'chapter' } as const
+const prefix = { characters: 'character', outlineNodes: 'outline-node', detailedOutlines: 'detailed-outline', storyArcs: 'story-arc', references: 'reference', foreshadows: 'foreshadow', powerSystems: 'power-system', cultivationSystems: 'cultivation-system', chapters: 'chapter', notes: null } as const
 const sceneTexts = ['title', 'summary', 'location', 'conflict', 'notes', ...DETAILED_SCENE_TASK_FIELDS.map(({ key }) => key)]
 const stageTexts = ['title', 'description', 'turningPoint']
 const cultivationTexts = ['name', 'features', 'breakthrough', 'branchLabel']
 export const recordTextWitnessKeyV1 = (field: string, entryId?: string) => entryId === undefined ? field : JSON.stringify([field, entryId])
 function validAddress(identity: LocalSaveRecordIdentityV1) {
+  if (identity.table === 'notes') return identity.field === 'content' && identity.entryId === undefined
+    && Number.isSafeInteger(identity.recordCreatedAt) && identity.recordCreatedAt! > 0
   if (identity.entryId === undefined) return recordAuthorTextFieldsV1(identity.table).includes(identity.field)
   if (typeof identity.entryId !== 'string' || !identity.entryId.trim()) return false
   return identity.table === 'detailedOutlines' ? sceneTexts.some(field => identity.field === `scenes.${field}`)
@@ -41,6 +43,8 @@ function addressedValue(row: RecordTextRowV1, identity: LocalSaveRecordIdentityV
   return { value: Reflect.get(target, field), present: Object.prototype.hasOwnProperty.call(target, field) }
 }
 export function recordAuthorTextFieldsV1(table: RecordTextTableV1) {
+  // Existing manual-only Work notes are not an additional AI writable field.
+  if (table === 'notes') return ['content']
   return (FIELD_BY_TARGET.get(table) ?? []).filter(spec => !spec.adoptionPolicy && !spec.field.startsWith('statusProducer')
     && (table !== 'references' || spec.field === 'note')
     && (table !== 'chapters' || spec.field === 'notes')
@@ -61,12 +65,13 @@ async function buildWitness(row: RecordTextRowV1 | undefined, identity: LocalSav
   if (!row || row.id !== identity.recordId || row.projectId !== identity.projectId
     || (['characters', 'powerSystems', 'cultivationSystems'].includes(identity.table) ? row.worldId !== identity.worldId : row.workId !== identity.workId)
     || (identity.table !== 'characters' && (row.worldGroupId ?? null) !== identity.worldGroupId)
-    || !validAddress(identity) || !isPortableResourceUidV1(row.ragDocumentId, prefix[identity.table]))
+    || !validAddress(identity) || (identity.table === 'notes' ? row.createdAt !== identity.recordCreatedAt
+      : !isPortableResourceUidV1(row.ragDocumentId, prefix[identity.table]!)))
     throw new Error('文字记录已删除、归属或身份变化，不能确认本机保存。')
   const leaf = identity.field.slice(identity.field.indexOf('.') + 1)
   const { value, present } = selected ? { value: Reflect.get(selected, leaf), present: Object.prototype.hasOwnProperty.call(selected, leaf) } : addressedValue(row, identity)
   if (value !== undefined && typeof value !== 'string') throw new Error('文字字段格式异常，不能确认本机保存。')
-  return { version: 1, source, identity: { ...identity }, recordId: row.id!, resourceUid: row.ragDocumentId!,
+  return { version: 1, source, identity: { ...identity }, recordId: row.id!, resourceUid: identity.table === 'notes' ? null : row.ragDocumentId!,
     value: value as string | undefined, present,
     valueHash: await hashAdoptFieldValueV1(value), confirmedAt: Date.now() }
 }
@@ -100,7 +105,8 @@ export async function readRecordTextWitnessesV1(table: RecordTextTableV1, id: nu
     if (row && table === 'storyArcs') addresses.push(...parseAuthorStoryStagesV1(Reflect.get(row, 'stages')).flatMap(stage => stageTexts.map(field => ({ field: `stages.${field}`, entryId: stage.id, selected: stage }))))
   } catch { /* Damaged nested data stays unconfirmed, without hiding valid scalar fields. */ }
   for (const { selected, ...address } of addresses) {
-    const identity: LocalSaveRecordIdentityV1 = { ...scope, table, ...address, recordId: id, worldGroupId: table !== 'characters' ? row?.worldGroupId ?? null : null }
+    const identity: LocalSaveRecordIdentityV1 = { ...scope, table, ...address, recordId: id, worldGroupId: table !== 'characters' ? row?.worldGroupId ?? null : null,
+      ...(table === 'notes' ? { recordCreatedAt: row?.createdAt } : {}) }
     try { witnesses[recordTextWitnessKeyV1(address.field, address.entryId)] = await buildWitness(row, identity, 'database-read', selected) }
     catch { /* A malformed field remains unknown; other fields retain their own evidence. */ }
   }
