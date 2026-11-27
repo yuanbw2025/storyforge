@@ -40,7 +40,11 @@ interface LocalSaveCreativeRuleIdentityV1 extends WorkspaceScope {
   field: LocalSaveCreativeRuleFieldV1
   worldGroupId: null
 }
-export type LocalSaveIdentityV1 = LocalSaveWorldviewIdentityV1 | LocalSaveStoryCoreIdentityV1 | LocalSaveCreativeRuleIdentityV1
+export type LocalSaveHistoryIdentityV1 = WorkspaceScope & { worldGroupId: number | null } & (
+  | { table: 'histories'; field: 'overview' | 'eraSystem' }
+  | { table: 'historicalTimelineEvents' | 'historicalKeywords'; field: 'description' | 'conceptNote'; recordId: number }
+)
+export type LocalSaveIdentityV1 = LocalSaveWorldviewIdentityV1 | LocalSaveStoryCoreIdentityV1 | LocalSaveCreativeRuleIdentityV1 | LocalSaveHistoryIdentityV1
 export interface LocalSaveWitnessV1 {
   version: 1
   source: 'database-read' | 'committed-write'
@@ -70,7 +74,8 @@ export interface LocalSaveContractV1 {
 }
 export function localSaveIdentityKeyV1(identity: LocalSaveIdentityV1): string {
   return JSON.stringify([identity.projectId, identity.worldId, identity.workId,
-    identity.worldGroupId, identity.table, identity.field])
+    identity.worldGroupId, identity.table, identity.field,
+    ...('recordId' in identity ? [identity.recordId] : [])])
 }
 export function matchingLocalSaveAckV1(ack: unknown, intent: LocalSaveIntentV1, raw: string): ack is LocalSaveAckV1 {
   const value = ack as LocalSaveAckV1 | undefined

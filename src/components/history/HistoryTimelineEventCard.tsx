@@ -9,7 +9,10 @@ import HistoryChapterPicker from './HistoryChapterPicker'
 import { InlineTextarea } from '../shared/InlineEdit'
 import MarkdownReadView from '../shared/MarkdownReadView'
 
+import type { LocalSaveAckV1, LocalSaveContractV1, LocalSaveIntentV1 } from '../../lib/authoring/local-save-evidence'
+
 interface Props {
+  localSaves?: Partial<Record<'description' | 'conceptNote', LocalSaveContractV1>>
   resizableInputs?: boolean
   event: HistoricalTimelineEvent
   chapters: Chapter[]
@@ -21,7 +24,7 @@ interface Props {
   consultAI: HistoryAgentViewState
   stormAI: HistoryAgentViewState
   onToggle: () => void
-  onChange: (patch: Partial<HistoricalTimelineEvent>) => void | Promise<void>
+  onChange: (patch: Partial<HistoricalTimelineEvent>, intent?: LocalSaveIntentV1) => void | Promise<void | LocalSaveAckV1>
   onConsult: () => void
   onStorm: () => void
   onDelete: () => void
@@ -34,7 +37,7 @@ interface Props {
 }
 
 export default function HistoryTimelineEventCard({
-  resizableInputs = false,
+  resizableInputs = false, localSaves,
   event,
   chapters,
   expanded,
@@ -224,7 +227,8 @@ export default function HistoryTimelineEventCard({
               {canEdit ? <InlineTextarea markdownRead minRows={3}
                 inputAreaLayout={inputAreaLayoutV1(resizableInputs, 'history.timeline.description')}
                 value={event.description}
-                onChange={description => onChange({ description })}
+                localSave={localSaves?.description}
+                onChange={(description, intent) => intent ? onChange({ description }, intent) : onChange({ description })}
                 placeholder="作者打磨好的最终条目内容，将作为 AI 写作的历史背景注入。例如：『公元 712 年，李隆基即位为唐玄宗，开元之治始。』"
                 className="w-full h-24 p-2 bg-bg-base border border-border rounded-lg text-xs text-text-primary resize-y focus:outline-none focus:border-accent"
               /> : <MarkdownReadView value={event.description} readOnly />}
@@ -257,7 +261,8 @@ export default function HistoryTimelineEventCard({
               {canEdit ? <InlineTextarea markdownRead minRows={3}
                 inputAreaLayout={inputAreaLayoutV1(resizableInputs, 'history.timeline.conceptNote')}
                 value={event.conceptNote || ''}
-                onChange={conceptNote => onChange({ conceptNote })}
+                localSave={localSaves?.conceptNote}
+                onChange={(conceptNote, intent) => intent ? onChange({ conceptNote }, intent) : onChange({ conceptNote })}
                 placeholder="描述你为这条事件想达到的效果、能接受的艺术改造或架空范围、希望保留 / 偏离的史实点。例如：『允许把火药提前到本朝；其余制度仍按真实唐制写。』"
                 className="w-full h-24 p-2 bg-bg-base border border-border rounded-lg text-xs text-text-primary resize-y focus:outline-none focus:border-accent"
               /> : <MarkdownReadView value={event.conceptNote ?? ''} readOnly />}

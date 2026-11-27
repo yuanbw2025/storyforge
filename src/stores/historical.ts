@@ -15,6 +15,13 @@ import {
   type WorldOwnerScopeLike,
 } from '../lib/workspace/scope'
 
+import { assertHistoryTextSaveExpectedV1, historyTextSaveAckV1, historyTextSaveRequestV1, readHistoryTextSaveAckV1 } from '../lib/authoring/history-local-save-evidence'
+import type { LocalSaveAckV1, LocalSaveIntentV1 } from '../lib/authoring/local-save-evidence'
+
+interface HistoricalTextUpdateV1<T> {
+  (id: number, patch: Partial<T>, scope?: WorldOwnerScopeLike): Promise<void>
+  (id: number, patch: Partial<T>, scope: WorldOwnerScopeLike, confirmation: LocalSaveIntentV1): Promise<LocalSaveAckV1>
+}
 interface HistoricalStore {
   events: HistoricalTimelineEvent[]
   keywords: HistoricalKeyword[]
@@ -28,7 +35,7 @@ interface HistoricalStore {
   /** 添加历史事件 */
   addEvent: (event: Omit<HistoricalTimelineEvent, 'createdAt' | 'updatedAt'>, scope?: WorldOwnerScopeLike) => Promise<number>
   /** 更新历史事件 */
-  updateEvent: (id: number, patch: Partial<HistoricalTimelineEvent>, scope?: WorldOwnerScopeLike) => Promise<void>
+  updateEvent: HistoricalTextUpdateV1<HistoricalTimelineEvent>
   /** 删除历史事件 */
   deleteEvent: (id: number) => Promise<void>
 
@@ -38,9 +45,20 @@ interface HistoricalStore {
   /** 添加历史关键词 */
   addKeyword: (keyword: Omit<HistoricalKeyword, 'createdAt' | 'updatedAt'>) => Promise<number>
   /** 更新历史关键词 */
-  updateKeyword: (id: number, patch: Partial<HistoricalKeyword>, scope?: WorldOwnerScopeLike) => Promise<void>
+  updateKeyword: HistoricalTextUpdateV1<HistoricalKeyword>
   /** 删除历史关键词 */
   deleteKeyword: (id: number) => Promise<void>
+}
+
+function confirmedTextUpdateV1(table: 'historicalTimelineEvents' | 'historicalKeywords', id: number,
+  patch: Record<string, unknown>, scope: WorldOwnerScopeLike | undefined, confirmation?: LocalSaveIntentV1) {
+  if (!confirmation) return undefined
+  if (Dexie.currentTransaction) throw new Error('历史本机保存确认需要独立提交。')
+  const proof = historyTextSaveRequestV1(patch, confirmation)
+  if (typeof scope !== 'object' || proof.identity.table !== table || !('recordId' in proof.identity)
+    || proof.identity.recordId !== id || proof.identity.projectId !== scope.projectId || proof.identity.worldId !== scope.worldId)
+    throw new Error('历史保存记录或作用域凭据无效。')
+  return proof
 }
 
 const sameWorld = (left: WorldOwnerScope | null, right: WorldOwnerScope) => left?.projectId === right.projectId && left.worldId === right.worldId
@@ -133,11 +151,16 @@ export const useHistoricalStore = create<HistoricalStore>((set, get) => ({
     return id
   },
 
-  updateEvent: async (id, patch, scopeInput) => {
+  updateEvent: (async (id: number, patch: Partial<HistoricalTimelineEvent>, scopeInput?: WorldOwnerScopeLike, intent?: LocalSaveIntentV1) => {
+    patch = { ...patch }
+    const confirmation = intent ? structuredClone(intent) : undefined
+    const proof = confirmedTextUpdateV1('historicalTimelineEvents', id, patch, scopeInput, confirmation)
     const selectedScope = typeof scopeInput === 'object' ? { ...scopeInput } : scopeInput
     const shown = get().events.find(event => event.id === id)
     const scope = await db.transaction('rw', scopeTransactionTables(db.historicalTimelineEvents), async () => {
-      const event = await db.historicalTimelineEvents.get(id)
+      const transaction = Dexie.currentTransaction!
+      const table = transaction.table<HistoricalTimelineEvent, number>('historicalTimelineEvents')
+      const event = await table.get(id)
       if (!event) {
         if (selectedScope != null) throw new Error('历史事件已不存在，输入已保留')
         return
@@ -147,13 +170,17 @@ export const useHistoricalStore = create<HistoricalStore>((set, get) => ({
         if (selectedScope != null) throw new Error('历史事件不属于打开编辑时的世界，输入已保留')
         return
       }
+      if (confirmation) await Dexie.waitFor(assertHistoryTextSaveExpectedV1(event, confirmation, transaction))
       const changes = { ...patch, updatedAt: Date.now() }
       assertEventIdentityUnchanged(event, changes)
-      if (await db.historicalTimelineEvents.update(id, changes) !== 1) throw new Error('历史事件保存未完成，输入已保留')
+      if (await table.update(id, changes) !== 1) throw new Error('历史事件保存未完成，输入已保留')
+      if (confirmation && proof) await Dexie.waitFor(historyTextSaveAckV1(await table.get(id), confirmation, proof.raw))
       return owner
     })
+    const ack = confirmation && proof ? await readHistoryTextSaveAckV1(confirmation, proof.raw) : undefined
     if (scope) await refreshEvents(scope, get, set)
-  },
+    return ack
+  }) as HistoricalTextUpdateV1<HistoricalTimelineEvent>,
 
   deleteEvent: async (id) => {
     const tables = scopeTransactionTables(...transactionTablesForReferenceCascade('historicalTimelineEvents'))
@@ -199,14 +226,19 @@ export const useHistoricalStore = create<HistoricalStore>((set, get) => ({
     return id
   },
 
-  updateKeyword: async (id, patch, scopeInput) => {
+  updateKeyword: (async (id: number, patch: Partial<HistoricalKeyword>, scopeInput?: WorldOwnerScopeLike, intent?: LocalSaveIntentV1) => {
+    patch = { ...patch }
+    const confirmation = intent ? structuredClone(intent) : undefined
+    const proof = confirmedTextUpdateV1('historicalKeywords', id, patch, scopeInput, confirmation)
     // Existing callers keep their lookup API. Text editors supply their frozen
     // World owner so a late save cannot follow a newly selected active World.
     const selectedScope = typeof scopeInput === 'object' ? { ...scopeInput } : scopeInput
     if (selectedScope != null) {
       const next = await db.transaction('rw', scopeTransactionTables(db.historicalKeywords), async () => {
+        const transaction = Dexie.currentTransaction!
+        const table = transaction.table<HistoricalKeyword, number>('historicalKeywords')
         const scope = await resolveWorldOwnerScopeLike(selectedScope)
-        const current = await db.historicalKeywords.get(id)
+        const current = await table.get(id)
         if (!current) throw new Error('历史关键词已不存在，输入已保留')
         if (!await assertRecordInScope(scope, 'historicalKeywords', current, { owner: 'world' })) {
           throw new Error('历史关键词不属于打开编辑时的世界，输入已保留')
@@ -217,12 +249,15 @@ export const useHistoricalStore = create<HistoricalStore>((set, get) => ({
             throw new Error('历史关键词的身份与归属不可通过编辑更改')
           }
         }
+        if (confirmation) await Dexie.waitFor(assertHistoryTextSaveExpectedV1(current, confirmation, transaction))
         const changes = { ...patch, updatedAt: Date.now() }
-        if (await db.historicalKeywords.update(id, changes) !== 1) throw new Error('历史关键词保存未完成，输入已保留')
+        if (await table.update(id, changes) !== 1) throw new Error('历史关键词保存未完成，输入已保留')
+        if (confirmation && proof) await Dexie.waitFor(historyTextSaveAckV1(await table.get(id), confirmation, proof.raw))
         return changes
       })
+      const ack = confirmation && proof ? await readHistoryTextSaveAckV1(confirmation, proof.raw) : undefined
       set({ keywords: get().keywords.map(row => row.id === id ? { ...row, ...next } : row).sort((a, b) => b.updatedAt - a.updatedAt) })
-      return
+      return ack
     }
     const existingRecord = get().keywords.find(keyword => keyword.id === id)
       ?? await db.historicalKeywords.get(id)
@@ -240,7 +275,7 @@ export const useHistoricalStore = create<HistoricalStore>((set, get) => ({
     const keywords = get().keywords.map(k => k.id === id ? { ...k, ...next } as HistoricalKeyword : k)
     keywords.sort((a, b) => b.updatedAt - a.updatedAt)
     set({ keywords })
-  },
+  }) as HistoricalTextUpdateV1<HistoricalKeyword>,
 
   deleteKeyword: async (id) => {
     const existingRecord = await db.historicalKeywords.get(id)

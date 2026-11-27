@@ -21,14 +21,18 @@ import { useHistoryAI } from './useHistoryAI'
 import { useWorldSettingsLayout, WorldSettingsToolbar } from '../longform/WorldSettingsLayout'
 import { flushPendingEditsV1 } from '../../lib/authoring/pending-edit-coordinator'
 
+import { readHistoryTextWitnessesV1 } from '../../lib/authoring/history-local-save-evidence'
+import { localSaveIdentityKeyV1, type LocalSaveHistoryIdentityV1, type LocalSaveWitnessV1, type LocalSaveContractV1 } from '../../lib/authoring/local-save-evidence'
+
 interface Props {
+  confirmedLocalSaves?: boolean
   resizableInputs?: boolean
   project: Project
 }
 
 type TabKey = 'overview' | 'timeline' | 'keywords'
 
-export default function HistoryPanel({ project, resizableInputs = false }: Props) {
+export default function HistoryPanel({ project, resizableInputs = false, confirmedLocalSaves = false }: Props) {
   const compact = useWorldSettingsLayout()
   const dialog = useDialog()
   const toast = useToast()
@@ -74,6 +78,35 @@ export default function HistoryPanel({ project, resizableInputs = false }: Props
     keywords, loadingKeywords, loadKeywords, addKeyword, updateKeyword, deleteKeyword
   } = useHistoricalStore()
   const { chapters, loadAll: loadChapters } = useChapterStore()
+  const saveIdentities = useMemo<LocalSaveHistoryIdentityV1[]>(() => {
+    if (!confirmedLocalSaves || historyOrigin.kind !== 'work') return []
+    const scope = historyOrigin.scope
+    return [
+      ...(['overview', 'eraSystem'] as const).map(field => ({ ...scope, table: 'histories' as const, field, worldGroupId: scopeGroupId })),
+      ...events.flatMap(row => row.id == null ? [] : (['description', 'conceptNote'] as const).map(field => ({ ...scope,
+        table: 'historicalTimelineEvents' as const, field, recordId: row.id!, worldGroupId: row.worldGroupId ?? null }))),
+      ...keywords.flatMap(row => row.id == null ? [] : (['description', 'conceptNote'] as const).map(field => ({ ...scope,
+        table: 'historicalKeywords' as const, field, recordId: row.id!, worldGroupId: row.worldGroupId ?? null }))),
+    ]
+  }, [confirmedLocalSaves, historyOrigin, scopeGroupId, events, keywords])
+  const identitiesKey = JSON.stringify(saveIdentities)
+  const [saveEvidence, setSaveEvidence] = useState<{ key: string; witnesses: Record<string, LocalSaveWitnessV1> } | null>(null)
+  useEffect(() => {
+    if (!saveIdentities.length || !historyReady) return
+    let active = true
+    void readHistoryTextWitnessesV1(saveIdentities).then(witnesses => {
+      if (active) setSaveEvidence({ key: identitiesKey, witnesses })
+    }).catch(() => { if (active) setSaveEvidence({ key: identitiesKey, witnesses: {} }) })
+    return () => { active = false }
+  }, [saveIdentities, identitiesKey, history, historyReady])
+  const localSaveFor = (table: LocalSaveHistoryIdentityV1['table'], field: LocalSaveHistoryIdentityV1['field'], recordId?: number): LocalSaveContractV1 | undefined => {
+    const identity = saveIdentities.find(item => item.table === table && item.field === field
+      && (!('recordId' in item) || item.recordId === recordId))
+    return identity && saveEvidence?.key === identitiesKey ? {
+      identity, witness: saveEvidence.witnesses[localSaveIdentityKeyV1(identity)] ?? null,
+    } : undefined
+  }
+
 
   const handleDeleteEvent = async (id: number) => {
     const ok = await dialog.confirm({
@@ -335,8 +368,13 @@ export default function HistoryPanel({ project, resizableInputs = false }: Props
           resizableInputs={resizableInputs}
           overview={history?.overview ?? ''}
           eraSystem={history?.eraSystem ?? ''}
-          onSaveOverview={overview => saveHistory({ origin: historyOrigin, selection: { kind: 'partition', worldGroupId: scopeGroupId }, patch: { overview } })}
-          onSaveEraSystem={eraSystem => saveHistory({ origin: historyOrigin, selection: { kind: 'partition', worldGroupId: scopeGroupId }, patch: { eraSystem } })}
+          localSaves={{ overview: localSaveFor('histories', 'overview'), eraSystem: localSaveFor('histories', 'eraSystem') }}
+          onSaveOverview={(overview, confirmation) => confirmation
+            ? saveHistory({ origin: historyOrigin, selection: { kind: 'partition', worldGroupId: scopeGroupId }, patch: { overview }, confirmation })
+            : saveHistory({ origin: historyOrigin, selection: { kind: 'partition', worldGroupId: scopeGroupId }, patch: { overview } })}
+          onSaveEraSystem={(eraSystem, confirmation) => confirmation
+            ? saveHistory({ origin: historyOrigin, selection: { kind: 'partition', worldGroupId: scopeGroupId }, patch: { eraSystem }, confirmation })
+            : saveHistory({ origin: historyOrigin, selection: { kind: 'partition', worldGroupId: scopeGroupId }, patch: { eraSystem } })}
         />
       )}
 
@@ -394,6 +432,7 @@ export default function HistoryPanel({ project, resizableInputs = false }: Props
                       resizableInputs={resizableInputs}
                       key={event.id}
                       event={event}
+                      localSaves={{ description: localSaveFor('historicalTimelineEvents', 'description', event.id), conceptNote: localSaveFor('historicalTimelineEvents', 'conceptNote', event.id) }}
                       chapters={project.activeWorkId == null ? [] : chapters}
                       expanded={expanded}
                       canEdit={canEdit}
@@ -403,9 +442,10 @@ export default function HistoryPanel({ project, resizableInputs = false }: Props
                       consultAI={historyAI.consult}
                       stormAI={historyAI.storm}
                       onToggle={() => afterSaved(() => setExpandedId(expanded ? null : event.id || null))}
-                      onChange={patch => {
+                      onChange={(patch, confirmation) => {
                         if (!event.id) return Promise.reject(new Error('历史事件尚未就绪'))
-                        return updateEvent(event.id, patch, { projectId: project.id!, worldId: project.activeWorldId! })
+                        return confirmation ? updateEvent(event.id, patch, { projectId: project.id!, worldId: project.activeWorldId! }, confirmation)
+                          : updateEvent(event.id, patch, { projectId: project.id!, worldId: project.activeWorldId! })
                       }}
                       onConsult={() => handleAIConsult(event)}
                       onStorm={() => handleAIStorm(event)}
@@ -503,6 +543,7 @@ export default function HistoryPanel({ project, resizableInputs = false }: Props
                       resizableInputs={resizableInputs}
                       key={keyword.id}
                       keyword={keyword}
+                      localSaves={{ description: localSaveFor('historicalKeywords', 'description', keyword.id), conceptNote: localSaveFor('historicalKeywords', 'conceptNote', keyword.id) }}
                       chapters={project.activeWorkId == null ? [] : chapters}
                       expanded={expanded}
                       canEdit={canEdit}
@@ -511,9 +552,10 @@ export default function HistoryPanel({ project, resizableInputs = false }: Props
                       consultAI={historyAI.consult}
                       stormAI={historyAI.storm}
                       onToggle={() => afterSaved(() => setExpandedKeywordId(expanded ? null : keyword.id || null))}
-                      onChange={patch => {
+                      onChange={(patch, confirmation) => {
                         if (!keyword.id) return Promise.reject(new Error('历史关键词尚未就绪'))
-                        return updateKeyword(keyword.id, patch, { projectId: project.id!, worldId: project.activeWorldId! })
+                        return confirmation ? updateKeyword(keyword.id, patch, { projectId: project.id!, worldId: project.activeWorldId! }, confirmation)
+                          : updateKeyword(keyword.id, patch, { projectId: project.id!, worldId: project.activeWorldId! })
                       }}
                       onConsult={() => handleAIKeywordConsult(keyword)}
                       onStorm={() => handleAIKeywordStorm(keyword)}

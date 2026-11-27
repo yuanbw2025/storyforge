@@ -24,6 +24,8 @@ import { coordinatePendingEditV1 } from '../lib/authoring/pending-edit-coordinat
 import type { LocalSaveAckV1, LocalSaveIntentV1 } from '../lib/authoring/local-save-evidence'
 import { assertCreativeRuleSaveExpectedV1, creativeRuleSaveRequestV1, creativeRuleTextWitnessV1 } from '../lib/authoring/creative-rules-local-save-evidence'
 
+import { assertHistoryTextSaveExpectedV1, historyTextSaveAckV1, historyTextSaveRequestV1 } from '../lib/authoring/history-local-save-evidence'
+
 const now = () => Date.now()
 
 /** 项目级单例记录的最小形状 */
@@ -61,11 +63,16 @@ export type ProjectSingletonStore<K extends string, T extends ProjectScopedRecor
   save: SingletonSave<T>
 } & { [P in K]: T | null }
 
+type HistoryAuthorSaveInputV1 = { origin: HistoryAuthorOriginV1; selection: HistoryAuthorPartitionV1; patch: HistoryTextPatchV1 }
+interface HistoryAuthorSaveV1 {
+  (input: HistoryAuthorSaveInputV1): Promise<void>
+  (input: HistoryAuthorSaveInputV1 & { confirmation: LocalSaveIntentV1 }): Promise<LocalSaveAckV1>
+}
 export interface HistoryAuthorSingletonStateV1 {
   loadedHistoryAuthorOrigin: HistoryAuthorOriginV1 | null
   loadedHistoryAuthorSelection: HistoryAuthorSelectionV1 | null
   loadForHistoryAuthorV1: (input: { origin: HistoryAuthorOriginV1; selection: HistoryAuthorSelectionV1 }) => Promise<void>
-  saveForHistoryAuthorV1: (input: { origin: HistoryAuthorOriginV1; selection: HistoryAuthorPartitionV1; patch: HistoryTextPatchV1 }) => Promise<void>
+  saveForHistoryAuthorV1: HistoryAuthorSaveV1
 }
 
 interface FactoryOptions<K extends string, T extends ProjectScopedRecord, HistoryAuthoring extends boolean> {
@@ -245,17 +252,24 @@ export function createProjectSingletonStore<K extends string, T extends ProjectS
           }).catch(error => { failAuthorLoad(request, error); throw error })
         } catch (error) { return Dexie.Promise.reject(error) }
       },
-      saveForHistoryAuthorV1: input => {
+      saveForHistoryAuthorV1: ((input: HistoryAuthorSaveInputV1 & { confirmation?: LocalSaveIntentV1 }) => {
         try {
-          historyAuthorRecordV1(input, ['origin', 'selection', 'patch'], '保存')
+          historyAuthorRecordV1(input, ['origin', 'selection', 'patch', 'confirmation'], '保存')
           const origin = copyHistoryAuthorOriginV1(input.origin)
           const selection = copyHistoryAuthorSelectionV1(input.selection)
           if (selection.kind !== 'partition') throw new Error('历史一览为只读，不能保存')
           const patch = copyHistoryTextPatchV1(input.patch)
+          const confirmation = input.confirmation ? structuredClone(input.confirmation) : undefined
+          const proof = confirmation ? historyTextSaveRequestV1(patch, confirmation) : undefined
+          if (proof && (proof.identity.table !== 'histories' || origin.kind !== 'work'
+            || proof.identity.projectId !== origin.scope.projectId || proof.identity.worldId !== origin.scope.worldId
+            || proof.identity.workId !== origin.scope.workId || proof.identity.worldGroupId !== selection.worldGroupId))
+            throw new Error('历史保存字段或作用域凭据无效。')
           const tables = authorTables(origin)
           const ambient = Dexie.currentTransaction
           if (ambient && (ambient.db !== db || ambient.mode !== 'readwrite' || !ambient.active
             || tables.some(table => !ambient.storeNames.includes(table.name)))) throw new Error('历史保存缺少原写事务或完整作用域表')
+          if (proof && ambient) throw new Error('历史本机保存确认需要独立提交，不能确认未提交的外层事务。')
           const native = ambient?.idbtrans
           const root = historyRootTransactionV1()
           const completion = root ? historyRootCompletionV1(root) : null
@@ -271,17 +285,24 @@ export function createProjectSingletonStore<K extends string, T extends ProjectS
               return readAuthorPartition(origin, selection, transaction).then(({ scope, record: current }) => {
                 check()
                 const history = transaction.table<History, number>(getTableSpec('histories').table.name)
-                const ts = now()
-                if (current?.id != null) {
-                  return history.update(current.id, { ...patch, updatedAt: ts }).then(written => {
+                const validate = confirmation ? Dexie.waitFor(assertHistoryTextSaveExpectedV1(current, confirmation, transaction)) : Dexie.Promise.resolve()
+                return validate.then(() => {
+                  check()
+                  const ts = now()
+                  const written = current?.id != null
+                    ? history.update(current.id, { ...patch, updatedAt: ts }).then(count => {
+                      check(); if (!count) throw new Error('历史保存目标已不存在'); return current.id!
+                    })
+                    : history.add(stampNewRecord(scope, 'histories', {
+                      ...HISTORY_TEXT_DEFAULTS_V1, ...patch, projectId: scope.projectId, worldGroupId: selection.worldGroupId,
+                      createdAt: ts, updatedAt: ts,
+                    }, { owner: 'world' }))
+                  return written.then(id => {
                     check()
-                    if (!written) throw new Error('历史保存目标已不存在')
+                    if (!confirmation || !proof) return
+                    return history.get(id).then(row => Dexie.waitFor(historyTextSaveAckV1(row, confirmation, proof.raw))).then(() => { check() })
                   })
-                }
-                return history.add(stampNewRecord(scope, 'histories', {
-                  ...HISTORY_TEXT_DEFAULTS_V1, ...patch, projectId: scope.projectId, worldGroupId: selection.worldGroupId,
-                  createdAt: ts, updatedAt: ts,
-                }, { owner: 'world' })).then(() => { check() })
+                })
               })
             }
             if (ambient) return write(ambient)
@@ -297,17 +318,24 @@ export function createProjectSingletonStore<K extends string, T extends ProjectS
             write: coordinatePendingEditV1({ key: targetKey, persist }),
           }))
           const written = admitted.then(slot => slot.write)
-          const committed = written.then(() => completion ?? Dexie.Promise.resolve())
-            .then(() => Dexie.ignoreTransaction(() => readCommittedAuthor(origin, selection))).then(record => {
-              publishAuthor(request, origin, selection, record)
+          let ack: LocalSaveAckV1 | undefined, publishRequest = request
+          const committed = written.then(() => completion ?? Dexie.Promise.resolve()).then(() => {
+            if (proof && historyView && sameHistoryOriginV1(historyView.origin, origin) && sameHistorySelectionV1(historyView.selection, selection)) {
+              publishRequest = ++loadRequest
+              historyView = { request: publishRequest, origin, selection }
+            }
+          })
+            .then(() => Dexie.ignoreTransaction(() => readCommittedAuthor(origin, selection))).then(async record => {
+              if (confirmation && proof) ack = await historyTextSaveAckV1(record, confirmation, proof.raw)
+              publishAuthor(publishRequest, origin, selection, record)
             })
           void committed.catch(() => undefined)
           const pending = coordinatePendingEditV1({ key: `history-author-fields:${targetKey}:${Object.keys(patch).sort().join('+')}`, persist: () => committed })
           // Parent code must be able to continue and commit/abort. Its completion
           // remains registered with the pending-edit barrier independently.
-          return root ? written : pending
+          return root ? written : pending.then(() => ack)
         } catch (error) { return Dexie.Promise.reject(error) }
-      },
+      }) as HistoryAuthorSaveV1,
     }
 
     return {
