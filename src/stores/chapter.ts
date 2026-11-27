@@ -102,12 +102,13 @@ export const useChapterStore = create<ChapterStore>((set, get) => ({
       key: `chapter:${id}`,
       persist: async () => {
         const initial = await db.chapters.get(id)
-        if (!initial?.projectId) return
+        if (!initial?.projectId) throw new Error('原章节已不存在；修改仍保留，请重新读取后重试。')
         const scope = await resolveScopeLike(initial.projectId)
         const before = await db.chapters.get(id)
-        if (!before || !await assertRecordInScope(scope, 'chapters', before, { owner: 'work' })) return
+        if (!before || !await assertRecordInScope(scope, 'chapters', before, { owner: 'work' })) throw new Error('原章节已不存在或不属于当前作品；修改仍保留。')
         const updated = { ...data, updatedAt: now() }
-        await db.chapters.update(id, updated)
+        const written = await db.chapters.update(id, updated)
+        if (!written) throw new Error('章节未写入：目标已不存在；修改仍保留，请重试。')
         if (Object.prototype.hasOwnProperty.call(data, 'content')) {
           const projectId = before.projectId
           if (projectId != null) {

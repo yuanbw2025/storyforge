@@ -14,6 +14,62 @@ async function openSecondBlankChapter(page: Page) {
   await expect(page.locator('.tiptap-editor')).toHaveText('')
 }
 
+test('050 manual readback rejects a missing chapter and an old status receipt cannot overwrite newer prose', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('storyforge_guide_completed', '050-isolated'))
+  let modelCalls = 0
+  await page.route('**/*', route => {
+    const url = new URL(route.request().url())
+    if (/\/chat\/completions|\/(?:responses|messages)(?:\/|$)|:(?:streamGenerateContent|generateContent)/.test(url.pathname)) modelCalls++
+    return ['localhost', '127.0.0.1'].includes(url.hostname) ? route.continue() : route.abort()
+  })
+  await openSecondBlankChapter(page)
+  const flush = () => page.evaluate(async () => {
+    const { flushPendingEditsV1 } = await (new Function('return import("/storyforge/src/lib/authoring/pending-edit-coordinator.ts")'))()
+    await flushPendingEditsV1()
+  })
+  await page.locator('.tiptap-editor').fill('先确认原稿。'); await flush()
+  await expect(page.getByRole('button', { name: '已保存', exact: true })).toBeVisible()
+  await page.evaluate(async () => {
+    const load = new Function('p', 'return import(p)')
+    const [{ db }, { useChapterStore }] = await Promise.all([load('/storyforge/src/lib/db/schema.ts'), load('/storyforge/src/stores/chapter.ts')])
+    const id = useChapterStore.getState().currentChapter.id
+    Object.assign(window, { originalChapter050: await db.chapters.get(id) })
+    await db.chapters.delete(id)
+  })
+  await page.getByRole('button', { name: '已保存', exact: true }).click()
+  await expect(page.getByRole('button', { name: '保存失败', exact: true })).toBeVisible()
+  await expect(page.locator('.tiptap-editor')).toHaveText('先确认原稿。')
+  await page.evaluate(async () => {
+    const { db } = await (new Function('return import("/storyforge/src/lib/db/schema.ts")'))()
+    await db.chapters.put((window as unknown as { originalChapter050: object }).originalChapter050)
+  })
+  await page.getByRole('button', { name: '保存失败', exact: true }).click()
+  await expect(page.getByRole('button', { name: '已保存', exact: true })).toBeVisible()
+  await page.evaluate(async () => {
+    const { db } = await (new Function('return import("/storyforge/src/lib/db/schema.ts")'))()
+    const original = db.chapters.update.bind(db.chapters)
+    const state = window as unknown as { statusWrite050?: boolean; releaseStatus050?: () => void }
+    const gate = new Promise<void>(resolve => { state.releaseStatus050 = resolve })
+    db.chapters.update = async (key: number, patch: Record<string, unknown>) => {
+      if (patch.status === 'final') { db.chapters.update = original; state.statusWrite050 = true; await gate }
+      return original(key, patch)
+    }
+  })
+  await page.getByRole('combobox', { name: '章节状态', exact: true }).selectOption('final')
+  await expect.poll(() => page.evaluate(() => Boolean((window as unknown as { statusWrite050?: boolean }).statusWrite050))).toBe(true)
+  const latest = '保存等待期间继续输入的新稿，不能被旧状态回执清掉。'
+  await page.locator('.tiptap-editor').fill(latest)
+  await page.evaluate(() => (window as unknown as { releaseStatus050: () => void }).releaseStatus050())
+  await flush(); await expect(page.locator('.tiptap-editor')).toHaveText(latest)
+  await expect(page.getByRole('button', { name: '已保存', exact: true })).toBeVisible()
+  const actual = await page.evaluate(async () => {
+    const load = new Function('p', 'return import(p)')
+    const [{ db }, { useChapterStore }] = await Promise.all([load('/storyforge/src/lib/db/schema.ts'), load('/storyforge/src/stores/chapter.ts')])
+    return db.chapters.get(useChapterStore.getState().currentChapter.id)
+  })
+  expect(actual.content).toContain(latest); expect(actual.status).toBe('final'); expect(modelCalls).toBe(0)
+})
+
 test('a late chapter refresh cannot replace unsaved prose before a rapid chapter switch', async ({ page }) => {
   await openSecondBlankChapter(page)
   await page.evaluate(async () => {
