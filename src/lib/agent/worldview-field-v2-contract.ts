@@ -49,6 +49,8 @@ export interface WorldviewFieldRootV2 {
   lengthPlan: TaskLengthPlanV1
   sourceRefs: WorldviewExactRefV2[]
   baselineSnapshotRef: WorldviewExactRefV2
+  /** Absent in old frozen runs; their original whole-candidate codec remains readable. */
+  expansionPolicy?: 'retain-original-v1'
   rootHash: string
 }
 export interface WorldviewFieldPlanV2 {
@@ -79,6 +81,7 @@ export interface WorldviewFieldRoundV2 {
   resultHash: string
   observation: AuthorLengthObservationV1
   structuredOutputEvidence: StructuredOutputRunEvidenceV1
+  expansionProofRef?: WorldviewExactRefV2
 }
 export interface WorldviewFieldCandidateMetadataV2 {
   version: 'worldview-field-candidate-v2'
@@ -164,8 +167,10 @@ export function resolveWorldviewLengthPlanV2(task: WorldviewFieldTaskV2, snapsho
     components, arrangement: { version: 1, basis: operation === 'polish' ? 'preserve-original' : 'task-semantics', sourceKeys: [...WORLDVIEW_FULL_SOURCE_KEYS_V2] } })
 }
 export function assertWorldviewRootV2(value: unknown): asserts value is WorldviewFieldRootV2 {
-  assertWorldviewExactKeysV2(value, ['version','portable','scope','worldGroupId','conversationId','task','operation','lengthPlan','sourceRefs','baselineSnapshotRef','rootHash'], 'worldview root')
+  const hasExpansion = !!value && typeof value === 'object' && Object.prototype.hasOwnProperty.call(value, 'expansionPolicy')
+  assertWorldviewExactKeysV2(value, ['version','portable','scope','worldGroupId','conversationId','task','operation','lengthPlan','sourceRefs','baselineSnapshotRef','rootHash', ...(hasExpansion ? ['expansionPolicy'] : [])], 'worldview root')
   const row = value as unknown as WorldviewFieldRootV2
+  if (hasExpansion && (row.expansionPolicy !== 'retain-original-v1' || row.operation !== 'expand')) throw new Error('世界基座扩写保留协议无效。')
   if (row.version !== 'worldview-field-root-v2' || row.portable !== false
     || !Number.isSafeInteger(row.conversationId) || row.conversationId < 1 || !['create','expand','rewrite','polish'].includes(row.operation)
     || !Array.isArray(row.sourceRefs) || row.sourceRefs.length !== WORLDVIEW_FULL_SOURCE_KEYS_V2.length || !/^[a-f0-9]{64}$/.test(row.rootHash)) throw new Error('世界基座 Root 身份无效。')

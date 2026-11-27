@@ -11,7 +11,7 @@ import { resolveRequestConfig, freezeAIRequestAssessmentContextV2, prepareAIRequ
 import { readBoundCodexReceiptV1, acknowledgeBoundCodexReceiptV1 } from '../../ai/codex-transport'
 import { worldviewFieldCaptureTransactionTablesV2 } from '../../registry/context-sources'
 import { captureRegisteredContextSourceV2, assembleCapturedWorldviewContextV2 } from '../../registry/assemble-context'
-import { adoptRestoredWorldviewFieldCandidateV2, parseWorldviewFieldCandidateDraftV2,
+import { adoptRestoredWorldviewFieldCandidateV2,
   resolveWorldviewAgentFieldV1, resolveWorldviewFieldModeV1,
   worldviewFieldCandidateIssuesV1, worldviewFieldHardSystemV2, worldviewFieldCandidateMatchesRowV1,
   type WorldviewFieldCopilotSnapshot } from '../worldview-field-copilot'
@@ -46,6 +46,7 @@ import { createAgentRunCheckpointV1, readLatestVerifiedAgentRunCheckpointV1 } fr
 import { createContextManifestFromAssemblyV1 } from './context-manifest'
 import { createVerificationReceiptV1 } from './verification-receipt'
 import { canonicalStringify, hashCanonicalValue } from './hash'
+import { readWorldviewCandidateV2, parseWorldviewResponseV2, worldviewExpansionOutputContractV1 } from '../worldview-expansion-runtime'
 
 const CATEGORY = 'agent.world-origin.worldview-field.v2'
 const VERIFIER = 'worldview-field-terminal-v2'
@@ -191,17 +192,25 @@ async function readState(scope: WorkspaceScope, runId: number) {
   const rounds: WorldviewFieldRoundV2[] = []
   for (const ref of state.roundRefs) {
     const round = JSON.parse(await exactText(snapshot, ref)) as WorldviewFieldRoundV2
-    assertWorldviewExactKeysV2(round,['version','runId','rootHash','planHash','callId','rawRef','callRef','planRef','wireRef','frameRef','draftRef','resultHash','observation','structuredOutputEvidence'],'worldview round')
+    assertWorldviewExactKeysV2(round,['version','runId','rootHash','planHash','callId','rawRef','callRef','planRef','wireRef','frameRef','draftRef','resultHash','observation','structuredOutputEvidence',
+      ...(root.expansionPolicy ? ['expansionProofRef'] : [])],'worldview round')
     const {parseStructuredOutputRunEvidenceV1}=await import('../structured-output-pipeline')
     parseStructuredOutputRunEvidenceV1(round.structuredOutputEvidence)
     if (round.version !== 'worldview-field-round-v2' || round.runId !== runId || round.rootHash !== rootHash) throw new Error('修订稿来自其他运行。')
     const draft = await exactText(snapshot, round.draftRef)
-    const candidate = parseWorldviewFieldCandidateDraftV2(draft)
+    const candidate = readWorldviewCandidateV2(root, draft)
     const observation = observeAuthorLengthV1({ plan: root.lengthPlan, text: worldviewTargetTextV2(candidate.value), representation: 'plain-text',
       candidateKind: 'complete-replacement', baseline: { text: worldviewTargetTextV2(baseline.values[root.task.targetField]), representation: 'plain-text' } })
     if (candidate.field !== root.task.targetField || await sha256Text(draft) !== round.resultHash
       || canonicalStringify(observation) !== canonicalStringify(round.observation)) throw new Error('修订稿计数或目标不一致。')
-    await proveRaw(snapshot, root, round.rawRef, round.callId, round.planHash)
+    const raw = await proveRaw(snapshot, root, round.rawRef, round.callId, round.planHash)
+    if (root.expansionPolicy) {
+      const derived = await parseWorldviewResponseV2(root, baseline, raw.response.text)
+      if (!derived.expansion || JSON.stringify(derived.candidate, null, 2) !== draft || !round.expansionProofRef
+        || canonicalStringify({ proof: derived.expansion.proof, retained: derived.expansion.retained }) !== await exactText(snapshot, round.expansionProofRef)) {
+        throw new Error('扩写候选与冻结原文、实际增补响应或保留证据不一致。')
+      }
+    }
     await proveRoundWire(snapshot, root, round)
     rounds.push(round)
   }
@@ -220,7 +229,8 @@ async function proveRawEnvelopeV2(snapshot: AgentRunSnapshotV1, root: WorldviewF
 }
 async function proveRaw(snapshot: AgentRunSnapshotV1, root: WorldviewFieldRootV2, ref: WorldviewExactRefV2, callId: string, planHash: string): Promise<RawV2> {
   const raw=await proveRawEnvelopeV2(snapshot,root,ref,callId,planHash)
-  const parsed=raw.response.completion==='complete'?parseWorldviewFieldCandidateDraftV2(raw.response.text):null
+  const baseline = JSON.parse(await exactText(snapshot, root.baselineSnapshotRef)) as WorldviewFieldCopilotSnapshot
+  const parsed=raw.response.completion==='complete'?(await parseWorldviewResponseV2(root, baseline, raw.response.text)).candidate:null
   if(parsed&&parsed.field!==root.task.targetField)throw new Error('实际原答跨越原字段目标。')
   return raw
 }
@@ -271,14 +281,15 @@ async function prepareRound(root: WorldviewFieldRootV2, baseline: WorldviewField
     overrides: { ...(request.systemOverride == null ? {} : { systemPrompt: request.systemOverride }),
       ...(request.userOverride == null ? {} : { userPromptTemplate: request.userOverride }) } })
   const hard = worldviewFieldHardSystemV2({ targetField: root.task.targetField, snapshot: baseline,
-    mode: root.operation, projectName: JSON.parse(captures[2].rawText).work.title })
+    mode: root.operation, projectName: JSON.parse(captures[2].rawText).work.title },
+    root.expansionPolicy ? await worldviewExpansionOutputContractV1(root, baseline) : undefined)
   const messages: ChatMessage[] = [{ role: 'system', content: [
     ...rendered.messages.filter(message => message.role === 'system').map(message => message.content), hard,
     `【本次生效篇幅计划】${describeTaskLengthPlanV1(root.lengthPlan)}。本计划优先于系统模板预设的字数建议；自动参考没有最高字数。`,
     '正式材料只在下方的完整来源包出现一次。空资料别名不是来源缺失。作者自定义模板/说明仍保留，事实权限与字段结构不得越界。',
   ].join('\n\n') }, ...rendered.messages.filter(message => message.role !== 'system'),
     { role: 'user', content: `【实际登记完整来源】\n${assembled.text}` }]
-  if (priorDraft) messages.push({ role: 'user', content: `${authorLengthRevisionInstructionV1(root.lengthPlan, priorDraft.round.observation)}\n【前轮完整候选】\n${priorDraft.text}` })
+  if (priorDraft) messages.push({ role: 'user', content: `${authorLengthRevisionInstructionV1(root.lengthPlan, priorDraft.round.observation)}\n【前轮完整候选】\n${priorDraft.text}${root.expansionPolicy ? '\n本轮仍基于同一冻结原文返回完整的增补 edits 集合；前轮增补未成为正式原文，不重复叠加前轮结果。' : ''}` })
   const temperature = request.temperature ?? rendered.modelOverride?.temperature
   // Sampling overrides belong to the routed configuration, never to the
   // request-options schema. Keep this exact override in every route guard.
@@ -391,7 +402,8 @@ export async function runWorldviewFieldMasterV2(input: WorldviewMasterInputV2): 
     const body = { version: 'worldview-field-root-v2' as const, portable: false as const, scope, worldGroupId: group,
       conversationId: input.conversationId!, task, operation, lengthPlan,
       sourceRefs: await Promise.all(sourceTexts.map(text => refOf('source-snapshot', text))),
-      baselineSnapshotRef: await refOf('source-snapshot', baselineText) }
+      baselineSnapshotRef: await refOf('source-snapshot', baselineText),
+      ...(operation === 'expand' ? { expansionPolicy: 'retain-original-v1' as const } : {}) }
     const root: WorldviewFieldRootV2 = { ...body, rootHash: await hashCanonicalValue(body) }
     const prepared = await prepareRound(root, baseline, captures, null)
     await assertFresh(root, captures, true)
@@ -486,17 +498,19 @@ async function dispatchRound(input: {
 async function compileRound(cursor: CursorV2, root: WorldviewFieldRootV2, baseline: WorldviewFieldCopilotSnapshot,
   plan: WorldviewFieldPlanV2, raw: RawV2, rawRef: WorldviewExactRefV2, state: StateV2): Promise<WorldviewFieldRoundV2> {
   if (raw.response.completion !== 'complete') throw new Error('本次回答停笔或结果未知；可见原答已保留，不能把不完整 JSON 标成完整候选。')
-  const candidate = parseWorldviewFieldCandidateDraftV2(raw.response.text)
-  const issues = worldviewFieldCandidateIssuesV1(candidate,{targetField:root.task.targetField,snapshot:baseline},parseWorldviewFieldCandidateDraftV2)
+  const { candidate, expansion } = await parseWorldviewResponseV2(root, baseline, raw.response.text)
+  const issues = worldviewFieldCandidateIssuesV1(candidate,{targetField:root.task.targetField,snapshot:baseline},draft => readWorldviewCandidateV2(root, draft))
   if (issues.length) throw new Error(issues.map(item => item.message).join('；'))
   const { readStructuredOutputEvidenceV1 } = await import('../structured-output-pipeline')
   const evidence = readStructuredOutputEvidenceV1(candidate)
   if (!evidence) throw new Error('缺少同一 pipeline 的结构校验证据。')
   const draft = JSON.stringify(candidate,null,2), draftRef = await cursor.record('tool-result',draft,stepId(root))
+  const expansionProofRef = expansion ? await cursor.record('tool-result', canonicalStringify({ proof: expansion.proof, retained: expansion.retained }), stepId(root)) : undefined
   const observation = observeAuthorLengthV1({plan:root.lengthPlan,text:worldviewTargetTextV2(candidate.value),representation:'plain-text',
     candidateKind:'complete-replacement',baseline:{text:worldviewTargetTextV2(baseline.values[root.task.targetField]),representation:'plain-text'}})
   return {version:'worldview-field-round-v2',runId:cursor.snapshot.run.id,rootHash:root.rootHash,planHash:plan.planHash,callId:raw.callId,
     rawRef,callRef:state.callRef!,planRef:state.planRef,wireRef:state.wireRef,frameRef:state.frameRef,draftRef,resultHash:await sha256Text(draft),observation,
+    ...(expansionProofRef ? { expansionProofRef } : {}),
     structuredOutputEvidence:{version:1,schemaId:evidence.schemaId,target:evidence.target,status:evidence.status,
       attempts:[{callIndex:1,purpose:'generate',evidence}],repair:null}}
 }
@@ -571,7 +585,8 @@ async function persistCandidate(cursor: CursorV2,root:WorldviewFieldRootV2,state
   disposition:WorldviewFieldCandidateMetadataV2['disposition'],reason:string):Promise<void> {
   const draft=await exactText(cursor.snapshot,round.draftRef)
   const metadata:WorldviewFieldCandidateMetadataV2={version:'worldview-field-candidate-v2',rootRef:state.rootRef,draftRef:round.draftRef,
-    roundRefs:[...state.roundRefs],lengthPlan:root.lengthPlan,lengthObservation:round.observation,disposition,reason}
+    roundRefs:[...state.roundRefs],lengthPlan:root.lengthPlan,lengthObservation:round.observation,disposition,
+    reason:root.expansionPolicy ? `原文已逐字保留，增补内容待作者确认。${reason}` : reason}
   const selectedCall=JSON.parse(await exactText(cursor.snapshot,round.callRef)) as {contextManifestHash:string}
   const payload:MasterCandidatePayload={version:1,taskId:root.task.id,agentId:'world-origin',skillId:WORLDVIEW_FIELD_SKILL_V2,
     label:WORLDVIEW_GENERATABLE_FIELD_SPECS.find(item=>item.field===root.task.targetField)!.aiGeneration.label,
@@ -601,7 +616,7 @@ export async function restoreWorldviewFieldMasterV2(scope:WorkspaceScope,runId:n
     const metadata=payload.worldviewFieldV2!
     assertWorldviewExactKeysV2(metadata,['version','rootRef','draftRef','roundRefs','lengthPlan','lengthObservation','disposition','reason'],'worldview candidate metadata')
     const {candidateHash,...withoutHash}=payload
-    const parsed=parseWorldviewFieldCandidateDraftV2(event.content)
+    const parsed=readWorldviewCandidateV2(read.root,event.content)
     const observed=observeAuthorLengthV1({plan:read.root.lengthPlan,text:worldviewTargetTextV2(parsed.value),representation:'plain-text',candidateKind:'complete-replacement',
       baseline:{text:worldviewTargetTextV2(read.baseline.values[read.root.task.targetField]),representation:'plain-text'}})
     if(!read.snapshot.events.some(item=>item.type==='context.assembled'&&item.payload.manifestHash===payload.contextManifestHash))throw new Error('候选缺少已提交完整来源 manifest。')
@@ -719,7 +734,7 @@ export async function reviseWorldviewMasterCandidateV2(input:{scope:WorkspaceSco
   const read=await restoreWorldviewFieldMasterV2(input.scope,event.durableRunId)
   const previous=read.candidates.find(item=>item.event.id===input.eventId)
   if(!previous)throw new Error('候选不属于原运行。')
-  const candidate=parseWorldviewFieldCandidateDraftV2(input.draft)
+  const candidate=readWorldviewCandidateV2(read.root,input.draft)
   if(candidate.field!==read.root.task.targetField)throw new Error('作者编辑不能改写其他字段。')
   const observation=observeAuthorLengthV1({plan:read.root.lengthPlan,text:worldviewTargetTextV2(candidate.value),representation:'plain-text',candidateKind:'complete-replacement',
     baseline:{text:worldviewTargetTextV2(read.baseline.values[candidate.field]),representation:'plain-text'}})
@@ -767,7 +782,8 @@ export async function adoptWorldviewMasterCandidateV2(input:MasterAgentCandidate
       if(!transaction?.active||transaction.mode!=='readwrite')throw new Error('缺少同一原生采用事务。')
       await Dexie.Promise.resolve(assertFresh(read.root,read.sourceCaptures,false))
       await Dexie.Promise.resolve(adoptRestoredWorldviewFieldCandidateV2({projectId:input.scope.projectId,scope:input.scope,worldGroupId:read.root.worldGroupId,
-        snapshot:read.baseline,targetField:read.root.task.targetField,draft:candidate.draft,transaction}))
+        snapshot:read.baseline,targetField:read.root.task.targetField,draft:candidate.draft,transaction,
+        preserveText:read.root.expansionPolicy==='retain-original-v1'}))
       if(!transaction.active||Dexie.currentTransaction!==transaction)throw new Error('采用未留在原事务。')
       const adoptionHash=await Dexie.waitFor(hashCanonicalValue({intentHash,draftHash:metadata.draftRef.contentHash}))
       current=await Dexie.Promise.resolve(appendPrivilegedAgentRunEventInTransactionV1(current,localEvent(current,'adoption.committed',{
@@ -800,13 +816,13 @@ export async function verifyWorldviewMasterV2(input:{scope:WorkspaceScope;runId:
   const step=read.snapshot.projection.steps[stepId(read.root)],candidate=read.candidates[0]
   if(!candidate||!step||step.status!=='succeeded'||!step.adoptionHash)return {accepted:false,codes:['run-not-ready'],snapshot:read.snapshot}
   const row=(await readOwnedRows<Worldview>(input.scope,'worldviews',{owner:'world'})).find(item=>(item.worldGroupId??null)===read.root.worldGroupId)
-  if(!worldviewFieldCandidateMatchesRowV1(parseWorldviewFieldCandidateDraftV2(candidate.draft),row))return {accepted:false,codes:['worldview-post-state-mismatch'],snapshot:read.snapshot}
+  if(!worldviewFieldCandidateMatchesRowV1(readWorldviewCandidateV2(read.root,candidate.draft),row))return {accepted:false,codes:['worldview-post-state-mismatch'],snapshot:read.snapshot}
   const cursor=new CursorV2(input.scope,read.snapshot)
   await cursor.append('verification.started',{verifierSetVersion:VERIFIER})
   const current=cursor.snapshot
   const receipt=await createVerificationReceiptV1({version:1,runId:input.runId,generation:current.projection.generation,contractHash:current.projection.contractHash,
     contextManifestHashes:[...new Set(current.events.filter(event=>event.type==='context.assembled').map(event=>event.payload.manifestHash))],
-    candidateHashes:[candidate.payload.candidateHash!],adoptionEventIds:[],postStateHash:await hashCanonicalValue({field:read.root.task.targetField,value:parseWorldviewFieldCandidateDraftV2(candidate.draft).value}),
+    candidateHashes:[candidate.payload.candidateHash!],adoptionEventIds:[],postStateHash:await hashCanonicalValue({field:read.root.task.targetField,value:readWorldviewCandidateV2(read.root,candidate.draft).value}),
     verifierSetVersion:VERIFIER,criteria:current.contract.acceptance.map(criterion=>({id:criterion.id,status:'passed' as const,evidenceRefs:[`candidate:${candidate.payload.candidateHash}`,`adoption:${step.adoptionHash}`]})),acceptedAt:input.now??Date.now()})
   await cursor.append('verification.accepted',{receiptHash:receipt.receiptHash})
   return {accepted:true,codes:[],snapshot:cursor.snapshot,receipt}

@@ -31,6 +31,8 @@ import { sha256Text } from '../../src/lib/ai/chapter-memory/text-normalization'
 import { readAgentRunV1 } from '../../src/lib/agent/run/event-store'
 import * as runEvents from '../../src/lib/agent/run/event-store'
 import * as conversations from '../../src/lib/agent/conversations'
+import * as requestClient from '../../src/lib/ai/client'
+import { parseWorldviewResponseV2 } from '../../src/lib/agent/worldview-expansion-runtime'
 import type { AuthorLengthIntentV1 } from '../../src/lib/types/agent-run'
 import type { PromptTemplate } from '../../src/lib/types/prompt'
 import type { AIConfig } from '../../src/lib/types'
@@ -725,4 +727,221 @@ describe.sequential('B02 C1–C6 · ordinary UI task to same-client durable cand
     if(resources.mode==='automatic')expect(resources.components).toHaveLength(4)
     expect(resolveWorldviewLengthPlanV2(task,baseline,'polish')).toMatchObject({operation:'polish',referenceWords:null})
   })
+})
+
+// 049: exercise the actual V2 Run, raw artifacts, restore, candidate journal and
+// original registered adoption, rather than only testing a patch materializer.
+const expansionOriginal = ' \t军税为17枚，不可夜航。\r\n\r\n重复段😀\r\n重复段😀\r\n尾段　 \r\n'
+type ExpansionField = 'worldOrigin' | 'worldStructure' | 'races' | 'naturalResources' | 'divineDesign'
+async function expansionFixture(field: ExpansionField = 'worldOrigin', value: unknown = expansionOriginal) {
+  const f = await fixture()
+  await db.worldviews.update(f.worldviewId, { [field]: value })
+  const instruction = formatWorldviewFieldGenerationRequestV1({ field, mode: 'expand', hint: '补充执行细节，保留军税数字、夜航禁忌与重复段。' })
+  const plan = await createMasterAgentPlan({ projectId: f.scope.projectId, scope: f.scope, worldGroupId: null, request: instruction,
+    pinnedTask: { agentId: 'world-origin', skillId: 'world-origin.worldview-field.v2', targetField: field, authorLengthIntent: null,
+      instruction, promptExecution: { version: 1, moduleKey: 'worldview.dimension' } } })
+  return { ...f, plan }
+}
+interface ExpansionWireFixture {
+  version: string; field: string; baseHash: string; authorizationHash: string
+  anchors: Array<{ leaf: string; segments: Array<{ id: string; from: number; to: number }> }>
+}
+function expansionBinding(body: Record<string, unknown>): ExpansionWireFixture {
+  const messages = body.messages as Array<{ content: string }>
+  const lines = messages.map(message => message.content).join('\n').split('\n')
+  for (const line of lines) {
+    try {
+      const row = JSON.parse(line)
+      if (row.version === 'worldview-expansion-v1' && Array.isArray(row.anchors)) return row
+    } catch { /* Normal prompt prose is not a protocol line. */ }
+  }
+  throw new Error('The actual preflighted wire has no expansion contract')
+}
+function expansionAnswer(binding: ExpansionWireFixture, text = '新增：守潮人按17枚军税核验。\r\n') {
+  const leaf = binding.anchors[0], anchor = leaf.segments[Math.min(3, leaf.segments.length - 1)]
+  return { version: binding.version, field: binding.field, baseHash: binding.baseHash, authorizationHash: binding.authorizationHash,
+    edits: [{ id: 'addition-1', kind: 'insert', leaf: leaf.leaf, segmentId: anchor.id, side: 'after', order: 0, text }] }
+}
+
+describe('049 actual frozen-original expansion', () => {
+  it('ordinary controls use the new expansion protocol and show exact source without a write or normalization', async () => {
+    const f = await expansionFixture(), project = (await db.projects.get(f.scope.projectId))!
+    const answers: Record<string, unknown>[] = [{}]
+    const sent = http(answers, (_index, body) => { answers[0] = expansionAnswer(expansionBinding(body)) })
+    function Controls() {
+      const copilot = useMasterCopilot({ project, worldGroupId: null })
+      const candidate = copilot.pendingCandidates.find(item => item.payload.worldviewField === 'worldOrigin')
+      return createElement(WorldviewAgentControls, { field: 'worldOrigin', project, activeGroupId: null, copilot,
+        candidate, hasOtherPendingCandidates: false, onRunningChange: () => undefined, onAdopted: async () => undefined })
+    }
+    await mountControls(createElement(ToastProvider, null, createElement(DialogProvider, null, createElement(Controls))))
+    await waitFor(() => expect(button('AI 生成').disabled).toBe(false))
+    await click('AI 生成')
+    await waitFor(() => expect(document.body.textContent).toContain('原文已逐字保留'), { timeout: 15000 })
+    const event = (await db.agentEvents.toArray()).find(row => row.kind === 'candidate')!
+    const candidateText = JSON.parse(event.content).value as string
+    await waitFor(() => expect(button('编辑源码').disabled).toBe(false))
+    await click('编辑源码')
+    const input = Array.from(document.querySelectorAll('textarea')).find(item => item.value.includes('新增：守潮人'))!
+    // Native textarea may project CRLF as LF, but opening it must not persist
+    // that display projection or trim the source artifact.
+    expect(input.value.replace(/\r\n/g, '\n')).toBe(candidateText.replace(/\r\n/g, '\n'))
+    expect(input.value.startsWith(' \t')).toBe(true)
+    expect(input.value.endsWith('尾段　 \r\n') || input.value.endsWith('尾段　 \n')).toBe(true)
+    expect((await db.agentEvents.get(event.id!))?.content).toBe(event.content)
+    expect((await db.worldviews.get(f.worldviewId))?.worldOrigin).toBe(expansionOriginal)
+    expect(sent.posts).toHaveLength(1)
+  }, 30000)
+
+  it('passes all anchors and complete original into actual preflight before creating a Run or sending a POST', async () => {
+    const f = await expansionFixture(), sent = http([])
+    vi.spyOn(requestClient, 'prepareAIRequestV2').mockImplementation(async input => {
+      const messages = input.messages.map(message => message.content).join('\n')
+      expect(messages).toContain('军税为17枚，不可夜航')
+      expect(messages).toContain('"anchors"')
+      expect(input.contextMaterial).toBeDefined()
+      throw new Error('synthetic actual capacity refusal')
+    })
+    await expect(runMasterWithWorldviewV2(f)).rejects.toThrow('synthetic actual capacity refusal')
+    expect(await db.agentRuns.count()).toBe(0)
+    expect((await db.worldviews.get(f.worldviewId))?.worldOrigin).toBe(expansionOriginal)
+    expect(sent.posts).toHaveLength(0)
+  })
+
+  it('does not reinterpret an old unmarked expansion root as a delta or change its original trimming codec', async () => {
+    const f = await expansionFixture(), answers: Record<string, unknown>[] = [{}]
+    http(answers, (_index, body) => { answers[0] = expansionAnswer(expansionBinding(body)) })
+    const run = await runMasterWithWorldviewV2(f), read = await restoreWorldviewFieldMasterV2(f.scope, run.runId)
+    const { expansionPolicy: _newOnly, ...oldRoot } = read.root
+    const old = await parseWorldviewResponseV2(oldRoot, read.baseline, JSON.stringify({ field: 'worldOrigin', value: '  历史完整候选\r\n' }))
+    expect(old).toMatchObject({ candidate: { field: 'worldOrigin', value: '历史完整候选' }, expansion: null })
+  }, 30000)
+
+  it('keeps temporary assumptions in the candidate evidence without writing them as confirmed facts', async () => {
+    const f = await expansionFixture(), answers: Record<string, unknown>[] = [{}]
+    const sent = http(answers, (_index, body) => {
+      answers[0] = { ...expansionAnswer(expansionBinding(body)), temporaryAssumptions: ['守潮人属于尚待确认的新组织'] }
+    })
+    const run = await runMasterWithWorldviewV2(f), read = await restoreWorldviewFieldMasterV2(f.scope, run.runId)
+    expect(JSON.parse(read.candidates[0].draft).temporaryAssumptions).toEqual(['守潮人属于尚待确认的新组织'])
+    expect((await db.worldviews.get(f.worldviewId))?.worldOrigin).toBe(expansionOriginal)
+    expect(sent.posts).toHaveLength(1)
+  }, 30000)
+
+  it('backs up the exact expansion raw/proof/draft while imported pending history stays read-only', async () => {
+    const f = await expansionFixture(), answers: Record<string, unknown>[] = [{}]
+    const sent = http(answers, (_index, body) => { answers[0] = expansionAnswer(expansionBinding(body)) })
+    const run = await runMasterWithWorldviewV2(f), before = await restoreWorldviewFieldMasterV2(f.scope, run.runId)
+    const exactArtifacts = (await db.agentRunArtifacts.toArray()).map(row => [row.artifactKind, row.contentHash, row.content])
+      .sort((a, b) => String(a[1]).localeCompare(String(b[1])))
+    const exported = await exportProjectJSON(f.scope.projectId)
+    await db.delete(); await db.open()
+    const projectId = await importProjectJSON(exported), project = (await db.projects.get(projectId))!
+    const scope = { projectId, worldId: project.activeWorldId!, workId: project.activeWorkId! }
+    expect((await db.agentRunArtifacts.toArray()).map(row => [row.artifactKind, row.contentHash, row.content])
+      .sort((a, b) => String(a[1]).localeCompare(String(b[1])))).toEqual(exactArtifacts)
+    const candidate = (await db.agentEvents.toArray()).find(row => row.kind === 'candidate')!
+    expect(candidate.content).toBe(before.candidates[0].draft)
+    await expect(adoptMasterWithWorldviewV2({ scope, runId: run.runId, worldGroupId: null, candidateEventId: candidate.id! })).rejects.toThrow('历史只读')
+    await expect(runMasterWithWorldviewV2({ scope, worldGroupId: null, conversationId: candidate.conversationId!, runId: run.runId })).rejects.toThrow('历史只读')
+    expect((await db.worldviews.toArray())[0].worldOrigin).toBe(expansionOriginal)
+    expect(sent.posts).toHaveLength(1)
+  }, 30000)
+
+  it.each(['worldOrigin', 'worldStructure', 'races', 'naturalResources', 'divineDesign'] as const)(
+    'retains exact %s text through real response, refresh and atomic registered adoption', async field => {
+      const original = field === 'naturalResources'
+        ? { rareCreatures: expansionOriginal, herbs: '  药材\r\n', minerals: '', others: '尾部  ' }
+        : field === 'divineDesign'
+          ? { hasDivinity: false, divineRank: expansionOriginal, divineNames: '旧名　 ', divineRules: '禁忌：不可夜航\r\n' }
+          : expansionOriginal
+      const f = await expansionFixture(field, original), answers: Record<string, unknown>[] = [{}]
+      let insertedAt = -1, raw = ''
+      const addition = '新增：守潮人按17枚军税核验。\r\n'
+      const sent = http(answers, (_index, body) => {
+        const binding = expansionBinding(body), answer = expansionAnswer(binding, addition)
+        answers[0] = answer; raw = JSON.stringify(answer)
+        insertedAt = binding.anchors[0].segments[Math.min(3, binding.anchors[0].segments.length - 1)].to
+        expect(body).not.toHaveProperty('max_tokens')
+        expect(JSON.stringify(body.messages)).toContain('保留原文的增补')
+      })
+      const run = await runMasterWithWorldviewV2(f), read = await restoreWorldviewFieldMasterV2(f.scope, run.runId)
+      expect(read.root.expansionPolicy).toBe('retain-original-v1')
+      const expectedText = expansionOriginal.slice(0, insertedAt) + addition + expansionOriginal.slice(insertedAt)
+      const expected = typeof original === 'string' ? expectedText : { ...original, [field === 'divineDesign' ? 'divineRank' : 'rareCreatures']: expectedText }
+      expect(JSON.parse(read.candidates[0].draft).value).toEqual(expected)
+      expect((await db.worldviews.get(f.worldviewId))?.[field]).toEqual(original)
+      expect(read.rounds[0].expansionProofRef).toBeDefined()
+      const proofRef = read.rounds[0].expansionProofRef!
+      const proof = JSON.parse(await artifacts.readAgentRunArtifactExactV1({ projectId: f.scope.projectId, ...proofRef }))
+      expect(proof.retained.reduce((sum: number, item: { baseFrom: number; baseTo: number }) => sum + item.baseTo - item.baseFrom, 0))
+        .toBe(typeof original === 'string' ? original.length : Object.values(original).filter(item => typeof item === 'string').join('').length)
+      const round = await inspectWorldviewRoundV2({ scope: f.scope, runId: run.runId, roundRef: read.state.roundRefs[0] })
+      const response = JSON.parse(await artifacts.readAgentRunArtifactExactV1({ projectId: f.scope.projectId, ...round.rawRef }))
+      expect(response.response.text).toBe(raw)
+      await runMasterWithWorldviewV2({ scope: f.scope, conversationId: f.conversationId, worldGroupId: null, runId: run.runId })
+      const refreshed = await restoreWorldviewFieldMasterV2(f.scope, run.runId)
+      expect(refreshed.candidates[0].draft).toBe(read.candidates[0].draft)
+      await adoptMasterWithWorldviewV2({ scope: f.scope, worldGroupId: null, runId: run.runId, candidateEventId: read.candidates[0].event.id! })
+      expect((await db.worldviews.get(f.worldviewId))?.[field]).toEqual(expected)
+      expect((await verifyMasterWithWorldviewV2({ scope: f.scope, runId: run.runId })).accepted).toBe(true)
+      expect(sent.posts).toHaveLength(1)
+    }, 30000)
+
+  it.each(['full-rewrite', 'replace', 'wrong-base', 'http', 'incomplete'] as const)(
+    'retains original and raw response, with no candidate/adoption or replay POST after %s', async kind => {
+      const f = await expansionFixture(), answers: Array<Record<string, unknown> | Response> = [{}]
+      const sent = http(answers, (_index, body) => {
+        const answer = expansionAnswer(expansionBinding(body))
+        answers[0] = kind === 'full-rewrite' ? { field: 'worldOrigin', value: '军税改成3枚，可以夜航。' }
+          : kind === 'replace' ? { ...answer, edits: [{ id: 'replacement', kind: 'replace', leaf: 'text', rangeId: 'invented', text: '改写' }] }
+            : kind === 'wrong-base' ? { ...answer, baseHash: 'a'.repeat(64) }
+              : kind === 'http' ? json({ error: { message: 'no credit' } }, 402)
+                : json({ choices: [{ message: { content: JSON.stringify(answer) }, finish_reason: 'length' }] })
+      })
+      await expect(runMasterWithWorldviewV2(f)).rejects.toThrow()
+      const run = (await db.agentRuns.toArray())[0]
+      expect((await db.worldviews.get(f.worldviewId))?.worldOrigin).toBe(expansionOriginal)
+      expect((await db.agentEvents.toArray()).filter(row => row.kind === 'candidate')).toHaveLength(0)
+      const snapshot = await readAgentRunV1(f.scope, run.id!)
+      expect(snapshot.events.some(event => event.type === 'adoption.committed')).toBe(false)
+      if (kind !== 'http') expect(snapshot.events.some(event => event.type === 'model.responded')).toBe(true)
+      await expect(runMasterWithWorldviewV2({ scope: f.scope, conversationId: f.conversationId, worldGroupId: null, runId: run.id! })).rejects.toThrow()
+      expect(sent.posts).toHaveLength(1)
+    }, 30000)
+
+  it('author edits remain explicit, preserve exact whitespace and original raw proof, with no new POST', async () => {
+    const f = await expansionFixture(), answers: Record<string, unknown>[] = [{}]
+    const sent = http(answers, (_index, body) => { answers[0] = expansionAnswer(expansionBinding(body)) })
+    const run = await runMasterWithWorldviewV2(f), before = await restoreWorldviewFieldMasterV2(f.scope, run.runId)
+    const authorText = '  作者明确修改军税为3枚；仍不可夜航。\r\n末尾保留　 '
+    await updateAgentEventCandidate(before.candidates[0].event.id!, f.scope.projectId, JSON.stringify({ field: 'worldOrigin', value: authorText }), f.scope)
+    const edited = await restoreWorldviewFieldMasterV2(f.scope, run.runId)
+    expect(edited.candidates[0].payload.worldviewFieldV2?.disposition).toBe('author-edited')
+    expect(edited.state.roundRefs).toEqual(before.state.roundRefs)
+    expect(JSON.parse(edited.candidates[0].draft).value).toBe(authorText)
+    await adoptMasterWithWorldviewV2({ scope: f.scope, runId: run.runId, worldGroupId: null, candidateEventId: edited.candidates[0].event.id! })
+    expect((await db.worldviews.get(f.worldviewId))?.worldOrigin).toBe(authorText)
+    expect(sent.posts).toHaveLength(1)
+  }, 30000)
+
+  it('stale target or foreign Work cannot adopt an expansion, and a later transaction failure rolls back exact text and journal', async () => {
+    const f = await expansionFixture(), answers: Record<string, unknown>[] = [{}]
+    const sent = http(answers, (_index, body) => { answers[0] = expansionAnswer(expansionBinding(body)) })
+    const run = await runMasterWithWorldviewV2(f), read = await restoreWorldviewFieldMasterV2(f.scope, run.runId)
+    const input = { scope: f.scope, runId: run.runId, worldGroupId: null, candidateEventId: read.candidates[0].event.id! }
+    await expect(adoptMasterWithWorldviewV2({ ...input, scope: { ...f.scope, workId: f.scope.workId + 100 } })).rejects.toThrow()
+    await db.worldviews.update(f.worldviewId, { worldOrigin: '已被作者另改' })
+    await expect(adoptMasterWithWorldviewV2(input)).rejects.toThrow()
+    await db.worldviews.update(f.worldviewId, { worldOrigin: expansionOriginal })
+    const snapshot = await readAgentRunV1(f.scope, run.runId), append = runEvents.appendPrivilegedAgentRunEventInTransactionV1
+    vi.spyOn(runEvents, 'appendPrivilegedAgentRunEventInTransactionV1').mockImplementation(async (current, event) => {
+      if (event.type === 'step.succeeded') throw new Error('synthetic terminal failure')
+      return append(current, event)
+    })
+    await expect(adoptMasterWithWorldviewV2(input)).rejects.toThrow('synthetic terminal')
+    expect((await db.worldviews.get(f.worldviewId))?.worldOrigin).toBe(expansionOriginal)
+    expect((await readAgentRunV1(f.scope, run.runId)).events).toEqual(snapshot.events)
+    expect(sent.posts).toHaveLength(1)
+  }, 30000)
 })

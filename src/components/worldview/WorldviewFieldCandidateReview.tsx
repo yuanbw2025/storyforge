@@ -280,7 +280,9 @@ function WorldviewFieldCandidateReviewMainV2({
   resizableInputs?: boolean
 }) {
   const isV2 = candidate.payload.skillId === 'world-origin.worldview-field.v2'
-  const parseDraft = isV2 ? parseWorldviewFieldCandidateDraftV2 : parseWorldviewFieldCandidateDraft
+  const parseDraft = useMemo(() => isV2
+    ? (draft: string) => parseWorldviewFieldCandidateDraftV2(draft, { preserveText: true })
+    : parseWorldviewFieldCandidateDraft, [isV2])
   const [frozenBaseline,setFrozenBaseline] = useState<WorldviewFieldCopilotSnapshot|null>(null)
   const [baselineError,setBaselineError] = useState<string|null>(null)
   useEffect(() => {
