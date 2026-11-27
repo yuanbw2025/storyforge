@@ -2,8 +2,9 @@ import { readStateCardFields, StateFieldsParseError } from '../../lib/types/stat
 import { prepareChapterPostAdoptionV1, runChapterPostAdoptionV1, type ChapterPostAdoptionTaskV1 } from '../../lib/prose/post-adoption-runner'
 import { lazy, Suspense, useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useNavigate } from 'react-router'
-import { FileText, ClipboardList, RotateCcw } from 'lucide-react'
+import { ClipboardList, RotateCcw } from 'lucide-react'
 import { useChapterStore } from '../../stores/chapter'
+import ChapterAuthorNotes from './ChapterAuthorNotes'
 import { useOutlineStore } from '../../stores/outline'
 import { useStateCardStore } from '../../stores/state-card'
 import { useCharacterStore } from '../../stores/character'
@@ -3859,19 +3860,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       />}
 
       {/* 作者笔记 */}
-      <div className="mt-3">
-        <label className="block text-xs text-text-muted mb-1">
-          <FileText className="w-3 h-3 inline mr-1" />作者笔记
-        </label>
-        <textarea
-          value={currentChapter.notes || ''}
-          onChange={e => { if (currentChapter.id) void updateChapter(currentChapter.id, { notes: e.target.value })
-            .catch(error => { if (editorChapterIdRef.current === currentChapter.id) setManualSaveError(error instanceof Error ? error.message : String(error)) }) }}
-          placeholder="写给自己的备忘..."
-          rows={2}
-          className="w-full p-2 bg-bg-elevated border border-border rounded text-xs text-text-muted resize-y focus:outline-none focus:border-accent"
-        />
-      </div>
+      <ChapterAuthorNotes key={currentChapter.id} chapter={currentChapter} />
 
       </div>
 

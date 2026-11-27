@@ -1,15 +1,26 @@
 import { create } from 'zustand'
+import Dexie from 'dexie'
 import { db } from '../lib/db/schema'
 import { pickBestChapterForOutline } from '../lib/chapters/selectors'
 import { cascadeDeleteChapterRecords } from '../lib/chapters/lifecycle'
-import type { Chapter } from '../lib/types'
+import type { Chapter, WorkspaceScope } from '../lib/types'
 import { assertRecordInScope, readOwnedRows, resolveReadScopeLike, resolveScopeLike, scopeTransactionTables, stampNewRecord, type WorkspaceScopeLike } from '../lib/workspace/scope'
 import { coordinatePendingEditV1 } from '../lib/authoring/pending-edit-coordinator'
+import { assertRecordTextSaveExpectedV1, recordTextSaveAckV1, recordTextSaveRequestV1 } from '../lib/authoring/record-text-save-evidence'
+import type { LocalSaveAckV1, LocalSaveIntentV1 } from '../lib/authoring/local-save-evidence'
+
+interface ChapterAuthorUpdateV1 {
+  (id: number, data: Partial<Chapter>): Promise<void>
+  (id: number, data: Partial<Chapter>, options: { scope: WorkspaceScope; confirmation: LocalSaveIntentV1 }): Promise<LocalSaveAckV1>
+}
+const sameWork = (a: WorkspaceScope | null, b: WorkspaceScope) => a?.projectId === b.projectId && a.worldId === b.worldId && a.workId === b.workId
+let loadSequence = 0, writeRevision = 0
 
 interface ChapterStore {
   chapters: Chapter[]
   currentChapter: Chapter | null
   loading: boolean
+  loadedScope: WorkspaceScope | null
 
   loadAll: (scope: WorkspaceScopeLike) => Promise<void>
   selectChapter: (id: number) => void
@@ -19,7 +30,7 @@ interface ChapterStore {
     outlineNodeId: number,
     create: Omit<Chapter, 'id' | 'projectId' | 'outlineNodeId' | 'createdAt' | 'updatedAt'>,
   ) => Promise<Chapter>
-  updateChapter: (id: number, data: Partial<Chapter>) => Promise<void>
+  updateChapter: ChapterAuthorUpdateV1
   /** adopt()/事务写回后只刷新内存，不重复写数据库。 */
   refreshChapter: (id: number) => Promise<void>
   deleteChapter: (id: number) => Promise<void>
@@ -38,12 +49,23 @@ export const useChapterStore = create<ChapterStore>((set, get) => ({
   chapters: [],
   currentChapter: null,
   loading: false,
+  loadedScope: null,
 
   loadAll: async (scopeInput: WorkspaceScopeLike) => {
+    const request = ++loadSequence
     set({ loading: true })
-    const chapters = (await readOwnedRows<Chapter>(await resolveReadScopeLike(scopeInput), 'chapters', { owner: 'work' }))
-      .sort((a, b) => a.order - b.order)
-    set({ chapters, loading: false })
+    try {
+      const scope = await resolveReadScopeLike(typeof scopeInput === 'number' ? scopeInput : { ...scopeInput })
+      let chapters: Chapter[] = [], observed = -1
+      for (let attempt = 0; attempt < 3; attempt++) {
+        observed = writeRevision
+        chapters = await readOwnedRows<Chapter>(scope, 'chapters', { owner: 'work' })
+        if (request !== loadSequence) return
+        if (observed === writeRevision) break
+      }
+      if (observed !== writeRevision) throw new Error('读取期间章节持续变化，请重新读取。')
+      if (request === loadSequence) set({ chapters: chapters.sort((a, b) => a.order - b.order), loadedScope: scope, loading: false })
+    } catch (cause) { if (request === loadSequence) set({ loading: false }); throw cause }
   },
 
   selectChapter: (id: number) => {
@@ -97,18 +119,42 @@ export const useChapterStore = create<ChapterStore>((set, get) => ({
     return chapter
   },
 
-  updateChapter: async (id, data) => {
-    await coordinatePendingEditV1({
+  updateChapter: ((id: number, input: Partial<Chapter>, options?: { scope: WorkspaceScope; confirmation: LocalSaveIntentV1 }) => {
+    const data = structuredClone(input), config = options ? structuredClone(options) : undefined
+    const selected = (async () => {
+      if (config) return resolveScopeLike(config.scope)
+      const initial = await db.chapters.get(id)
+      if (!initial?.projectId) throw new Error('原章节已不存在；修改仍保留，请重新读取后重试。')
+      return resolveScopeLike(initial.projectId)
+    })()
+    void selected.catch(() => undefined)
+    return coordinatePendingEditV1({
       key: `chapter:${id}`,
       persist: async () => {
-        const initial = await db.chapters.get(id)
-        if (!initial?.projectId) throw new Error('原章节已不存在；修改仍保留，请重新读取后重试。')
-        const scope = await resolveScopeLike(initial.projectId)
+        const scope = await selected
+        if (config) {
+          if (Dexie.currentTransaction) throw new Error('作者笔记保存确认需要独立提交。')
+          const proof = recordTextSaveRequestV1('chapters', id, data, config.scope, config.confirmation)
+          await db.transaction('rw', scopeTransactionTables(db.chapters), async transaction => {
+            const table = transaction.table<Chapter, number>('chapters'), current = await table.get(id)
+            await Dexie.waitFor(assertRecordTextSaveExpectedV1(current, config.confirmation, transaction))
+            if (await db.chapters.update.bind(table)(id, { ...data, updatedAt: Math.max(now(), current!.updatedAt + 1) }) !== 1) throw new Error('作者笔记写入0行，输入已保留。')
+            await Dexie.waitFor(recordTextSaveAckV1(await table.get(id), config.confirmation, proof.raw))
+          })
+          const revision = ++writeRevision
+          const actual = await db.chapters.get(id), ack = await recordTextSaveAckV1(actual, config.confirmation, proof.raw)
+          if (revision === writeRevision && sameWork(get().loadedScope, scope)) set({
+            chapters: get().chapters.map(row => row.id === id ? actual! : row),
+            currentChapter: get().currentChapter?.id === id ? actual! : get().currentChapter,
+          })
+          return ack
+        }
         const before = await db.chapters.get(id)
         if (!before || !await assertRecordInScope(scope, 'chapters', before, { owner: 'work' })) throw new Error('原章节已不存在或不属于当前作品；修改仍保留。')
         const updated = { ...data, updatedAt: now() }
         const written = await db.chapters.update(id, updated)
         if (!written) throw new Error('章节未写入：目标已不存在；修改仍保留，请重试。')
+        writeRevision++
         if (Object.prototype.hasOwnProperty.call(data, 'content')) {
           const projectId = before.projectId
           if (projectId != null) {
@@ -130,7 +176,7 @@ export const useChapterStore = create<ChapterStore>((set, get) => ({
         set({ chapters, currentChapter })
       },
     })
-  },
+  }) as ChapterAuthorUpdateV1,
 
   refreshChapter: async (id) => {
     const fresh = await db.chapters.get(id)
