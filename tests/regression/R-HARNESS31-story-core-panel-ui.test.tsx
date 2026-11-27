@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
     submitRequest: vi.fn(async () => undefined),
     submitTargetedRequest: vi.fn(async () => undefined),
     updateCandidate: vi.fn(async () => undefined),
+    flushCandidateDraft: vi.fn(async () => undefined),
     rejectCandidate: vi.fn(async () => undefined),
     adoptCandidate: vi.fn(async () => undefined),
   },
@@ -185,9 +186,9 @@ describe('R-HARNESS31 · 故事核心面板统一进入主 Agent Harness', () =>
     expect(host.textContent).toContain('本次实际输入证据')
     expect(host.textContent).toContain('因预算移除：existingVolumeOutlines')
 
-    const editor = host.querySelector<HTMLTextAreaElement>(
-      'textarea[aria-label="一句话故事候选内容"]',
-    )!
+    const candidateView = [...host.querySelectorAll<HTMLElement>('[data-markdown-read-view]')].find(view => view.textContent?.includes('候选的一句话故事'))!
+    await act(async () => [...candidateView.querySelectorAll('button')].find(button => button.textContent === '编辑源码')!.click())
+    const editor = host.querySelector<HTMLTextAreaElement>('textarea[aria-label="一句话故事候选内容"]')!
     expect(editor.value).toBe('候选的一句话故事')
     await act(async () => setInputValue(editor, '作者修订候选'))
     expect(mocks.copilot.updateCandidate).toHaveBeenCalledWith(
@@ -211,7 +212,7 @@ describe('R-HARNESS31 · 故事核心面板统一进入主 Agent Harness', () =>
     const host = await renderPanel()
 
     await vi.waitFor(() => {
-      expect(host.querySelector('textarea[aria-label="故事主题候选内容"]')).not.toBeNull()
+      expect([...host.querySelectorAll('[data-markdown-read-view]')].some(view => view.textContent?.includes('候选的故事主题'))).toBe(true)
     })
     expect(host.querySelector('[aria-label="故事主题有待确认候选"]')).not.toBeNull()
     expect(host.textContent).toContain('待确认 · 故事主题')

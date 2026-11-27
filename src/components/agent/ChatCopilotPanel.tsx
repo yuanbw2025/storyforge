@@ -544,6 +544,7 @@ export default function ChatCopilotPanel({
                 payload={candidate.payload}
                 value={candidate.event.content}
                 disabled={copilot.busy}
+                onCommit={() => copilot.flushCandidateDraft(candidate.event.id!)}
                 onChange={(draft) => {
                   void copilot.updateCandidate(candidate.event.id!, draft)
                 }}

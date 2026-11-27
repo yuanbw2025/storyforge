@@ -429,9 +429,11 @@ function CharacterCandidateCard({
         </span>
       </div>
       <CandidateDraftEditor
+        key={candidate.event.id}
         payload={candidate.payload}
         value={candidate.event.content}
         disabled={copilot.busy}
+        onCommit={() => copilot.flushCandidateDraft(candidate.event.id!)}
         onChange={content => { void copilot.updateCandidate(candidate.event.id!, content) }}
       />
       <HarnessEvidencePanel
