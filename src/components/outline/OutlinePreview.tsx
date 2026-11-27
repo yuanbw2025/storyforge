@@ -8,7 +8,7 @@
  * - 相关伏笔（埋设/呼应/回收）
  * - 场景地点 + 情绪走向
  */
-import { useMemo, useState, useEffect } from 'react'
+import { useMemo, useState } from 'react'
 import { X, MapPin, Users, BookOpen, Zap, TrendingUp, Bookmark } from 'lucide-react'
 import { useDetailedOutlineStore } from '../../stores/detailed-outline'
 import { useCharacterStore } from '../../stores/character'
@@ -17,6 +17,9 @@ import { useOutlineStore } from '../../stores/outline'
 import { useChapterStore } from '../../stores/chapter'
 import { parseForeshadowEchoChapterIds } from '../../lib/foreshadow/context'
 import type { EmotionArc, ScenePace } from '../../lib/types'
+import { useAuthorRecordSavesV1 } from '../shared/AuthorRecordSaveScope'
+import AcknowledgedTextField from '../shared/AcknowledgedTextField'
+import { flushPendingEditsV1 } from '../../lib/authoring/pending-edit-coordinator'
 
 interface Props {
   /** 当前章节的 outlineNodeId */
@@ -56,8 +59,8 @@ export default function OutlinePreview({ outlineNodeId, onClose }: Props) {
   const chapterId = chapters.find(ch => ch.outlineNodeId === outlineNodeId)?.id ?? null
 
   // FB-3:章节大纲(摘要)可手动编辑 —— 此前只读显示,用户无法改了再用。
-  const [summaryDraft, setSummaryDraft] = useState('')
-  useEffect(() => { setSummaryDraft(node?.summary || '') }, [node?.summary])
+  const localSave = useAuthorRecordSavesV1('outlineNodes', node)
+  const [closeError, setCloseError] = useState('')
 
   // 查找关联角色
   const appearingChars = useMemo(() => {
@@ -98,27 +101,34 @@ export default function OutlinePreview({ outlineNodeId, onClose }: Props) {
   if (!node) return null
 
   return (
-    <div className="bg-bg-surface border border-border rounded-xl overflow-hidden shadow-lg">
+    <div aria-label="章节大纲预览" className="bg-bg-surface border border-border rounded-xl overflow-hidden shadow-lg">
       {/* 头部 */}
       <div className="flex items-center justify-between px-4 py-3 bg-bg-elevated border-b border-border">
         <div className="flex items-center gap-2">
           <BookOpen className="w-4 h-4 text-accent" />
           <h3 className="text-sm font-bold text-text-primary">{node.title}</h3>
         </div>
-        <button onClick={onClose} className="p-1 text-text-muted hover:text-text-primary rounded transition-colors">
+        <button aria-label="关闭大纲预览" onClick={() => {
+          void flushPendingEditsV1().then(onClose).catch(cause => setCloseError(cause instanceof Error ? cause.message : '章节摘要尚未保存，输入已保留。'))
+        }} className="p-1 text-text-muted hover:text-text-primary rounded transition-colors">
           <X className="w-4 h-4" />
         </button>
       </div>
 
       <div className="p-4 space-y-4 max-h-[60vh] overflow-y-auto">
+        {closeError && <p role="alert" className="text-xs text-error">{closeError}</p>}
         {/* 章节摘要(章节大纲)— FB-3:可手动编辑,失焦自动保存 */}
         {(
           <div>
             <SectionLabel icon={<BookOpen className="w-3 h-3" />} label="章节摘要" />
-            <textarea
-              value={summaryDraft}
-              onChange={e => setSummaryDraft(e.target.value)}
-              onBlur={() => { if (node.id != null && summaryDraft !== (node.summary || '')) updateNode(node.id, { summary: summaryDraft }) }}
+            <AcknowledgedTextField key={node.id} label="预览章节摘要" value={node.summary} localSave={localSave('summary')} markdownRead
+              onCommit={(summary, expected, intent) => {
+                if (node.id == null) throw new Error('原章纲已不存在，摘要输入已保留。')
+                const options = { expected: { summary: expected as string } }
+                if (!intent) return updateNode(node.id, { summary }, options)
+                const { projectId, worldId, workId } = intent.expected.identity
+                return updateNode(node.id, { summary }, { ...options, scope: { projectId, worldId, workId }, confirmation: intent })
+              }}
               rows={3}
               placeholder="章节大纲/摘要(可手动编辑,失焦自动保存)"
               className="w-full px-2 py-1.5 bg-bg-base border border-border rounded text-sm text-text-secondary leading-relaxed resize-y focus:outline-none focus:border-accent"
