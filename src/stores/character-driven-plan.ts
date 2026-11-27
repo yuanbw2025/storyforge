@@ -4,6 +4,7 @@ import type {
   CharacterDrivenPlan,
   CharacterDrivenPlanArc,
   CharacterDrivenPlotVolume,
+  Work,
 } from '../lib/types'
 import {
   parseCharacterDrivenPlanArcs,
@@ -16,26 +17,32 @@ import {
   readOwnedRows,
   resolveReadScopeLike,
   resolveScopeLike,
+  scopeTransactionTables,
   stampNewRecord,
   type WorkspaceScopeLike,
 } from '../lib/workspace/scope'
 import type { WorkspaceScope } from '../lib/types/world-ownership'
+import { coordinatePendingEditV1 } from '../lib/authoring/pending-edit-coordinator'
+import { assertCharacterDrivenInputSourceV1, assertCharacterDrivenInputExpectedV1, assertCharacterDrivenInputWrittenV1, type CharacterDrivenInputSaveV1 } from '../lib/authoring/character-driven-input-save'
+
+interface SavePlanInputs {
+  (id: number, input: { arcs: CharacterDrivenPlanArc[]; userHint: string }): Promise<void>
+  (id: number, input: { arcs: CharacterDrivenPlanArc[]; userHint: string }, confirmation: CharacterDrivenInputSaveV1): Promise<CharacterDrivenPlan>
+}
 
 interface CharacterDrivenPlanStore {
   plans: CharacterDrivenPlan[]
   currentPlanId: number | null
   activePlanId: number | null
   loading: boolean
+  loadedScope: WorkspaceScope | null
 
   loadAll: (scope: WorkspaceScopeLike) => Promise<void>
   selectPlan: (id: number | null) => void
   createPlan: (projectId: number, name?: string) => Promise<number>
   copyAsNewVersion: (id: number) => Promise<number>
   renamePlan: (id: number, name: string) => Promise<void>
-  saveInputs: (
-    id: number,
-    input: { arcs: CharacterDrivenPlanArc[]; userHint: string },
-  ) => Promise<void>
+  saveInputs: SavePlanInputs
   saveGenerated: (id: number, volumes: CharacterDrivenPlotVolume[]) => Promise<void>
   markAdopted: (id: number) => Promise<void>
   setActivePlan: (projectId: number, id: number | null) => Promise<void>
@@ -43,7 +50,8 @@ interface CharacterDrivenPlanStore {
 }
 
 const now = () => Date.now()
-const inputSaveChains = new Map<number, Promise<void>>()
+let loadSequence = 0, inputWriteRevision = 0
+const sameWork = (a: WorkspaceScope | null, b: WorkspaceScope) => a?.projectId === b.projectId && a.worldId === b.worldId && a.workId === b.workId
 
 function updatedPlan(
   plan: CharacterDrivenPlan,
@@ -69,15 +77,23 @@ export const useCharacterDrivenPlanStore = create<CharacterDrivenPlanStore>((set
   currentPlanId: null,
   activePlanId: null,
   loading: false,
+  loadedScope: null,
 
   loadAll: async (scopeInput) => {
+    const request = ++loadSequence
     set({ loading: true })
-    const scope = await resolveReadScopeLike(scopeInput)
-    const [plans, work] = await Promise.all([
-      readOwnedRows<CharacterDrivenPlan>(scope, 'characterDrivenPlans', { owner: 'work' })
-        .then(rows => rows.sort((left, right) => right.updatedAt - left.updatedAt)),
-      scope.workId > 0 ? db.works.get(scope.workId) : undefined,
-    ])
+    try {
+    const scope = await resolveReadScopeLike(typeof scopeInput === 'number' ? scopeInput : { ...scopeInput })
+    let plans: CharacterDrivenPlan[] = [], observed = -1, work: Work | undefined
+    for (let attempt = 0; attempt < 3; attempt++) {
+      observed = inputWriteRevision
+      ;[plans, work] = await Promise.all([readOwnedRows<CharacterDrivenPlan>(scope, 'characterDrivenPlans', { owner: 'work' }), db.works.get(scope.workId)])
+      if (request !== loadSequence) return
+      if (observed === inputWriteRevision) break
+    }
+    if (observed !== inputWriteRevision) throw new Error('读取期间方案持续变化，请重新读取。')
+    if (request !== loadSequence) return
+    plans.sort((left, right) => right.updatedAt - left.updatedAt)
     const current = get().currentPlanId
     const activeCandidate = work?.activeCharacterDrivenPlanId
     const active = plans.some(plan => plan.id === activeCandidate)
@@ -90,7 +106,9 @@ export const useCharacterDrivenPlanStore = create<CharacterDrivenPlanStore>((set
         : (active ?? plans[0]?.id ?? null),
       activePlanId: active,
       loading: false,
+      loadedScope: scope,
     })
+    } catch (cause) { if (request === loadSequence) set({ loading: false }); throw cause }
   },
 
   selectPlan: id => set({ currentPlanId: id }),
@@ -151,18 +169,25 @@ export const useCharacterDrivenPlanStore = create<CharacterDrivenPlanStore>((set
     set({ plans: get().plans.map(plan => plan.id === id ? updatedPlan(plan, { name: trimmed, updatedAt }) : plan) })
   },
 
-  saveInputs: async (id, input) => {
-    const previous = inputSaveChains.get(id) ?? Promise.resolve()
-    const pending = previous.catch(() => undefined).then(async () => {
-      const resolved = await resolveOwnedPlan(id)
+  saveInputs: ((id: number, payload: { arcs: CharacterDrivenPlanArc[]; userHint: string }, confirmation?: CharacterDrivenInputSaveV1) => {
+    const input = structuredClone(payload), proof = confirmation ? structuredClone(confirmation) : undefined
+    const selected = proof ? resolveScopeLike(proof.scope) : resolveOwnedPlan(id).then(resolved => {
       if (!resolved) throw new Error('方案不存在或不属于当前作品')
-      const { scope } = resolved
-      const validCharacterIds = new Set(
-        (await readOwnedRows<any>(scope, 'characters', { owner: 'world' }))
-          .map(character => character.id)
-          .filter((characterId): characterId is number => typeof characterId === 'number'),
-      )
-      const normalizedArcs = input.arcs.map(arc => ({
+      return resolved.scope
+    })
+    void selected.catch(() => undefined)
+    return coordinatePendingEditV1({ key: `character-driven-inputs:${id}`, persist: async () => {
+      const scope = await selected
+      const parsed = parseCharacterDrivenPlanArcs(input.arcs)
+      if (typeof input.userHint !== 'string') throw new Error('方案作者要求必须是原文。')
+      const saved = await db.transaction('rw', scopeTransactionTables(db.characterDrivenPlans, db.characters), async transaction => {
+      const table = transaction.table<CharacterDrivenPlan, number>('characterDrivenPlans'), current = await table.get(id)
+      await resolveScopeLike(scope)
+      if (!current || !await assertRecordInScope(scope, 'characterDrivenPlans', current, { owner: 'work' })) throw new Error('方案不存在或不属于当前作品')
+      if (proof) { await assertCharacterDrivenInputSourceV1(current, scope); assertCharacterDrivenInputExpectedV1(current, proof.expected) }
+      const characters = await transaction.table('characters').toArray(), validCharacterIds = new Set<number>()
+      for (const character of characters) if (await assertRecordInScope(scope, 'characters', character, { owner: 'world' })) validCharacterIds.add(character.id)
+      const normalizedArcs = parsed.map(arc => ({
         ...arc,
         characterId: arc.characterId != null && validCharacterIds.has(arc.characterId)
           ? arc.characterId
@@ -172,18 +197,29 @@ export const useCharacterDrivenPlanStore = create<CharacterDrivenPlanStore>((set
         arcs: stringifyCharacterDrivenPlanArcs(normalizedArcs),
         userHint: input.userHint,
         status: 'draft',
-        updatedAt: now(),
+        updatedAt: Math.max(now(), current.updatedAt + 1),
       }
-      await db.characterDrivenPlans.update(id, patch)
-      set({ plans: get().plans.map(plan => plan.id === id ? updatedPlan(plan, patch) : plan) })
-    })
-    inputSaveChains.set(id, pending)
-    try {
-      await pending
-    } finally {
-      if (inputSaveChains.get(id) === pending) inputSaveChains.delete(id)
-    }
-  },
+      if (await db.characterDrivenPlans.update.bind(table)(id, patch) !== 1) throw new Error('方案输入写入0行，草稿已保留。')
+      const actual = await table.get(id)
+      if (!actual || !await assertRecordInScope(scope, 'characterDrivenPlans', actual, { owner: 'work' })) throw new Error('方案提交后归属异常，草稿已保留。')
+      assertCharacterDrivenInputWrittenV1(actual, current, normalizedArcs, input.userHint)
+      return actual
+      })
+      const revision = ++inputWriteRevision
+      let actual: CharacterDrivenPlan
+      try {
+        const read = await db.characterDrivenPlans.get(id)
+        if (!read || !await assertRecordInScope(scope, 'characterDrivenPlans', read, { owner: 'work' })) throw new Error('方案提交后归属异常。')
+        assertCharacterDrivenInputWrittenV1(read, saved, parseCharacterDrivenPlanArcs(saved.arcs), input.userHint)
+        actual = read
+      } catch (cause) {
+        throw Object.assign(new Error('方案输入已提交，但尚未确认回读；输入已保留，请显式重试。'), { cause, committedCharacterDrivenInputsV1: saved })
+      }
+      if ((sameWork(get().loadedScope, scope) || !get().loadedScope && get().plans.some(plan => plan.id === id && Reflect.get(plan, 'workId') === scope.workId))
+        && revision === inputWriteRevision) set({ plans: get().plans.map(plan => plan.id === id ? actual : plan) })
+      return proof ? actual : undefined
+    } })
+  }) as SavePlanInputs,
 
   saveGenerated: async (id, volumes) => {
     if (!await resolveOwnedPlan(id)) throw new Error('方案不存在或不属于当前作品')
