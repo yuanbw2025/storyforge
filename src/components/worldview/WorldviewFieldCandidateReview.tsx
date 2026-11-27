@@ -80,6 +80,7 @@ function WorldviewFieldCandidateReviewV1({candidate,busy,visibleDraft,onUpdate,o
   const [,redraw]=useState(0),[mode,setMode]=useState<'compare'|'edit'>(()=>candidate.payload.worldviewFieldOperation==='expand'||candidate.payload.worldviewFieldOperation==='polish'?'compare':'edit')
   const [notice,setNotice]=useState(''),[baselineHash,setBaselineHash]=useState<{key:string;hash:string}|null>(null)
   const selection=useRef<{start:number;end:number;direction:'forward'|'backward'|'none';top:number;left:number}|null>(null)
+  const selectionActivity=useRef(0)
   const pendingRange=useRef<readonly[number,number]|null>(null),compositionOwner=useRef<EditSession|null>(null)
   const compositionDraftTimer=useRef<ReturnType<typeof setTimeout>|null>(null)
   const unknown=useRef<EditSession|null>(null)
@@ -158,7 +159,12 @@ function WorldviewFieldCandidateReviewV1({candidate,busy,visibleDraft,onUpdate,o
     if(target.tailPending){target.tailDuplicate=raw;target.compositionActive=false;target.tailPending=false;compositionOwner.current=null;notify(target)}
     target.pendingTail=null;redraw(value=>value+1)
   }
+  // A delayed mode-switch restoration must yield to a new author selection.
+  // Otherwise select-all/paste can insert at the old caret and retain old text.
+  const authorSelection=()=>{selectionActivity.current++;pendingRange.current=null}
   const events={
+    onFocusCapture:authorSelection,onPointerDownCapture:authorSelection,
+    onKeyDownCapture:authorSelection,onBeforeInputCapture:authorSelection,
     onCompositionStartCapture:(event:CompositionEvent<HTMLTextAreaElement>)=>{
       if(!allowed())return
       activeSession.compositionActive=true;activeSession.tailPending=true;compositionOwner.current=activeSession;notify(activeSession)
@@ -184,10 +190,10 @@ function WorldviewFieldCandidateReviewV1({candidate,busy,visibleDraft,onUpdate,o
   useLayoutEffect(()=>{
     if(mode!=='edit'||activeSession.compositionActive||activeSession.tailPending)return
     const element=editor.current;if(!element)return
-    const range=pendingRange.current,previous=selection.current
+    const range=pendingRange.current,previous=selection.current,activity=selectionActivity.current
     if(!range&&!previous)return
     const frame=requestAnimationFrame(()=>{
-      if(current.current.key!==activeSession.key||activeSession.compositionActive||activeSession.tailPending)return
+      if(current.current.key!==activeSession.key||activeSession.compositionActive||activeSession.tailPending||selectionActivity.current!==activity)return
       if(range&&activeSession.kind==='field-value') {
         const map=worldviewLFMap(activeSession.raw)
         if(map.domText!==element.value){setNotice('正文显示换行尚未同步，请直接在编辑框定位。');return}

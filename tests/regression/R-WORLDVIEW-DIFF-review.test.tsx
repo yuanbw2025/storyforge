@@ -63,6 +63,23 @@ describe('054-B fixed core actual Review protocol',()=>{
     await settle();expect(ui.host.querySelector('textarea')).toBe(area);expect(area.selectionDirection).toBe('backward');expect(area.selectionStart).toBe(3)
     await input(area,'作者正文');expect(update).toHaveBeenCalledExactlyOnceWith(JSON.stringify({field:'worldStructure',value:'作者正文',temporaryAssumptions:['合成假设']},null,2),'作者正文')
   })
+  it('never restores an old selection over a newly focused select-all replacement before the next frame',async()=>{
+    const frames=new Map<number,FrameRequestCallback>();let nextFrame=0
+    vi.spyOn(window,'requestAnimationFrame').mockImplementation(callback=>{const id=++nextFrame;frames.set(id,callback);return id})
+    vi.spyOn(window,'cancelAnimationFrame').mockImplementation(id=>{frames.delete(id)})
+    const flushFrames=async()=>{const pending=[...frames];frames.clear();await act(async()=>{for(const [,callback]of pending)callback(0)})}
+    const item=candidate(),update=vi.fn(),ui=await mount(<WorldviewFieldCandidateReview candidate={item} viewBinding={view(item)} busy={false} onUpdate={update}/>)
+    await settle(()=>!!ui.host.querySelector('.wv-diff-row'))
+    await click(ui.host,'编辑候选');await flushFrames()
+    const area=ui.host.querySelector('textarea')!;area.setSelectionRange(3,7,'backward')
+    await click(ui.host,'对比');area.blur();await click(ui.host,'编辑候选')
+    await act(async()=>{area.focus();area.setSelectionRange(0,area.value.length)})
+    await flushFrames()
+    expect(area.selectionStart).toBe(0);expect(area.selectionEnd).toBe(area.value.length)
+    await input(area,'替换后的完整候选')
+    expect(update).toHaveBeenCalledExactlyOnceWith(JSON.stringify({field:'worldStructure',value:'替换后的完整候选',temporaryAssumptions:['合成假设']},null,2),'替换后的完整候选')
+    expect(item.event.content).toBe(JSON.stringify({field:'worldStructure',value:right,temporaryAssumptions:['合成假设']}))
+  })
   it('marks changed digits with side-specific words as well as inline differences',async()=>{
     const item=candidate('议席每八次退潮轮换。','议席每七次退潮轮换。'),update=vi.fn()
     const ui=await mount(<WorldviewFieldCandidateReview candidate={item} viewBinding={view(item)} busy={false} onUpdate={update}/>)
