@@ -303,13 +303,22 @@ export const useWorldviewStore = create<WorldviewStore>((set, get) => ({
       key: `story-core:${projectId}`,
       persist: async () => {
         const scope = await scopePromise
-        const target = (await readOwnedRows<StoryCore>(scope, 'storyCores', { owner: 'work' }))[0]
-        const result = await adopt({
-          projectId, scope, target: 'storyCores', mode: 'replace',
-          ...(target?.id != null ? { recordId: target.id, preserveAuthorText: true } : {}),
-          data: patch as Record<string, unknown>,
+        const tables = scopeTransactionTables(...adoptionTransactionTablesV1('storyCores', patch, { callerOwned: true }))
+        await db.transaction('rw', tables, () => {
+          const owned = { transaction: Dexie.currentTransaction! }
+          return Dexie.Promise.resolve(Dexie.waitFor(readOwnedRows<StoryCore>(scope, 'storyCores', { owner: 'work' }))).then(list => {
+            const target = list[0]
+            const base = { projectId, scope, target: 'storyCores', mode: 'replace' as const, data: patch as Record<string, unknown> }
+            if (target?.id != null) return Dexie.Promise.resolve(adopt({ ...base, recordId: target.id, preserveAuthorText: true }, owned))
+              .then(result => { requireWritten(result, Object.keys(patch)) })
+            return Dexie.Promise.resolve(adopt(base, owned)).then(created => {
+              requireWritten(created, Object.keys(patch))
+              if (created.written.length !== 1) throw new Error('故事核心首建记录不唯一。')
+              return Dexie.Promise.resolve(adopt({ ...base, recordId: created.written[0].id, preserveAuthorText: true }, owned))
+                .then(exact => { requireWritten(exact, Object.keys(patch)) })
+            })
+          })
         })
-        requireWritten(result, Object.keys(patch))
         const next = (await readOwnedRows<StoryCore>(scope, 'storyCores', { owner: 'work' }))[0] ?? null
         if (sameScope(get().loadedScope, scope)) set({ storyCore: next })
       },

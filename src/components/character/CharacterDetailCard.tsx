@@ -197,7 +197,7 @@ export default function CharacterDetailCard({
           <div className="flex gap-2">
             <span className="w-20 flex-shrink-0 pt-1.5 text-xs text-text-muted">人物关系</span>
             <div className="flex-1 min-w-0">
-              <InlineTextarea
+              <InlineTextarea markdownRead
                 value={char.relationships || ''}
                 onChange={value => onUpdateField('relationships', value)}
                 placeholder="点击填写人物关系…"

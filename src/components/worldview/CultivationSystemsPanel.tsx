@@ -212,7 +212,7 @@ function CultivationSystemEditor({
             onChange={name => onUpdate({ name: name.trim() || system.name })}
             className="text-lg font-semibold text-text-primary"
           />
-          <InlineTextarea
+          <InlineTextarea markdownRead
             inputAreaLayout={inputAreaLayoutV1(resizableInputs, 'cultivation.description')}
             value={system.description}
             onChange={description => onUpdate({ description })}
@@ -297,7 +297,7 @@ function CultivationSystemEditor({
           </div>
           <div>
             <label className="block text-[11px] text-text-muted mb-1">境界特征 / 战力边界</label>
-            <InlineTextarea
+            <InlineTextarea markdownRead
               inputAreaLayout={inputAreaLayoutV1(resizableInputs, 'power.stageFeatures')}
               value={selectedStage.features || ''}
               onChange={features => patchStage(selectedStage.id, { features })}
@@ -306,7 +306,7 @@ function CultivationSystemEditor({
           </div>
           <div>
             <label className="block text-[11px] text-text-muted mb-1">突破到此阶的条件</label>
-            <InlineTextarea
+            <InlineTextarea markdownRead
               inputAreaLayout={inputAreaLayoutV1(resizableInputs, 'power.breakthrough')}
               value={selectedStage.breakthrough || ''}
               onChange={breakthrough => patchStage(selectedStage.id, { breakthrough })}

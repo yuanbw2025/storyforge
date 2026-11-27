@@ -21,9 +21,14 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261127-cover035-runtime-v1.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261127-markdown051-descriptions-v1.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261127-cover035-runtime-v1.json",
+        "sha256": "8b103ef5385ee2cf9cc8a5791d64a104b9c5469d4ce26b36f337f611988e4938",
+        "note": "Preserve the cover035 receipt before admitting StoryCore author text into the existing caller-owned adoption transaction. Remeasure deterministic observations and known gaps; no model, literary or release acceptance inferred."
+      },
       {
         "path": "tests/acceptance/narrative-world/baseline-20261127-inspiration059-input-v2.json",
         "sha256": "c0e0009453ba660f945f4a34b9edff1af216fb5179335d03d19c4c0eb0bc5592",

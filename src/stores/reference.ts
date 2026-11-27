@@ -77,11 +77,11 @@ export const useReferenceStore = create<ReferenceStore>((set, get) => ({
       key: `reference:${id}`,
       persist: async () => {
         const initial = await db.references.get(id)
-        if (!initial) return
+        if (!initial) throw new Error('参考已删除，输入尚未保存。')
         const scope = await resolveScopeLike(initial.projectId)
         const current = await db.references.get(id)
-        if (!current || !await assertRecordInScope(scope, 'references', current, { owner: 'work' })) return
-        await db.references.update(id, { ...data, updatedAt: Date.now() })
+        if (!current || !await assertRecordInScope(scope, 'references', current, { owner: 'work' })) throw new Error('参考不属于当前作品或已删除，输入尚未保存。')
+        if (await db.references.update(id, { ...data, updatedAt: Date.now() }) !== 1) throw new Error('参考已删除，输入尚未保存。')
         const ref = await db.references.get(id)
         if (ref) await get().loadAll(ref.projectId)
       },
