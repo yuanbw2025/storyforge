@@ -6,16 +6,22 @@ export const LOCAL_SAVE_NATURAL_FIELDS_V1 = [
 ] as const
 export type LocalSaveNaturalFieldV1 = typeof LOCAL_SAVE_NATURAL_FIELDS_V1[number]
 /** Explicit scalar text whitelist for the same independent-longform writer.
- * Object leaves, other products and unverified writers do not acquire badges. */
+ * Nested leaves are admitted separately below, never as an entire object. */
 export const LOCAL_SAVE_WORLDVIEW_TEXT_FIELDS_V1 = [
   ...LOCAL_SAVE_NATURAL_FIELDS_V1, 'worldOrigin', 'powerHierarchy', 'races',
   'factionLayout', 'regionDimensions', 'politicsOverview', 'economyOverview',
   'cultureOverview', 'internalConflicts', 'itemDesign',
 ] as const
 export type LocalSaveWorldviewTextFieldV1 = typeof LOCAL_SAVE_WORLDVIEW_TEXT_FIELDS_V1[number]
+export const LOCAL_SAVE_WORLDVIEW_LEAF_FIELDS_V1 = [
+  'divineDesign.divineRank', 'divineDesign.divineNames', 'divineDesign.divineRules',
+  'naturalResources.rareCreatures', 'naturalResources.herbs', 'naturalResources.minerals', 'naturalResources.others',
+] as const
+export const LOCAL_SAVE_WORLDVIEW_FIELDS_V1 = [...LOCAL_SAVE_WORLDVIEW_TEXT_FIELDS_V1, ...LOCAL_SAVE_WORLDVIEW_LEAF_FIELDS_V1] as const
+export type LocalSaveWorldviewFieldV1 = typeof LOCAL_SAVE_WORLDVIEW_FIELDS_V1[number]
 export interface LocalSaveIdentityV1 extends WorkspaceScope {
   table: 'worldviews'
-  field: LocalSaveWorldviewTextFieldV1
+  field: LocalSaveWorldviewFieldV1
   worldGroupId: number | null
 }
 export interface LocalSaveWitnessV1 {

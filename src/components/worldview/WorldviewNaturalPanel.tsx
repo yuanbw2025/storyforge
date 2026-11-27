@@ -16,7 +16,7 @@ import { useWorldSettingsLayout, WorldSettingsToolbar } from '../longform/WorldS
 import type { Project, NaturalResources } from '../../lib/types'
 import type { WorldviewAgentField } from '../../lib/agent/worldview-field-copilot'
 
-import type { LocalSaveContractV1 } from '../../lib/authoring/local-save-evidence'
+import type { LocalSaveAckV1, LocalSaveContractV1, LocalSaveIntentV1 } from '../../lib/authoring/local-save-evidence'
 
 interface Props { project: Project; resizableInputs?: boolean; confirmedLocalSaves?: boolean }
 
@@ -94,8 +94,9 @@ function ScopedNaturalPanel({ project, activeGroupId, resizableInputs = false, c
     setNaturalResources(worldview?.naturalResources || { ...EMPTY_NATURAL_RESOURCES })
   }, [worldview, readReady])
 
-  const save = (patch: WorldviewAuthorPatch) =>
-    saveWorldview({ projectId: project.id!, worldGroupId: targetWorldGroupId, ...patch }, authorScope)
+  const save = (patch: WorldviewAuthorPatch, intent?: LocalSaveIntentV1) => intent
+    ? saveWorldview({ projectId: project.id!, worldGroupId: targetWorldGroupId, ...patch }, authorScope, intent)
+    : saveWorldview({ projectId: project.id!, worldGroupId: targetWorldGroupId, ...patch }, authorScope)
 
   const pendingWorldviewCandidates = copilot.pendingCandidates.filter(candidate => (
     (['world-origin.worldview-field','world-origin.worldview-field.v2'] as const).some(id => id === candidate.payload.skillId)
@@ -283,6 +284,10 @@ function ScopedNaturalPanel({ project, activeGroupId, resizableInputs = false, c
                   naturalResources={naturalResources}
                   setNaturalResources={setNaturalResources}
                   save={save}
+                  localSaveFor={confirmedLocalSaves ? key => ({
+                    identity: { ...authorScope, table: 'worldviews', field: `naturalResources.${key}`, worldGroupId: targetWorldGroupId },
+                    witness: localSaveWitnesses[`naturalResources.${key}`] ?? null,
+                  }) : undefined}
                 />
                 <div className="mt-4">
                   <WorldviewAgentControls
@@ -375,11 +380,12 @@ function SimpleFieldEditor({
 
 // ── 自然资源编辑器 ─────────────────────────────────────────────
 
-function NaturalResourcesEditor({ naturalResources, setNaturalResources, save, resizableInputs = false }: {
+function NaturalResourcesEditor({ naturalResources, setNaturalResources, save, localSaveFor, resizableInputs = false }: {
   naturalResources: NaturalResources
   resizableInputs?: boolean
   setNaturalResources: React.Dispatch<React.SetStateAction<NaturalResources>>
-  save: (patch: WorldviewAuthorPatch) => Promise<void>
+  save: (patch: WorldviewAuthorPatch, intent?: LocalSaveIntentV1) => Promise<void | LocalSaveAckV1>
+  localSaveFor?: (key: keyof NaturalResources) => LocalSaveContractV1
 }) {
   const compact = useWorldSettingsLayout()
   const rows: { key: keyof NaturalResources; label: string; placeholder: string }[] = [
@@ -389,7 +395,8 @@ function NaturalResourcesEditor({ naturalResources, setNaturalResources, save, r
     { key: 'others',        label: '✨ 其他特产',         placeholder: '例：神木 / 蜀锦 / 茶叶 ...' },
   ]
 
-  const update = (key: keyof NaturalResources, v: string) => {
+  const update = (key: keyof NaturalResources, v: string, intent?: LocalSaveIntentV1) => {
+    if (intent) return save({ naturalResources: { [key]: v } }, intent)
     setNaturalResources(current => ({ ...current, [key]: v }))
     return save({ naturalResources: { [key]: v } })
   }
@@ -405,7 +412,7 @@ function NaturalResourcesEditor({ naturalResources, setNaturalResources, save, r
           <div key={r.key} className={`flex items-start gap-3 ${compact ? 'lf-world-resource-row' : ''}`}>
             <span className="text-sm text-text-secondary w-28 flex-shrink-0 pt-0.5">{r.label}</span>
             <div className="flex-1">
-              <InlineTextarea markdownRead inputAreaLayout={inputAreaLayoutV1(resizableInputs, worldviewInputAreaFieldV1(r.key))} value={naturalResources[r.key]} onChange={v => update(r.key, v)} placeholder={r.placeholder} />
+              <InlineTextarea markdownRead localSave={localSaveFor?.(r.key)} inputAreaLayout={inputAreaLayoutV1(resizableInputs, worldviewInputAreaFieldV1(r.key))} value={naturalResources[r.key]} onChange={(v, intent) => update(r.key, v, intent)} placeholder={r.placeholder} />
             </div>
           </div>
         ))}

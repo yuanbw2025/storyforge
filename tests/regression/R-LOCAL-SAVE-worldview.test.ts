@@ -4,7 +4,7 @@ import { db } from '../../src/lib/db/schema'
 import { adopt, hashAdoptFieldValueV1 } from '../../src/lib/registry/adopt'
 import { useWorldviewStore } from '../../src/stores/worldview'
 import { coordinatePendingEditV1, resetPendingEditCoordinatorForTestsV1 } from '../../src/lib/authoring/pending-edit-coordinator'
-import { LOCAL_SAVE_NATURAL_FIELDS_V1, LOCAL_SAVE_WORLDVIEW_TEXT_FIELDS_V1, type LocalSaveIntentV1, type LocalSaveWorldviewTextFieldV1 } from '../../src/lib/authoring/local-save-evidence'
+import { LOCAL_SAVE_NATURAL_FIELDS_V1, LOCAL_SAVE_WORLDVIEW_TEXT_FIELDS_V1, LOCAL_SAVE_WORLDVIEW_LEAF_FIELDS_V1, type LocalSaveIntentV1, type LocalSaveWorldviewFieldV1 } from '../../src/lib/authoring/local-save-evidence'
 import { fingerprintSettingSource } from '../../src/lib/fact-ledger/setting-assertions'
 import { CANON_RESOURCE_PROVIDER_V1 } from '../../src/lib/context-gateway/canon-provider'
 import { stampNewRecord } from '../../src/lib/workspace/scope'
@@ -13,7 +13,7 @@ const raw = '  # 潮汐\r\n\r\n```text\r\n  |--🌊  \r\n```\r\n  '
 beforeEach(async () => { await db.delete(); await db.open(); resetPendingEditCoordinatorForTestsV1(); vi.stubGlobal('fetch', vi.fn(() => { throw new Error('no network') })) })
 afterEach(() => { expect(fetch).not.toHaveBeenCalled(); vi.unstubAllGlobals(); db.close() })
 async function fixture() { const { scope } = await seedCurrentWorkspace('050 isolated'); await useWorldviewStore.getState().loadAll(scope); return scope }
-function intent(field: LocalSaveWorldviewTextFieldV1 = 'worldStructure'): LocalSaveIntentV1 { return { kind: 'natural-field-local-save-v1', session: 'edit-1', generation: 1, expected: structuredClone(useWorldviewStore.getState().localSaveWitnesses[field]!) } }
+function intent(field: LocalSaveWorldviewFieldV1 = 'worldStructure'): LocalSaveIntentV1 { return { kind: 'natural-field-local-save-v1', session: 'edit-1', generation: 1, expected: structuredClone(useWorldviewStore.getState().localSaveWitnesses[field]!) } }
 async function row() { return (await db.worldviews.toArray())[0] }
 it('confirms N5 exact raw text only after root commit, preserves UID/owner and survives close/reopen', async () => {
   const scope = await fixture(); expect(await db.worldviews.count()).toBe(0)
@@ -172,4 +172,62 @@ it('rolls back a new humanity receipt on quota error, rejects a false committed 
   expect(await db.worldviews.count()).toBe(0)
   expect(LOCAL_SAVE_WORLDVIEW_TEXT_FIELDS_V1 as readonly string[]).not.toContain('divineDesign')
   expect(LOCAL_SAVE_WORLDVIEW_TEXT_FIELDS_V1 as readonly string[]).not.toContain('naturalResources')
+})
+
+
+function leafPatch(field: typeof LOCAL_SAVE_WORLDVIEW_LEAF_FIELDS_V1[number], value: string) {
+  const [root, leaf] = field.split('.')
+  return { [root]: { [leaf]: value } }
+}
+it.each(LOCAL_SAVE_WORLDVIEW_LEAF_FIELDS_V1)('confirms exact %s without changing sibling values or switches, and survives reopen', async field => {
+  const scope = await fixture()
+  await useWorldviewStore.getState().saveWorldview({ projectId: scope.projectId, worldOrigin: 'root unchanged',
+    divineDesign: { hasDivinity: true, divineRank: '阶序 ', divineNames: '原名\r\n', divineRules: '不可夜航' },
+    naturalResources: { rareCreatures: '原兽', herbs: '旧草', minerals: '原矿 ', others: '原特产' } }, scope)
+  await useWorldviewStore.getState().loadAll(scope)
+  const before = await row(), [root, leaf] = field.split('.'), expected = intent(field)
+  const ack = await useWorldviewStore.getState().saveWorldview({ projectId: scope.projectId, ...leafPatch(field, raw) }, scope, expected)
+  const after = await row(), beforeObject = before[root as 'divineDesign' | 'naturalResources']!
+  expect(after[root as 'divineDesign' | 'naturalResources']).toEqual({ ...beforeObject, [leaf]: raw })
+  expect(after.worldOrigin).toBe('root unchanged'); expect(after.id).toBe(before.id); expect(after.ragDocumentId).toBe(before.ragDocumentId)
+  expect(ack.witness).toMatchObject({ present: true, source: 'committed-write', value: raw,
+    identity: { ...scope, field, table: 'worldviews', worldGroupId: null }, valueHash: await hashAdoptFieldValueV1(raw) })
+  db.close(); await db.open(); await useWorldviewStore.getState().loadAll(scope)
+  expect(useWorldviewStore.getState().localSaveWitnesses[field]).toMatchObject({ source: 'database-read', value: raw, recordId: before.id, resourceUid: before.ragDocumentId })
+})
+it.each(['divineDesign.divineNames', 'naturalResources.herbs'] as const)('creates %s atomically, rejects an empty absence and rolls back a failed exact write', async field => {
+  const scope = await fixture(), frozen = intent(field)
+  const save = (value: string) => useWorldviewStore.getState().saveWorldview({ projectId: scope.projectId, ...leafPatch(field, value) }, scope, frozen)
+  await expect(save('')).rejects.toThrow('尚未填写'); expect(await db.worldviews.count()).toBe(0)
+  const fail = () => { throw new DOMException('leaf exact quota', 'QuotaExceededError') }; db.worldviews.hook('updating', fail)
+  try { await expect(save(raw)).rejects.toThrow('leaf exact quota') } finally { db.worldviews.hook('updating').unsubscribe(fail) }
+  expect(await db.worldviews.count()).toBe(0)
+  expect(useWorldviewStore.getState().localSaveWitnesses[field]?.recordId).toBeNull()
+  const ack = await save(raw)
+  expect(await db.worldviews.count()).toBe(1); expect(ack.witness.value).toBe(raw)
+})
+it('merges concurrent edits of different leaves on the same native object, but rejects same-leaf stale and multi-leaf payloads', async () => {
+  const scope = await fixture()
+  await useWorldviewStore.getState().saveWorldview({ projectId: scope.projectId,
+    divineDesign: { hasDivinity: true, divineNames: '旧名', divineRules: '旧禁忌', divineRank: '原阶' } }, scope)
+  await useWorldviewStore.getState().loadAll(scope)
+  const names = intent('divineDesign.divineNames'), rules = intent('divineDesign.divineRules')
+  const first = useWorldviewStore.getState().saveWorldview({ projectId: scope.projectId, divineDesign: { divineNames: '新名  ' } }, scope, names)
+  const second = useWorldviewStore.getState().saveWorldview({ projectId: scope.projectId, divineDesign: { divineRules: '新禁忌\r\n' } }, scope, rules)
+  await Promise.all([first, second])
+  expect((await row()).divineDesign).toEqual({ hasDivinity: true, divineNames: '新名  ', divineRules: '新禁忌\r\n', divineRank: '原阶' })
+  await expect(useWorldviewStore.getState().saveWorldview({ projectId: scope.projectId, divineDesign: { divineNames: 'stale' } }, scope, names)).rejects.toThrow('已被修改')
+  await expect(useWorldviewStore.getState().saveWorldview({ projectId: scope.projectId, divineDesign: { divineNames: 'stale', divineRules: 'extra' } }, scope, names)).rejects.toThrow('凭据无效')
+  await expect(useWorldviewStore.getState().saveWorldview({ projectId: scope.projectId, naturalResources: { herbs: 'wrong-root' } }, scope, names)).rejects.toThrow('凭据无效')
+})
+it('does not confirm malformed object/leaf values or allow a forged switch receipt', async () => {
+  const scope = await fixture()
+  await useWorldviewStore.getState().saveWorldview({ projectId: scope.projectId, divineDesign: { hasDivinity: true, divineNames: '旧名' } }, scope)
+  await useWorldviewStore.getState().loadAll(scope); const expected = intent('divineDesign.divineNames'), before = await row()
+  await db.worldviews.update(before.id!, { divineDesign: { ...before.divineDesign!, hasDivinity: 'invalid' } } as never)
+  await useWorldviewStore.getState().loadAll(scope)
+  expect(useWorldviewStore.getState().localSaveWitnesses['divineDesign.divineNames']).toBeUndefined()
+  await expect(useWorldviewStore.getState().saveWorldview({ projectId: scope.projectId, divineDesign: { divineNames: 'new' } }, scope, expected)).rejects.toThrow('格式')
+  const forged = { ...expected, expected: { ...expected.expected, identity: { ...expected.expected.identity, field: 'divineDesign.hasDivinity' } } } as unknown as LocalSaveIntentV1
+  await expect(useWorldviewStore.getState().saveWorldview({ projectId: scope.projectId, divineDesign: { hasDivinity: false } }, scope, forged)).rejects.toThrow('凭据无效')
 })

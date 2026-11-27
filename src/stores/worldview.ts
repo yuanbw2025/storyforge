@@ -10,7 +10,7 @@ import { refreshSettingAssertionSourceStatus } from '../lib/fact-ledger/setting-
 import { assertRecordInScope, scopeTransactionTables, readOwnedRows, resolveScope, resolveScopeLike, stampNewRecord, type WorkspaceScopeLike } from '../lib/workspace/scope'
 import { coordinatePendingEditV1 } from '../lib/authoring/pending-edit-coordinator'
 
-import { LOCAL_SAVE_WORLDVIEW_TEXT_FIELDS_V1, type LocalSaveAckV1, type LocalSaveIntentV1, type LocalSaveWitnessV1, type LocalSaveWorldviewTextFieldV1 } from '../lib/authoring/local-save-evidence'
+import { LOCAL_SAVE_WORLDVIEW_FIELDS_V1, type LocalSaveAckV1, type LocalSaveIntentV1, type LocalSaveWitnessV1, type LocalSaveWorldviewFieldV1 } from '../lib/authoring/local-save-evidence'
 
 interface SaveWorldview {
   (data: WorldviewAuthorPatch, scope?: WorkspaceScope): Promise<void>
@@ -34,7 +34,7 @@ interface WorldviewStore {
 
   loadAll: (scope: WorkspaceScopeLike, worldGroupId?: number | null) => Promise<void>
 
-  localSaveWitnesses: Partial<Record<LocalSaveWorldviewTextFieldV1, LocalSaveWitnessV1>>
+  localSaveWitnesses: Partial<Record<LocalSaveWorldviewFieldV1, LocalSaveWitnessV1>>
   saveWorldview: SaveWorldview
   saveStoryCore: (data: Partial<StoryCore>, scope?: WorkspaceScope) => Promise<void>
   savePowerSystem: (data: Partial<PowerSystem>, scope?: WorkspaceScope) => Promise<void>
@@ -82,17 +82,33 @@ function mergeAuthorWorldviewObjects(current: Worldview | undefined, patch: Reco
   return patch
 }
 
+function worldviewTextLocation(field: LocalSaveWorldviewFieldV1) {
+  const [root, leaf] = field.split('.')
+  return { root: root as keyof Worldview, leaf }
+}
+function worldviewTextSource(row: Worldview | undefined, field: LocalSaveWorldviewFieldV1) {
+  const { root, leaf } = worldviewTextLocation(field)
+  const container = row?.[root]
+  if (!leaf) return { present: row != null && Object.prototype.hasOwnProperty.call(row, root), value: container }
+  if (container === undefined) return { present: false, value: undefined }
+  if (!container || typeof container !== 'object' || Array.isArray(container)) throw new Error('对象子项格式异常，不能确认本机保存。')
+  // Check known sibling types using the original object contract, without
+  // writing defaults or losing historical extra keys.
+  mergeAuthorWorldviewObjects(row, { [root]: {} })
+  const source = container as unknown as Record<string, unknown>
+  return { present: Object.prototype.hasOwnProperty.call(source, leaf), value: source[leaf] }
+}
 async function worldviewTextWitness(row: Worldview | undefined, scope: WorkspaceScope, worldGroupId: number | null,
-  field: LocalSaveWorldviewTextFieldV1, source: LocalSaveWitnessV1['source']): Promise<LocalSaveWitnessV1> {
-  const value = row?.[field]
+  field: LocalSaveWorldviewFieldV1, source: LocalSaveWitnessV1['source']): Promise<LocalSaveWitnessV1> {
+  const { value, present } = worldviewTextSource(row, field)
   if (value !== undefined && typeof value !== 'string') throw new Error('字段格式异常，不能确认本机保存。')
   if (row && (row.id == null || !isPortableResourceUidV1(row.ragDocumentId, 'worldview'))) throw new Error('字段记录身份不完整，不能确认本机保存。')
   return { version: 1, source, identity: { ...scope, table: 'worldviews', field, worldGroupId },
     recordId: row?.id ?? null, resourceUid: row?.ragDocumentId ?? null,
-    present: row != null && Object.prototype.hasOwnProperty.call(row, field), value, valueHash: await hashAdoptFieldValueV1(value), confirmedAt: Date.now() }
+    present, value, valueHash: await hashAdoptFieldValueV1(value), confirmedAt: Date.now() }
 }
 async function worldviewTextWitnesses(row: Worldview | undefined, scope: WorkspaceScope, group: number | null) {
-  const pairs = await Promise.all(LOCAL_SAVE_WORLDVIEW_TEXT_FIELDS_V1.map(async field => {
+  const pairs = await Promise.all(LOCAL_SAVE_WORLDVIEW_FIELDS_V1.map(async field => {
     try { return [field, await worldviewTextWitness(row, scope, group, field, 'database-read')] as const }
     catch { return [field, undefined] as const }
   }))
@@ -110,24 +126,29 @@ function saveConfirmedWorldviewTextField(data: WorldviewAuthorPatch, scope: Work
   const identity = expected?.identity
   const field = identity?.field
   if (request.kind !== 'natural-field-local-save-v1' || !identity || identity.table !== 'worldviews'
-    || !LOCAL_SAVE_WORLDVIEW_TEXT_FIELDS_V1.includes(field) || !request.session || !Number.isSafeInteger(request.generation)
+    || !LOCAL_SAVE_WORLDVIEW_FIELDS_V1.includes(field) || !request.session || !Number.isSafeInteger(request.generation)
     || request.generation < 0 || expected.version !== 1
     || !['database-read', 'committed-write'].includes(expected.source)
     || identity.projectId !== scope.projectId || identity.worldId !== scope.worldId || identity.workId !== scope.workId
-    || data.projectId !== scope.projectId || (data.worldGroupId ?? null) !== identity.worldGroupId
-    || Object.keys(data).some(key => !['projectId', 'worldGroupId', field].includes(key)) || typeof data[field] !== 'string') {
+    || data.projectId !== scope.projectId || (data.worldGroupId ?? null) !== identity.worldGroupId) {
     return Promise.reject(new Error('本机保存字段或作用域凭据无效。'))
   }
-  const raw = data[field]!
-  const patch = { [field]: raw }
+  const { root, leaf } = worldviewTextLocation(field)
+  const provided = data[root]
+  const leafObject = leaf && provided && typeof provided === 'object' && !Array.isArray(provided) ? provided as Record<string, unknown> : undefined
+  const raw = leaf ? leafObject?.[leaf] : provided
+  if (Object.keys(data).some(key => !['projectId', 'worldGroupId', root].includes(key)) || typeof raw !== 'string'
+    || leaf && (!leafObject || Object.keys(leafObject).length !== 1 || !Object.prototype.hasOwnProperty.call(leafObject, leaf))) {
+    return Promise.reject(new Error('本机保存字段或作用域凭据无效。'))
+  }
+  const requestedPatch = { [root]: leaf ? { [leaf]: raw } : raw }
   const group = identity.worldGroupId
-  const tables = scopeTransactionTables(...adoptionTransactionTablesV1('worldviews', patch, { callerOwned: true }), db.worldGroups)
+  const tables = scopeTransactionTables(...adoptionTransactionTablesV1('worldviews', requestedPatch, { callerOwned: true }), db.worldGroups)
   return coordinatePendingEditV1({ key: `worldview:${scope.projectId}:${group ?? 'default'}`, persist: () => {
     if (Dexie.currentTransaction) throw new Error('本机保存确认需要独立提交事务。')
     return db.transaction('rw', tables, () => {
       const transaction = Dexie.currentTransaction!
       const owned = { transaction }
-      const base = { projectId: scope.projectId, scope, worldGroupId: group, target: 'worldviews', mode: 'replace' as const, data: patch }
       return Dexie.Promise.resolve(Dexie.waitFor(resolveScope({ projectId: scope.projectId, scope }))).then(() => {
         return transaction.table('projects').get(scope.projectId)
       }).then(project => {
@@ -143,30 +164,33 @@ function saveConfirmedWorldviewTextField(data: WorldviewAuthorPatch, scope: Work
         const matches = rows.filter(row => (row.worldGroupId ?? null) === group)
         if (matches.length > 1) throw new Error('世界设定记录不唯一，已保留草稿。')
         const row = matches[0]
+        const currentSource = worldviewTextSource(row, field)
         if ((row?.id ?? null) !== expected.recordId || (row?.ragDocumentId ?? null) !== expected.resourceUid
-          || (row != null && Object.prototype.hasOwnProperty.call(row, field)) !== expected.present || row?.[field] !== expected.value) {
+          || currentSource.present !== expected.present || currentSource.value !== expected.value) {
           throw new Error('此字段已被修改或记录已变化，已保留草稿；请核对后重新读取。')
         }
-        return Dexie.waitFor(hashAdoptFieldValueV1(row?.[field])).then(hash => {
+        return Dexie.waitFor(hashAdoptFieldValueV1(currentSource.value)).then(hash => {
           if (hash !== expected.valueHash) throw new Error('字段预像已变化，已保留草稿。')
+          const patch = mergeAuthorWorldviewObjects(row, structuredClone(requestedPatch))
+          const base = { projectId: scope.projectId, scope, worldGroupId: group, target: 'worldviews', mode: 'replace' as const, data: patch }
           if (row?.id != null) {
-            if (row[field] === raw) return row.id
+            if (currentSource.value === raw) return row.id
             return Dexie.Promise.resolve(adopt({ ...base, recordId: row.id, preserveAuthorText: true }, owned)).then(result => {
-              requireWritten(result, [field]); return row.id!
+              requireWritten(result, [root]); return row.id!
             })
           }
           if (raw === '') throw new Error('尚未填写：空字段未创建记录，不能确认已保存。')
           return Dexie.Promise.resolve(adopt(base, owned)).then(created => {
-            requireWritten(created, [field])
+            requireWritten(created, [root])
             if (created.written.length !== 1) throw new Error('首建记录不唯一。')
             const id = created.written[0].id
             return Dexie.Promise.resolve(adopt({ ...base, recordId: id, preserveAuthorText: true }, owned)).then(exact => {
-              requireWritten(exact, [field]); return id
+              requireWritten(exact, [root]); return id
             })
           })
         })
       }).then(id => transaction.table('worldviews').get(id).then(row => {
-        if (!row || row[field] !== raw || !row.ragDocumentId || (row.worldGroupId ?? null) !== group) throw new Error('事务内精确保存校验失败。')
+        if (!row || worldviewTextSource(row, field).value !== raw || !row.ragDocumentId || (row.worldGroupId ?? null) !== group) throw new Error('事务内精确保存校验失败。')
         return { id, uid: row.ragDocumentId as string }
       }))
     }).then(async committed => {
@@ -176,7 +200,7 @@ function saveConfirmedWorldviewTextField(data: WorldviewAuthorPatch, scope: Work
       const rows = (await readOwnedRows<Worldview>(scope, 'worldviews', { owner: 'world' }))
         .filter(row => (row.worldGroupId ?? null) === group)
       const row = rows[0]
-      if (rows.length !== 1 || row.id !== committed.id || row.ragDocumentId !== committed.uid || row[field] !== raw) {
+      if (rows.length !== 1 || row.id !== committed.id || row.ragDocumentId !== committed.uid || worldviewTextSource(row, field).value !== raw) {
         throw new Error('提交后字段已变化，未确认保存；已保留草稿。')
       }
       return { kind: 'natural-field-local-save-ack-v1' as const, session: request.session, generation: request.generation,
