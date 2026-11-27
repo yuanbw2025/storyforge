@@ -231,3 +231,33 @@ it('does not confirm malformed object/leaf values or allow a forged switch recei
   const forged = { ...expected, expected: { ...expected.expected, identity: { ...expected.expected.identity, field: 'divineDesign.hasDivinity' } } } as unknown as LocalSaveIntentV1
   await expect(useWorldviewStore.getState().saveWorldview({ projectId: scope.projectId, divineDesign: { hasDivinity: false } }, scope, forged)).rejects.toThrow('凭据无效')
 })
+
+it.each([false, true])('ordinary worldview writes retain fresh scoped database witnesses for the next child edit (existing=%s)', async existing => {
+  const scope = await fixture()
+  if (existing) await useWorldviewStore.getState().saveWorldview({ projectId: scope.projectId, worldOrigin: raw, divineDesign: { divineNames: '原名' } }, scope)
+  await useWorldviewStore.getState().saveWorldview({ projectId: scope.projectId, divineDesign: { hasDivinity: true } }, scope)
+  const persisted = await row()
+  expect(useWorldviewStore.getState().localSaveWitnesses['divineDesign.divineRank']).toMatchObject({
+    source: 'database-read', recordId: persisted.id, resourceUid: persisted.ragDocumentId,
+    identity: { ...scope, table: 'worldviews', field: 'divineDesign.divineRank', worldGroupId: null },
+  })
+  const expected = intent('divineDesign.divineRank')
+  await useWorldviewStore.getState().saveWorldview({ projectId: scope.projectId, divineDesign: { divineRank: raw } }, scope, expected)
+  expect((await row()).divineDesign).toEqual({ ...persisted.divineDesign!, divineRank: raw })
+  expect((await row()).worldOrigin).toBe(persisted.worldOrigin)
+  await expect(useWorldviewStore.getState().saveWorldview({ projectId: scope.projectId, divineDesign: { divineRank: 'stale' } }, scope, expected)).rejects.toThrow('已被修改')
+})
+it('ordinary write witness refresh never publishes a late result into another workspace', async () => {
+  const scope = await fixture(), other = await seedCurrentWorkspace('ordinary witness foreign view')
+  let release!: () => void
+  const barrier = coordinatePendingEditV1({ key: `worldview:${scope.projectId}:default`, persist: () => new Promise<void>(resolve => { release = resolve }) })
+  await Promise.resolve(); await Promise.resolve()
+  const saved = useWorldviewStore.getState().saveWorldview({ projectId: scope.projectId, divineDesign: { hasDivinity: true } }, scope)
+  await useWorldviewStore.getState().loadAll(other.scope)
+  const current = structuredClone(useWorldviewStore.getState().localSaveWitnesses)
+  release(); await barrier; await saved
+  expect(useWorldviewStore.getState().loadedScope).toEqual(other.scope)
+  expect(useWorldviewStore.getState().worldview).toBeNull()
+  expect(useWorldviewStore.getState().localSaveWitnesses).toEqual(current)
+  expect((await row()).worldId).toBe(scope.worldId)
+})
