@@ -22,9 +22,9 @@ import ImportUploadZone from './import/ImportUploadZone'
 import useImportDocumentPreparation from './import/useImportDocumentPreparation'
 import useImportSessionRecovery from './import/useImportSessionRecovery'
 import type { Project, WorkspaceScope } from '../../lib/types'
-import type { Character, OutlineNode } from '../../lib/types'
+import type { Character, OutlineNode, Reference } from '../../lib/types'
 import { resolveScope, readOwnedRows } from '../../lib/workspace/scope'
-import { detectSameNameConflictsV1, type SameNameConflictItemV1 } from '../../lib/import/dedup'
+import { detectSameNameConflictsV1, detectReferenceDuplicatesV1, type SameNameConflictItemV1, type ReferenceDuplicateItemV1 } from '../../lib/import/dedup'
 import type { ImportSession, ChunkState, ImportTarget } from '../../lib/types/import-session'
 import type { SidebarModule } from '../layout/sidebar-tree'
 import { useDialog } from '../shared/Dialog'
@@ -67,6 +67,8 @@ export default function ImportDocPanel({ project, onNavigate }: Props) {
   const [applyingReuse, setApplyingReuse] = useState(false)
   /** 032-L1-d-WIRE：确认前同名清单（只读展示用，空数组=不显示区块）。 */
   const [sameNameConflicts, setSameNameConflicts] = useState<SameNameConflictItemV1[]>([])
+  /** 032-L1-d-REFERENCE-DUP：参考路径重复/同名清单（仅 modal 的参考区块使用）。 */
+  const [referenceDuplicates, setReferenceDuplicates] = useState<ReferenceDuplicateItemV1[]>([])
   const recovery = useImportSessionRecovery(project.id!, project.activeWorldId, project.activeWorkId)
   const previewTargetScope = useRef<WorkspaceScope | null>(null)
   const {
@@ -74,6 +76,10 @@ export default function ImportDocPanel({ project, onNavigate }: Props) {
     showConfirm, volumeDetect, previewPlans, handleFile, handleRawTextChange,
     prepareConfirmation, handleChunkSizeChange, closeConfirm, sourceBlob,
   } = source
+  const previewIdentity = useMemo(() => ({ projectId: project.id, worldId: project.activeWorldId, workId: project.activeWorkId,
+    filename, rawText, targetWorldGroupId }), [project.id, project.activeWorldId, project.activeWorkId, filename, rawText, targetWorldGroupId])
+  const currentPreviewIdentity = useRef(previewIdentity)
+  currentPreviewIdentity.current = previewIdentity
   const {
     unfinished, reusable, blobRestored, restoringBlob,
     clearUnfinished, clearReusable, markBlobRestored,
@@ -135,16 +141,43 @@ export default function ImportDocPanel({ project, onNavigate }: Props) {
   }
 
   const prepareScopedConfirmation = async () => {
+    const identity = currentPreviewIdentity.current
+    setReferenceDuplicates([])
     try {
-      previewTargetScope.current = await resolveScope({ projectId: project.id! })
+      const scope = await resolveScope({ projectId: project.id! })
+      if (currentPreviewIdentity.current !== identity) return
+      previewTargetScope.current = scope
       // 032-L1-d-WIRE：确认前把目标世界已有条目与本次待导入标题做一次只读同名对照，
       // 仅用于展示"将按既有规则合并/追加"的提示；不改写入语义、不写库、不发模型。
-      setSameNameConflicts(await readPendingSameNameConflicts())
+      const [sameNames, references] = await Promise.all([readPendingSameNameConflicts(), readPendingReferenceDuplicates()])
+      if (currentPreviewIdentity.current !== identity || previewTargetScope.current !== scope) return
+      setSameNameConflicts(sameNames)
+      setReferenceDuplicates(references)
       prepareConfirmation()
     } catch (error) {
       // 同名清单只是提示：读取失败不能阻断作者已经开始的确认流程，清掉即可。
       setSameNameConflicts([])
+      setReferenceDuplicates([])
       reportImportFailure('无法确认导入目标', error)
+    }
+  }
+
+  /** 032-L1-d-REFERENCE-DUP：参考路径只读重复/同名清单。
+   * existing 取目标 Work 的真实 references（readOwnedRows，与写入口径同 scope）；
+   * incoming 只用 filename + quickHash(rawText)，标题按 importedReferenceDataV1
+   * 的既有去后缀规则对齐，hash 与 session.fileHash 同口径。读取失败保守空清单。 */
+  const readPendingReferenceDuplicates = async (): Promise<ReferenceDuplicateItemV1[]> => {
+    const scope = previewTargetScope.current
+    if (!scope || !rawText.trim()) return []
+    try {
+      const references = await readOwnedRows<Reference>(scope, 'references', { owner: 'work' })
+      return detectReferenceDuplicatesV1({
+        existingReferences: references.map(reference => ({ id: reference.id, title: reference.title, fileHash: reference.fileHash })),
+        incomingTitle: (filename || '未命名文档').replace(/\.[^.]+$/, ''),
+        incomingFileHash: rawText ? quickHash(rawText) : undefined,
+      })
+    } catch {
+      return []
     }
   }
 
@@ -189,8 +222,9 @@ export default function ImportDocPanel({ project, onNavigate }: Props) {
       return
     }
     closeConfirm()
-    // 同名提示属于本次预览；确认后按已有 adopt 链走，不需要再留在界面上。
+    // 提示属于本次预览；确认后按已有 adopt/reference 链走，不需要再留在界面上。
     setSameNameConflicts([])
+    setReferenceDuplicates([])
 
     useImportStatusStore.getState().reset()
     useImportStatusStore.getState().setPhase('preparing')
@@ -661,6 +695,7 @@ export default function ImportDocPanel({ project, onNavigate }: Props) {
           onConfirm={handleConfirmStart}
           onCancel={closeConfirm}
           sameNameConflicts={sameNameConflicts}
+          referenceDuplicates={referenceDuplicates}
         />
       )}
 

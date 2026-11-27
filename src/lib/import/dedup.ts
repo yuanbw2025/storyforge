@@ -329,3 +329,32 @@ export function detectCodexSameNameConflictsV1(input: CodexSameNameConflictInput
   }
   return items
 }
+
+/** A read-only warning; the existing explicit confirmation still owns import. */
+export const REFERENCE_DUPLICATE_RULE_V1 = '重复或同名参考不会自动去重：仍需作者确认是否再次导入；建议先核对已有参考，避免产生多份副本。'
+
+export interface ReferenceDuplicateItemV1 {
+  kind: 'reference'
+  reason: 'same-file' | 'same-name'
+  incomingTitle: string
+  existingId?: number
+  existingTitle: string
+  hint: string
+}
+
+export function detectReferenceDuplicatesV1(input: {
+  existingReferences: ReadonlyArray<{ id?: number; title: string; fileHash?: string }>
+  incomingTitle: string
+  incomingFileHash?: string
+}): ReferenceDuplicateItemV1[] {
+  const title = input.incomingTitle.trim()
+  if (!title) return []
+  const normalized = title.normalize('NFKC').replace(/\s+/g, '').toLowerCase()
+  return input.existingReferences.flatMap(row => {
+    const sameHash = Boolean(input.incomingFileHash) && row.fileHash === input.incomingFileHash
+    const sameName = row.title.normalize('NFKC').replace(/\s+/g, '').toLowerCase() === normalized
+    if (!sameHash && !sameName) return []
+    return [{ kind: 'reference' as const, reason: sameHash ? 'same-file' as const : 'same-name' as const,
+      incomingTitle: title, existingId: row.id, existingTitle: row.title, hint: REFERENCE_DUPLICATE_RULE_V1 }]
+  })
+}

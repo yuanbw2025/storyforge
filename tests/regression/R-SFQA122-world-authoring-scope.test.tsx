@@ -114,8 +114,8 @@ describe('SFQA-122 · actual world editors', () => {
       const text = variant === 'natural' ? 'A世界结构' : 'A种族'
       await render(variant, made.project)
       await settle(() => visible(text))
-      const display = [...host.querySelectorAll<HTMLElement>('div.cursor-text')].find(node => node.textContent === text)!
-      await act(async () => display.click())
+      const display = [...host.querySelectorAll<HTMLElement>('[data-markdown-read-view]')].find(node => node.textContent?.includes(text))!
+      await act(async () => [...display.querySelectorAll('button')].find(button => button.textContent === '编辑源码')!.click())
       await input(host.querySelector('textarea')!, '作者未失焦的新输入')
       await group(made.b)
       await settle(() => !useWorldviewStore.getState().loading && useWorldviewStore.getState().activeWorldGroupId === made.b)
@@ -130,16 +130,21 @@ describe('SFQA-122 · actual world editors', () => {
       const text = variant === 'natural' ? 'A世界结构' : 'A种族'
       await render(variant, made.project)
       await settle(() => visible(text))
-      await act(async () => [...host.querySelectorAll<HTMLElement>('div.cursor-text')].find(node => node.textContent === text)!.click())
+      const display = [...host.querySelectorAll<HTMLElement>('[data-markdown-read-view]')].find(node => node.textContent?.includes(text))!
+      await act(async () => [...display.querySelectorAll('button')].find(button => button.textContent === '编辑源码')!.click())
       await input(host.querySelector('textarea')!, '不能丢的输入')
       const save = useWorldviewStore.getState().saveWorldview
-      // Editing captured the original callback; inject failure at its actual domain write.
-      const adopted = vi.spyOn(db.worldviews, 'update').mockRejectedValue(new Error('测试写入失败'))
-      await group(made.b)
-      await settle(() => host.textContent?.includes('尚未切换') === true)
-      expect(host.querySelector('textarea')?.value).toBe('不能丢的输入')
-      expect(await db.worldviews.count()).toBe(1)
-      adopted.mockRestore()
+      // Caller-owned adoption uses the transaction's table instance. Reject at
+      // the storage hook so the failure covers that actual committed boundary.
+      const reject = () => { throw new Error('测试写入失败') }
+      db.worldviews.hook('updating', reject)
+      try {
+        await group(made.b)
+        await settle(() => host.textContent?.includes('尚未切换') === true)
+        expect(host.querySelector('textarea')?.value).toBe('不能丢的输入')
+        expect(await db.worldviews.count()).toBe(1)
+        expect((await db.worldviews.toArray())[0][variant === 'natural' ? 'worldStructure' : 'races']).toBe(text)
+      } finally { db.worldviews.hook('updating').unsubscribe(reject) }
       expect(useWorldviewStore.getState().saveWorldview).toBe(save)
       await click('重试保存并切换')
       await settle(() => useWorldviewStore.getState().activeWorldGroupId === made.b && !useWorldviewStore.getState().loading)
