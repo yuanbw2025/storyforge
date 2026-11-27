@@ -9,6 +9,7 @@ import { create } from 'zustand'
 import { db } from '../lib/db/schema'
 import type { WorkspaceScope } from '../lib/types'
 import { coordinatePendingEditV1 } from '../lib/authoring/pending-edit-coordinator'
+import { CODEX_ENTRY_AUTHOR_FIELDS_V1, createCodexLocalSaveWitnessV1, hashCodexLocalSaveValueV1, type CodexLocalSaveWitnessV1 } from '../lib/authoring/codex-local-save-evidence'
 import { removeCodexEntryReferences } from '../lib/codex/references'
 import { cascadeRegisteredReferences } from '../lib/workspace/lifecycle'
 import { assertRegisteredTreeParentV1 } from '../lib/registry/tree-relations'
@@ -25,6 +26,7 @@ interface CodexStore {
   loadedProjectId: number | null
   loadedScope: WorkspaceScope | null
   loadError: string | null
+  localSaveWitnesses: Partial<Record<number, CodexLocalSaveWitnessV1>>
 
   loadAll: (scope: WorkspaceScopeLike) => Promise<void>
   /** 只读加载现有分类/词条，不播种内置分类（供正文档案提示等纯读入口）。 */
@@ -60,7 +62,17 @@ const now = () => Date.now()
 const ensureBuiltInsInFlight = new Map<string, Promise<void>>()
 let loadSequence = 0
 const sameWorld = (a: WorkspaceScope | null, b: WorkspaceScope) => a?.projectId === b.projectId && a.worldId === b.worldId
-const AUTHOR_FIELDS = ['categoryId', 'name', 'icon', 'summary', 'description', 'fields', 'refs', 'tags', 'importance', 'cultivationSystemId', 'cultivationStageId', 'importantLocationId', 'order', 'worldGroupId'] as const
+const AUTHOR_FIELDS = CODEX_ENTRY_AUTHOR_FIELDS_V1
+
+async function confirmCodexEntryCommit(row: CodexEntry & { id: number }, scope: WorkspaceScope) {
+  const actual = await db.codexEntries.get(row.id)
+  if (!actual || !await assertRecordInScope(scope, 'codexEntries', actual, { owner: 'world' })
+    || actual.ragDocumentId !== row.ragDocumentId || actual.createdAt !== row.createdAt || actual.updatedAt !== row.updatedAt
+    || await hashCodexLocalSaveValueV1(actual) !== await hashCodexLocalSaveValueV1(row)) {
+    throw new Error('词条提交后的原记录或内容已变化，未确认保存；输入已保留，请核对后重新读取。')
+  }
+  return { row: actual, witness: await createCodexLocalSaveWitnessV1(actual, scope, 'committed-write') }
+}
 
 /** Read the actual descendant graph inside the deletion transaction. A linked
  * row from another owner is a broken edge, never extra deletion authority. */
@@ -91,7 +103,7 @@ async function categorySubtree(scope: WorkspaceScope, root: CodexCategory): Prom
 
 async function loadRows(input: WorkspaceScopeLike, seed: boolean, set: (patch: Partial<CodexStore>) => void, get: () => CodexStore) {
   const request = ++loadSequence
-  set({ loading: true, loadError: null })
+  set({ loading: true, loadError: null, localSaveWitnesses: {} })
   try {
     const scope = await (seed ? resolveScopeLike(input) : resolveReadScopeLike(input))
     if (request !== loadSequence) return
@@ -101,7 +113,12 @@ async function loadRows(input: WorkspaceScopeLike, seed: boolean, set: (patch: P
       readOwnedRows<CodexCategory>(scope, 'codexCategories', { owner: 'world' }),
       readOwnedRows<CodexEntry>(scope, 'codexEntries', { owner: 'world' }),
     ])
-    if (request === loadSequence) set({ categories, entries, loading: false, loadedProjectId: scope.projectId, loadedScope: scope })
+    const pairs = await Promise.all(entries.map(async entry => {
+      const witness = await createCodexLocalSaveWitnessV1(entry, scope, 'database-read')
+      return witness ? [[witness.recordId, witness] as const] : []
+    }))
+    if (request === loadSequence) set({ categories, entries, localSaveWitnesses: Object.fromEntries(pairs.flat()),
+      loading: false, loadedProjectId: scope.projectId, loadedScope: scope })
   } catch (cause) {
     if (request === loadSequence) set({ loading: false, loadError: cause instanceof Error ? cause.message : '词条读取失败。' })
   }
@@ -110,6 +127,7 @@ async function loadRows(input: WorkspaceScopeLike, seed: boolean, set: (patch: P
 export const useCodexStore = create<CodexStore>((set, get) => ({
   categories: [],
   entries: [],
+  localSaveWitnesses: {},
   loading: false,
   loadedProjectId: null,
 
@@ -238,6 +256,7 @@ export const useCodexStore = create<CodexStore>((set, get) => ({
     set({
       categories: get().categories.filter(category => !deleted.categoryIds.has(category.id!)),
       entries: get().entries.filter(entry => !deleted.entryIds.has(entry.id!)),
+      localSaveWitnesses: Object.fromEntries(Object.entries(get().localSaveWitnesses).filter(([entryId]) => !deleted.entryIds.has(Number(entryId)))),
     })
     // Never cancel a newer view load to refresh this completed deletion.
     if (request === loadSequence && sameWorld(get().loadedScope, scope)) await get().loadExisting(scope)
@@ -275,7 +294,9 @@ export const useCodexStore = create<CodexStore>((set, get) => ({
       const id = await db.codexEntries.add(row) as number
       return { ...row, id }
     })
-    if (sameWorld(get().loadedScope, scope)) set({ entries: [...get().entries, created] })
+    const committed = await confirmCodexEntryCommit(created, scope)
+    if (sameWorld(get().loadedScope, scope)) set({ entries: [...get().entries, committed.row],
+      localSaveWitnesses: { ...get().localSaveWitnesses, ...(committed.witness ? { [created.id]: committed.witness } : {}) } })
     return created.id
   },
 
@@ -314,8 +335,13 @@ export const useCodexStore = create<CodexStore>((set, get) => ({
         if (await db.codexEntries.update(id, { ...capturedPatch, updatedAt: next.updatedAt }) !== 1) throw new Error('词条已删除，输入尚未保存。')
         return next
       })
-      if (sameWorld(get().loadedScope, scope)) set({ entries: get().entries.map(entry => entry.id === id ? updated : entry) })
-      return updated
+      const committed = await confirmCodexEntryCommit(updated as CodexEntry & { id: number }, scope)
+      if (sameWorld(get().loadedScope, scope)) {
+        const { [id]: _old, ...retained } = get().localSaveWitnesses
+        set({ entries: get().entries.map(entry => entry.id === id ? committed.row : entry),
+          localSaveWitnesses: { ...retained, ...(committed.witness ? { [id]: committed.witness } : {}) } })
+      }
+      return committed.row
     } })
   },
 
@@ -329,7 +355,8 @@ export const useCodexStore = create<CodexStore>((set, get) => ({
       await removeCodexEntryReferences(entry.projectId, new Set([id]))
       await db.codexEntries.delete(id)
     })
-    set({ entries: get().entries.filter(e => e.id !== id) })
+    const { [id]: _old, ...retained } = get().localSaveWitnesses
+    set({ entries: get().entries.filter(e => e.id !== id), localSaveWitnesses: retained })
   },
 
   getCategoriesByDomain: (domain) => {
