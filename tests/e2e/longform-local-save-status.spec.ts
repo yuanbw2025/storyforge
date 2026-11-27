@@ -450,3 +450,70 @@ test('embedded Codex confirms real record saves, retains failed Markdown drafts 
   }, id)
   expect(actual?.description).toBe(expected); expect(actual?.name).toBe('保存验收种族'); expect(actual?.summary).toBe('原简介')
 })
+
+test('050 History native six-field save evidence, quota retry and reopened-tab readback stay on the original World', async ({ page, context }) => {
+  const scope = await seed(page)
+  const ids = await page.evaluate(async scope => {
+    const load = new Function('path', 'return import(path)') as <T>(path: string) => Promise<T>
+    const { useHistoryStore } = await load<typeof import('../../src/stores/project-singletons')>('/storyforge/src/stores/project-singletons.ts')
+    const { useHistoricalStore } = await load<typeof import('../../src/stores/historical')>('/storyforge/src/stores/historical.ts')
+    await useHistoryStore.getState().saveForHistoryAuthorV1({ origin: { version: 1, kind: 'work', scope }, selection: { kind: 'partition', worldGroupId: null }, patch: { overview: '初始总述', eraSystem: '初始纪年' } })
+    const eventId = await useHistoricalStore.getState().addEvent({ projectId: scope.projectId, era: 'custom', year: 1, date: '初年', title: '隔离历史事件', description: '初始事件', isHistorical: false }, scope)
+    const keywordId = await useHistoricalStore.getState().addKeyword({ projectId: scope.projectId, keyword: '隔离历史关键词', era: 'custom', category: 'culture', description: '初始关键词' })
+    return { eventId, keywordId }
+  }, scope)
+  const url = `./workspace/${scope.projectId}?module=history`
+  await page.goto(url)
+  await page.getByRole('button', { name: '历史总述与纪年', exact: true }).click()
+  const overview = page.locator('div.p-5.space-y-2').filter({ has: page.locator('label').filter({ hasText: /^历史总述$/ }) })
+  const era = page.locator('div.p-5.space-y-2').filter({ has: page.locator('label').filter({ hasText: /^纪年体系$/ }) })
+  const enter = async (box: ReturnType<Page['locator']>, value: string) => {
+    await expect(box.locator('[data-local-save-status]')).toBeVisible()
+    await box.getByRole('button', { name: '编辑源码', exact: true }).or(box.locator('div.cursor-text')).first().click()
+    const area = box.locator('textarea'); await area.fill(value); return area
+  }
+  await enter(overview, '# 历史总述\n\n作者原文🌊。  '); await flush(page)
+  await expect(overview.locator('[data-local-save-status]')).toHaveAttribute('data-local-save-status', 'saved')
+  await enter(era, '纪年原文与末尾。  '); await flush(page)
+  await expect(era.locator('[data-local-save-status]')).toHaveAttribute('data-local-save-status', 'saved')
+  await page.getByRole('button', { name: '历史时间轴', exact: true }).click()
+  await page.getByRole('button').filter({ hasText: '隔离历史事件' }).click()
+  const content = page.locator('div.px-4.pb-4.border-t')
+  const description = content.locator(':scope > div').filter({ has: page.locator('label').filter({ hasText: /^📒 条目定稿/ }) })
+  const concept = content.locator(':scope > div').filter({ has: page.locator('label').filter({ hasText: /^🧭 概念与创作思路/ }) })
+  await page.evaluate(async () => {
+    const { db } = await (new Function('return import("/storyforge/src/lib/db/schema.ts")'))()
+    const fault = () => { throw new DOMException('isolated history quota failure', 'QuotaExceededError') }
+    db.historicalTimelineEvents.hook('updating', fault)
+    Object.assign(window, { clearHistory050Fault: () => db.historicalTimelineEvents.hook('updating').unsubscribe(fault) })
+  })
+  const failed = await enter(description, '事件定稿原文，失败不丢。  ')
+  await expect(flush(page)).rejects.toThrow('isolated history quota failure')
+  await expect(description.locator('[data-local-save-status]')).toHaveAttribute('data-local-save-status', 'failed')
+  await expect(failed).toHaveValue('事件定稿原文，失败不丢。  ')
+  await page.evaluate(() => (window as unknown as { clearHistory050Fault: () => void }).clearHistory050Fault())
+  await description.getByRole('button', { name: '重试', exact: true }).click()
+  await expect(description.locator('[data-local-save-status]')).toHaveAttribute('data-local-save-status', 'saved')
+  await enter(concept, '事件概念原文。  '); await flush(page)
+  await expect(concept.locator('[data-local-save-status]')).toHaveAttribute('data-local-save-status', 'saved')
+  await page.getByRole('button', { name: '历史细节风暴', exact: true }).click()
+  await page.getByRole('button').filter({ hasText: '#隔离历史关键词' }).click()
+  await enter(description, '关键词定稿原文。  '); await flush(page)
+  await expect(description.locator('[data-local-save-status]')).toHaveAttribute('data-local-save-status', 'saved')
+  await enter(concept, '关键词概念原文。  '); await flush(page)
+  await expect(concept.locator('[data-local-save-status]')).toHaveAttribute('data-local-save-status', 'saved')
+  await page.reload(); await page.getByRole('button').filter({ hasText: '隔离历史事件' }).click()
+  await expect(description.locator('[data-local-save-status]')).toHaveAttribute('data-local-save-status', 'saved')
+  const reopened = await context.newPage(); await page.close(); await reopened.goto(url)
+  await reopened.getByRole('button').filter({ hasText: '隔离历史事件' }).click()
+  await expect(reopened.locator('[data-local-save-status]')).toHaveCount(2)
+  const saved = await reopened.evaluate(async ({ scope, ids }) => {
+    const { db } = await (new Function('return import("/storyforge/src/lib/db/schema.ts")'))()
+    return { histories: await db.histories.where('projectId').equals(scope.projectId).toArray(),
+      event: await db.historicalTimelineEvents.get(ids.eventId), keyword: await db.historicalKeywords.get(ids.keywordId) }
+  }, { scope, ids })
+  expect(saved.histories).toHaveLength(1)
+  expect(saved.histories[0]).toMatchObject({ overview: '# 历史总述\n\n作者原文🌊。  ', eraSystem: '纪年原文与末尾。  ', worldId: scope.worldId })
+  expect(saved.event).toMatchObject({ title: '隔离历史事件', description: '事件定稿原文，失败不丢。  ', conceptNote: '事件概念原文。  ', worldId: scope.worldId })
+  expect(saved.keyword).toMatchObject({ keyword: '隔离历史关键词', description: '关键词定稿原文。  ', conceptNote: '关键词概念原文。  ', worldId: scope.worldId })
+})

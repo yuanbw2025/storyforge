@@ -13,7 +13,10 @@ import HistoryChapterPicker from './HistoryChapterPicker'
 import { InlineTextarea } from '../shared/InlineEdit'
 import MarkdownReadView from '../shared/MarkdownReadView'
 
+import type { LocalSaveAckV1, LocalSaveContractV1, LocalSaveIntentV1 } from '../../lib/authoring/local-save-evidence'
+
 interface Props {
+  localSaves?: Partial<Record<'description' | 'conceptNote', LocalSaveContractV1>>
   resizableInputs?: boolean
   keyword: HistoricalKeyword
   chapters: Chapter[]
@@ -24,7 +27,7 @@ interface Props {
   consultAI: HistoryAgentViewState
   stormAI: HistoryAgentViewState
   onToggle: () => void
-  onChange: (patch: Partial<HistoricalKeyword>) => void | Promise<void>
+  onChange: (patch: Partial<HistoricalKeyword>, intent?: LocalSaveIntentV1) => void | Promise<void | LocalSaveAckV1>
   onConsult: () => void
   onStorm: () => void
   onDelete: () => void
@@ -37,7 +40,7 @@ interface Props {
 }
 
 export default function HistoryKeywordCard({
-  resizableInputs = false,
+  resizableInputs = false, localSaves,
   keyword,
   chapters,
   expanded,
@@ -158,7 +161,8 @@ export default function HistoryKeywordCard({
             {canEdit ? <InlineTextarea markdownRead minRows={3}
               inputAreaLayout={inputAreaLayoutV1(resizableInputs, 'history.keyword.description')}
               value={keyword.description}
-              onChange={description => onChange({ description })}
+              localSave={localSaves?.description}
+                onChange={(description, intent) => intent ? onChange({ description }, intent) : onChange({ description })}
               placeholder="作者打磨好的最终条目内容，将作为 AI 写作的历史细节注入。例如：『飞钱：唐宪宗时期出现的汇兑凭证，由邸店或商号代为兑付。』"
               className="w-full h-24 p-2 bg-bg-base border border-border rounded-lg text-xs text-text-primary resize-y focus:outline-none focus:border-accent"
             /> : <MarkdownReadView value={keyword.description} readOnly />}
@@ -181,7 +185,8 @@ export default function HistoryKeywordCard({
             {canEdit ? <InlineTextarea markdownRead minRows={3}
               inputAreaLayout={inputAreaLayoutV1(resizableInputs, 'history.keyword.conceptNote')}
               value={keyword.conceptNote || ''}
-              onChange={conceptNote => onChange({ conceptNote })}
+              localSave={localSaves?.conceptNote}
+                onChange={(conceptNote, intent) => intent ? onChange({ conceptNote }, intent) : onChange({ conceptNote })}
               placeholder="描述你想为这个关键词达到的效果、能接受的艺术改造或架空范围。例如：『允许把飞钱的普及度写得比真实高一些；想要市井使用场景。』"
               className="w-full h-24 p-2 bg-bg-base border border-border rounded-lg text-xs text-text-primary resize-y focus:outline-none focus:border-accent"
             /> : <MarkdownReadView value={keyword.conceptNote ?? ''} readOnly />}

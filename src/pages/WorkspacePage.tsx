@@ -466,7 +466,7 @@ export default function WorkspacePage({ embeddedProjectId, embeddedModule, embed
         return <PlacesWorkspace project={project} tab={tab} onTab={next => afterPendingEdits(() => navigate(`/workspace/${project.id}?module=locations&placeTab=${next}`), '地点编辑保存失败')} />
       }
       case 'history':
-        return <HistoryPanel project={project} resizableInputs={resizableInputs} />
+        return <HistoryPanel project={project} resizableInputs={resizableInputs} confirmedLocalSaves={isLongform && activeWork.id === project.activeWorkId && activeWork.projectId === project.id} />
       // ── 设定库 - 故事设计 ─────────────────────────────────────────
       case 'story-design':
         return <StoryCorePanel
