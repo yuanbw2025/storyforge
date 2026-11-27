@@ -4,20 +4,22 @@ import type { DetailedScene, ScenePace } from '../../lib/types'
 import { DETAILED_SCENE_TASK_FIELDS } from '../../lib/types/detailed-outline'
 import { flushPendingEditsV1 } from '../../lib/authoring/pending-edit-coordinator'
 import AcknowledgedTextField from '../shared/AcknowledgedTextField'
+import type { LocalSaveAckV1, LocalSaveContractV1, LocalSaveIntentV1 } from '../../lib/authoring/local-save-evidence'
 
 const PACE_LABELS: Record<ScenePace, string> = { slow: '🐢 慢', medium: '🚶 中', fast: '🏃 快', climax: '⚡ 高潮' }
 interface Props {
   scene: DetailedScene
   index: number
-  onUpdate: (patch: Partial<DetailedScene>, expected?: Partial<DetailedScene>) => void | Promise<void>
+  localSave?: (field: string, entryId?: string) => LocalSaveContractV1 | undefined
+  onUpdate: (patch: Partial<DetailedScene>, expected?: Partial<DetailedScene>, confirmation?: LocalSaveIntentV1) => void | Promise<void | LocalSaveAckV1>
   onDelete: () => void | Promise<void>
 }
-export default function DetailedSceneCard({ scene, index, onUpdate, onDelete }: Props) {
+export default function DetailedSceneCard({ scene, index, onUpdate, onDelete, localSave }: Props) {
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState('')
   const text = (key: 'title' | 'summary' | 'location' | 'conflict' | 'notes' | typeof DETAILED_SCENE_TASK_FIELDS[number]['key'], label: string, placeholder: string, input = false, rows = 2) => (
-    <AcknowledgedTextField markdownRead={!input} label={`场景${index + 1} · ${label}`} value={scene[key]} placeholder={placeholder} input={input} rows={rows}
-      onCommit={(value, expected) => onUpdate({ [key]: value }, { [key]: expected })} />
+    <AcknowledgedTextField localSave={localSave?.(`scenes.${key}`, scene.sceneId)} markdownRead={!input} label={`场景${index + 1} · ${label}`} value={scene[key]} placeholder={placeholder} input={input} rows={rows}
+      onCommit={(value, expected, confirmation) => confirmation ? onUpdate({ [key]: value }, { [key]: expected }, confirmation) : onUpdate({ [key]: value }, { [key]: expected })} />
   )
   const remove = async () => {
     if (deleting) return

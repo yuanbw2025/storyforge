@@ -5,11 +5,18 @@ import { DETAILED_SCENE_TASK_FIELDS, normalizeDetailedScenes } from '../lib/type
 import { assertRecordInScope, readOwnedRows, resolveReadScopeLike, resolveScopeLike, scopeTransactionTables, stampNewRecord, type WorkspaceScopeLike } from '../lib/workspace/scope'
 import { coordinatePendingEditV1 } from '../lib/authoring/pending-edit-coordinator'
 import { FIELD_BY_TARGET } from '../lib/registry/field-registry'
+import Dexie from 'dexie'
+import type { LocalSaveAckV1, LocalSaveIntentV1 } from '../lib/authoring/local-save-evidence'
+import { assertRecordTextSaveExpectedV1, recordTextSaveAckV1, recordTextSaveRequestV1 } from '../lib/authoring/record-text-save-evidence'
 
 export type DetailedSceneEditV1 =
   | { kind: 'add'; scene: DetailedScene }
   | { kind: 'patch'; sceneId: string; patch: Partial<Omit<DetailedScene, 'sceneId'>>; expected?: Partial<Omit<DetailedScene, 'sceneId'>> }
   | { kind: 'remove'; sceneId: string }
+interface SceneAuthorUpdateV1 {
+  (id: number, edit: DetailedSceneEditV1, scope: WorkspaceScopeLike, chapterSummary: string): Promise<void>
+  (id: number, edit: DetailedSceneEditV1, scope: WorkspaceScopeLike, chapterSummary: string, confirmation: LocalSaveIntentV1): Promise<LocalSaveAckV1>
+}
 
 interface DetailedOutlineStore {
   detailedOutlines: DetailedOutline[]
@@ -19,12 +26,12 @@ interface DetailedOutlineStore {
   loadAll: (scope: WorkspaceScopeLike) => Promise<void>
   getOrCreate: (scope: WorkspaceScopeLike, outlineNodeId: number) => Promise<DetailedOutline>
   save: (id: number, patch: Partial<DetailedOutline>, scope?: WorkspaceScopeLike, expected?: Partial<DetailedOutline>) => Promise<void>
-  editScene: (id: number, edit: DetailedSceneEditV1, scope: WorkspaceScopeLike, chapterSummary: string) => Promise<void>
+  editScene: SceneAuthorUpdateV1
   remove: (id: number, scope?: WorkspaceScopeLike) => Promise<void>
 }
 
 const now = () => Date.now()
-let loadSequence = 0
+let loadSequence = 0, writeRevision = 0
 const sameWork = (a: WorkspaceScope | null, b: WorkspaceScope) => a?.projectId === b.projectId && a.worldId === b.worldId && a.workId === b.workId
 const authorFields = new Map((FIELD_BY_TARGET.get('detailedOutlines') ?? []).filter(field => !field.adoptionPolicy && field.field !== 'outlineNodeId').map(field => [field.field, field]))
 const sceneFields = new Set<string>(['title', 'summary', 'characterIds', 'location', 'conflict', 'pace', 'estimatedWords', 'notes', ...DETAILED_SCENE_TASK_FIELDS.map(field => field.key)])
@@ -96,7 +103,14 @@ export const useDetailedOutlineStore = create<DetailedOutlineStore>((set, get) =
         const scope = await resolveReadScopeLike(typeof input === 'number' ? input : { ...input })
         if (request !== loadSequence) return
         if (!sameWork(get().loadedScope, scope)) set({ detailedOutlines: [], loadedScope: null })
-        const rows = (await readOwnedRows<DetailedOutline>(scope, 'detailedOutlines', { owner: 'work' })).map(normalizeRow)
+        let rows: DetailedOutline[] = [], observed = -1
+        for (let attempt = 0; attempt < 3; attempt++) {
+          observed = writeRevision
+          rows = (await readOwnedRows<DetailedOutline>(scope, 'detailedOutlines', { owner: 'work' })).map(normalizeRow)
+          if (request !== loadSequence) return
+          if (observed === writeRevision) break
+        }
+        if (observed !== writeRevision) throw new Error('读取期间细纲持续变化，请重新读取。')
         if (new Set(rows.map(row => row.outlineNodeId)).size !== rows.length) throw new Error('同一章纲存在多个细纲记录，原数据已保留，请先核对恢复。')
         if (request === loadSequence) set({ detailedOutlines: rows, loading: false, loadedScope: scope })
       } catch (cause) {
@@ -138,15 +152,21 @@ export const useDetailedOutlineStore = create<DetailedOutlineStore>((set, get) =
         publish(scope, saved)
       } })
     },
-    editScene: (id, input, scopeInput, chapterSummary) => {
+    editScene: ((id: number, input: DetailedSceneEditV1, scopeInput: WorkspaceScopeLike, chapterSummary: string, inputConfirmation?: LocalSaveIntentV1) => {
       const edit = structuredClone(input)
+      const confirmation = inputConfirmation ? structuredClone(inputConfirmation) : undefined
+      if (confirmation && Dexie.currentTransaction) return Promise.reject(new Error('场景保存确认需要独立提交。'))
       const captured = captureScope(scopeInput, get().loadedScope, id)
       const persist = async () => {
         if (typeof chapterSummary !== 'string') throw new Error('章纲摘要必须是文本。')
         const scope = await captured
-        const saved = await db.transaction('rw', scopeTransactionTables(db.detailedOutlines, db.outlineNodes, db.characters, db.foreshadows), async () => {
+        const proof = confirmation ? recordTextSaveRequestV1('detailedOutlines', id, edit.kind === 'patch' ? edit.patch : {}, scope, confirmation) : undefined
+        if (proof && (edit.kind !== 'patch' || proof.identity.entryId !== edit.sceneId || !proof.identity.field.startsWith('scenes.'))) throw new Error('场景保存凭据与目标不符。')
+        let saved: DetailedOutline = await db.transaction('rw', scopeTransactionTables(db.detailedOutlines, db.outlineNodes, db.characters, db.foreshadows), async transaction => {
+          const table = transaction.table<DetailedOutline, number>('detailedOutlines'), update = db.detailedOutlines.update.bind(table)
           await resolveScopeLike(scope)
           const row = await ownedRow(scope, id)
+          if (confirmation) await Dexie.waitFor(assertRecordTextSaveExpectedV1(row, confirmation, transaction))
           const scenes = row.scenes
           let next: DetailedScene[]
           if (edit.kind === 'add') next = [...scenes, edit.scene]
@@ -163,15 +183,23 @@ export const useDetailedOutlineStore = create<DetailedOutlineStore>((set, get) =
           normalizeDetailedScenes(next)
           const data = { scenes: next, lastUsedSummary: row.lastUsedSummary ?? chapterSummary, updatedAt: Math.max(now(), row.updatedAt + 1) }
           await validateReferences(scope, { ...row, ...data })
-          if (await db.detailedOutlines.update(id, data) !== 1) throw new Error('细纲已删除，场景编辑未写入。')
+          if (await update(id, data) !== 1) throw new Error('细纲已删除，场景编辑未写入。')
+          if (confirmation && proof) await Dexie.waitFor(recordTextSaveAckV1(await table.get(id), confirmation, proof.raw))
           return { ...row, ...data }
         })
-        publish(scope, saved)
+        const revision = ++writeRevision
+        let ack: LocalSaveAckV1 | undefined
+        if (confirmation && proof) {
+          const actual = await db.detailedOutlines.get(id)
+          ack = await recordTextSaveAckV1(actual, confirmation, proof.raw); saved = actual!
+        }
+        if (revision === writeRevision) publish(scope, saved)
+        return ack
       }
       // A reported add/delete failure has no unsaved field draft. Native write
       // transactions still serialize with edits, without a permanent draft key.
       return edit.kind !== 'patch' ? persist() : coordinatePendingEditV1({ key: `detailed-outline:${id}`, persist })
-    },
+    }) as SceneAuthorUpdateV1,
     remove: async (id, input) => {
       const scope = await captureScope(input, get().loadedScope, id)
       await db.transaction('rw', scopeTransactionTables(db.detailedOutlines, db.outlineNodes), async () => {

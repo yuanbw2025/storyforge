@@ -9,6 +9,9 @@ import { assertRecordInScope, readOwnedRows, resolveReadScopeLike, resolveScopeL
 import { coordinatePendingEditV1 } from '../lib/authoring/pending-edit-coordinator'
 import { FIELD_BY_TARGET } from '../lib/registry/field-registry'
 import { transactionTablesForReferenceCascade } from '../lib/registry/lifecycle'
+import Dexie from 'dexie'
+import type { LocalSaveAckV1, LocalSaveIntentV1 } from '../lib/authoring/local-save-evidence'
+import { assertRecordTextSaveExpectedV1, recordTextSaveAckV1, recordTextSaveRequestV1 } from '../lib/authoring/record-text-save-evidence'
 
 type ArcPatch = Partial<Pick<StoryArc, 'name' | 'description' | 'type'>>
 type StagePatch = Partial<Omit<StoryStage, 'id'>>
@@ -16,6 +19,14 @@ export type StoryStageEditV1 =
   | { kind: 'patch'; stageId: string; patch: StagePatch; expected?: StagePatch }
   | { kind: 'add'; stage: StoryStage }
   | { kind: 'remove'; stageId: string; expected?: StoryStage }
+interface ArcAuthorUpdateV1 {
+  (id: number, data: ArcPatch, scope?: WorkspaceScopeLike, expected?: ArcPatch): Promise<void>
+  (id: number, data: ArcPatch, scope: WorkspaceScopeLike | undefined, expected: ArcPatch | undefined, confirmation: LocalSaveIntentV1): Promise<LocalSaveAckV1>
+}
+interface StageAuthorUpdateV1 {
+  (id: number, edit: StoryStageEditV1, scope?: WorkspaceScopeLike): Promise<void>
+  (id: number, edit: StoryStageEditV1, scope: WorkspaceScopeLike | undefined, confirmation: LocalSaveIntentV1): Promise<LocalSaveAckV1>
+}
 interface StoryArcStore {
   arcs: StoryArc[]
   intentAlignmentByArcId: Record<number, StoryArcIntentAlignmentV1>
@@ -26,18 +37,18 @@ interface StoryArcStore {
   loadAll: (scope: WorkspaceScopeLike) => Promise<void>
   setActiveArc: (id: number | null) => void
   addArc: (arc: Omit<StoryArc, 'id' | 'createdAt' | 'updatedAt'>, scope?: WorkspaceScopeLike) => Promise<number>
-  updateArc: (id: number, data: ArcPatch, scope?: WorkspaceScopeLike, expected?: ArcPatch) => Promise<void>
+  updateArc: ArcAuthorUpdateV1
   deleteArc: (id: number, scope?: WorkspaceScopeLike) => Promise<void>
   getActiveStages: () => StoryStage[]
   updateStages: (arcId: number, stages: StoryStage[], scopeOrExpected?: WorkspaceScopeLike | string, expected?: string) => Promise<void>
-  editStage: (arcId: number, edit: StoryStageEditV1, scope?: WorkspaceScopeLike) => Promise<void>
+  editStage: StageAuthorUpdateV1
   buildStoryArcContext: (currentChapterOrder?: number) => string
 }
 const equal = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
 const sameWork = (a: WorkspaceScope | null, b: WorkspaceScope) => a?.projectId === b.projectId && a.worldId === b.worldId && a.workId === b.workId
 const authorFields = new Map((FIELD_BY_TARGET.get('storyArcs') ?? []).filter(field => ['name', 'description', 'type'].includes(field.field)).map(field => [field.field, field]))
 const stageFields = new Set(['title', 'description', 'startVolume', 'endVolume', 'keyEvents', 'turningPoint'])
-let loadSequence = 0
+let loadSequence = 0, writeRevision = 0
 function validatePatch(patch: ArcPatch): void {
   for (const [key, value] of Object.entries(patch)) {
     const spec = authorFields.get(key)
@@ -88,7 +99,15 @@ export const useStoryArcStore = create<StoryArcStore>((set, get) => {
         const scope = await resolveReadScopeLike(typeof input === 'number' ? input : { ...input })
         if (request !== loadSequence) return
         if (!sameWork(get().loadedScope, scope)) set({ arcs: [], activeArcId: null, loadedScope: null, intentAlignmentByArcId: {} })
-        const [rows, intent] = await Promise.all([readOwnedRows<StoryArc>(scope, 'storyArcs', { owner: 'work' }), readStoryCoreIntentSnapshotV1(scope)])
+        let rows: StoryArc[] = [], observed = -1
+        const intent = await readStoryCoreIntentSnapshotV1(scope)
+        for (let attempt = 0; attempt < 3; attempt++) {
+          observed = writeRevision
+          rows = await readOwnedRows<StoryArc>(scope, 'storyArcs', { owner: 'work' })
+          if (request !== loadSequence) return
+          if (observed === writeRevision) break
+        }
+        if (observed !== writeRevision) throw new Error('读取期间故事线持续变化，请重新读取。')
         if (request !== loadSequence) return
         const arcs = rows.map(validateRow)
         const current = get().activeArcId
@@ -121,22 +140,38 @@ export const useStoryArcStore = create<StoryArcStore>((set, get) => {
       })
       publish(scope, { ...row, id }); return id
     },
-    updateArc: (id, input, scopeInput, inputExpected) => {
+    updateArc: ((id: number, input: ArcPatch, scopeInput?: WorkspaceScopeLike, inputExpected?: ArcPatch, inputConfirmation?: LocalSaveIntentV1) => {
       const patch = structuredClone(input)
+      const confirmation = inputConfirmation ? structuredClone(inputConfirmation) : undefined
+      if (confirmation && Dexie.currentTransaction) return Promise.reject(new Error('故事线保存确认需要独立提交。'))
       const cached = get().arcs.find(arc => arc.id === id)
       const expected = structuredClone(inputExpected ?? (cached ? Object.fromEntries(Object.keys(patch).map(key => [key, cached[key as keyof StoryArc]])) : {}))
       const captured = captureScope(scopeInput, get().loadedScope, id)
       return coordinatePendingEditV1({ key: `story-arc:${id}`, persist: async () => {
         const scope = await captured; validatePatch(patch)
-        const saved = await db.transaction('rw', scopeTransactionTables(db.storyArcs), async () => {
+        const proof = confirmation ? recordTextSaveRequestV1('storyArcs', id, patch, scope, confirmation) : undefined
+        if (proof?.identity.entryId !== undefined) throw new Error('故事线保存凭据与目标不符。')
+        let saved = await db.transaction('rw', scopeTransactionTables(db.storyArcs), async transaction => {
+          const table = transaction.table<StoryArc, number>('storyArcs'), update = db.storyArcs.update.bind(table)
           const row = await ownedRow(scope, id)
           for (const key of Object.keys(patch)) if (Object.prototype.hasOwnProperty.call(expected, key) && !equal(row[key as keyof StoryArc], expected[key as keyof typeof expected])) throw new Error('故事线已被另一页面修改，输入已保留。')
-          if (await db.storyArcs.update(id, { ...patch, updatedAt: Date.now() }) !== 1) throw new Error('故事线写入0行，输入未保存。')
-          return ownedRow(scope, id)
+          if (confirmation) await Dexie.waitFor(assertRecordTextSaveExpectedV1(row, confirmation, transaction))
+          if (await update(id, { ...patch, updatedAt: Math.max(Date.now(), row.updatedAt + 1) }) !== 1) throw new Error('故事线写入0行，输入未保存。')
+          const next = await table.get(id)
+          if (!next || !await assertRecordInScope(scope, 'storyArcs', next, { owner: 'work' })) throw new Error('故事线已删除或不属于原作品，输入未保存。')
+          if (confirmation && proof) await Dexie.waitFor(recordTextSaveAckV1(next, confirmation, proof.raw))
+          return validateRow(next)
         })
-        publish(scope, saved)
+        const revision = ++writeRevision
+        let ack: LocalSaveAckV1 | undefined
+        if (confirmation && proof) {
+          const actual = await db.storyArcs.get(id)
+          ack = await recordTextSaveAckV1(actual, confirmation, proof.raw); saved = actual!
+        }
+        if (revision === writeRevision) publish(scope, saved)
+        return ack
       } })
-    },
+    }) as ArcAuthorUpdateV1,
     deleteArc: (id, scopeInput) => {
       const expected = structuredClone(get().arcs.find(arc => arc.id === id))
       const captured = captureScope(scopeInput, get().loadedScope, id)
@@ -175,12 +210,17 @@ export const useStoryArcStore = create<StoryArcStore>((set, get) => {
         publish(scope, saved)
       } })
     },
-    editStage: (id, input, scopeInput) => {
+    editStage: ((id: number, input: StoryStageEditV1, scopeInput?: WorkspaceScopeLike, inputConfirmation?: LocalSaveIntentV1) => {
       const edit = structuredClone(input); const captured = captureScope(scopeInput, get().loadedScope, id)
+      const confirmation = inputConfirmation ? structuredClone(inputConfirmation) : undefined
+      if (confirmation && Dexie.currentTransaction) return Promise.reject(new Error('故事阶段保存确认需要独立提交。'))
       return coordinatePendingEditV1({ key: `story-arc:${id}`, persist: async () => {
         const scope = await captured
-        const saved = await db.transaction('rw', scopeTransactionTables(db.storyArcs, db.storylineProgress), async () => {
+        const proof = confirmation ? recordTextSaveRequestV1('storyArcs', id, edit.kind === 'patch' ? edit.patch : {}, scope, confirmation) : undefined
+        if (proof && (edit.kind !== 'patch' || proof.identity.entryId !== edit.stageId || !proof.identity.field.startsWith('stages.'))) throw new Error('故事阶段保存凭据与目标不符。')
+        let saved = await db.transaction('rw', scopeTransactionTables(db.storyArcs, db.storylineProgress), async transaction => {
           const row = await ownedRow(scope, id); let stages = stagesOf(row)
+          if (confirmation) await Dexie.waitFor(assertRecordTextSaveExpectedV1(row, confirmation, transaction))
           if (edit.kind === 'add') {
             if (stages.some(stage => stage.id === edit.stage.id)) throw new Error('故事阶段标识已存在。')
             stages.push(edit.stage)
@@ -198,11 +238,20 @@ export const useStoryArcStore = create<StoryArcStore>((set, get) => {
               stages = stages.map(stage => stage.id === current.id ? { ...stage, ...edit.patch } : stage)
             }
           }
-          return persistStages(scope, row, stages)
+          const next = await persistStages(scope, row, stages)
+          if (confirmation && proof) await Dexie.waitFor(recordTextSaveAckV1(next, confirmation, proof.raw))
+          return next
         })
-        publish(scope, saved)
+        const revision = ++writeRevision
+        let ack: LocalSaveAckV1 | undefined
+        if (confirmation && proof) {
+          const actual = await db.storyArcs.get(id)
+          ack = await recordTextSaveAckV1(actual, confirmation, proof.raw); saved = actual!
+        }
+        if (revision === writeRevision) publish(scope, saved)
+        return ack
       } })
-    },
+    }) as StageAuthorUpdateV1,
   buildStoryArcContext: (currentChapterOrder?: number) => {
     const arcs = get().arcs.filter(arc => arc.status !== 'deprecated')
     if (!arcs.length) return ''

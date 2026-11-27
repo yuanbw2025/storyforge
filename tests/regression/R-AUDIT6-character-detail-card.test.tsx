@@ -8,6 +8,7 @@ import type { LocalSaveAckV1, LocalSaveIntentV1 } from '../../src/lib/authoring/
 import { flushPendingEditsV1, resetPendingEditCoordinatorForTestsV1 } from '../../src/lib/authoring/pending-edit-coordinator'
 
 vi.mock('../../src/lib/authoring/record-text-save-evidence', () => ({
+  recordTextWitnessKeyV1: (field: string, entryId?: string) => entryId === undefined ? field : JSON.stringify([field, entryId]),
   readRecordTextWitnessesV1: vi.fn(async () => Object.fromEntries([['name', '林照雪'], ['shortDescription', '守城人']].map(([field, value]) => {
     const identity = { projectId: 1, worldId: 11, workId: 12, table: 'characters', field, recordId: 7, worldGroupId: null }
     return [field, { version: 1, source: 'database-read', identity, recordId: 7, resourceUid: 'character-header', present: true, value, valueHash: `hash-${value}`, confirmedAt: 1 }]

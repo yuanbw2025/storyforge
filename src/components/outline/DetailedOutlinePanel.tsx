@@ -31,6 +31,8 @@ import {
 import { useToast } from '../shared/Toast'
 import DetailedOutlineSidebar from './DetailedOutlineSidebar'
 import DetailedSceneCard from './DetailedSceneCard'
+import { useAuthorRecordSavesV1 } from '../shared/AuthorRecordSaveScope'
+import type { LocalSaveIntentV1 } from '../../lib/authoring/local-save-evidence'
 import { useDetailedOutlineGenerationController } from './useDetailedOutlineGenerationController'
 import CreativeArtifactSummary from '../agent/CreativeArtifactSummary'
 import {
@@ -196,9 +198,11 @@ function ScopedDetailedOutlinePanel({ project, initialNodeId, onOpenChapter, onO
     await editScene(dt.id!, { kind: 'add', scene: newScene }, scope, currentChapter!.summary)
   }
 
-  const updateScene = async (sceneId: string, patch: Partial<DetailedScene>, expected?: Partial<DetailedScene>) => {
+  const localSave = useAuthorRecordSavesV1('detailedOutlines', currentDetailed)
+  const updateScene = async (sceneId: string, patch: Partial<DetailedScene>, expected?: Partial<DetailedScene>, confirmation?: LocalSaveIntentV1) => {
     if (!ready || !currentDetailed || !currentChapter) throw new Error('当前作品的细纲尚未就绪')
-    await editScene(currentDetailed.id!, { kind: 'patch', sceneId, patch, expected }, scope, currentChapter.summary)
+    return confirmation ? editScene(currentDetailed.id!, { kind: 'patch', sceneId, patch, expected }, scope, currentChapter.summary, confirmation)
+      : editScene(currentDetailed.id!, { kind: 'patch', sceneId, patch, expected }, scope, currentChapter.summary)
   }
 
   const deleteScene = async (sceneId: string) => {
@@ -640,7 +644,8 @@ function ScopedDetailedOutlinePanel({ project, initialNodeId, onOpenChapter, onO
                     key={s.sceneId}
                     scene={s}
                     index={idx}
-                    onUpdate={(patch, expected) => updateScene(s.sceneId, patch, expected)}
+                    localSave={localSave}
+                    onUpdate={(patch, expected, confirmation) => updateScene(s.sceneId, patch, expected, confirmation)}
                     onDelete={() => deleteScene(s.sceneId)}
                   />
                 ))}
