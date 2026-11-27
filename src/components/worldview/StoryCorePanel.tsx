@@ -6,7 +6,8 @@ import { Check, Loader2, Sparkles, Trash2 } from 'lucide-react'
 import { useWorldviewStore } from '../../stores/worldview'
 import { useWorldGroupStore } from '../../stores/world-group'
 import PromptRunPanel from '../shared/PromptRunPanel'
-import { InlineTextarea } from '../shared/InlineEdit'
+import { InlineTextarea, type InlineSave } from '../shared/InlineEdit'
+import type { LocalSaveContractV1, LocalSaveIntentV1 } from '../../lib/authoring/local-save-evidence'
 import AIFieldModeTabs from '../shared/AIFieldModeTabs'
 import CandidateDraftEditor from '../agent/CandidateDraftEditor'
 import CandidateSaveFeedback from '../agent/CandidateSaveFeedback'
@@ -62,10 +63,11 @@ interface Props {
   project: Project
   resizableInputs?: boolean
   initialStoryCoreId?: number | null
+  confirmedLocalSaves?: boolean
 }
 
-export default function StoryCorePanel({ project, initialStoryCoreId, resizableInputs = false }: Props) {
-  const { storyCore, saveStoryCore } = useWorldviewStore()
+export default function StoryCorePanel({ project, initialStoryCoreId, resizableInputs = false, confirmedLocalSaves = false }: Props) {
+  const { storyCore, saveStoryCore, storyCoreSaveWitnesses } = useWorldviewStore()
   const activeGroupId = useWorldGroupStore(s => s.activeGroupId)
   const { authorScope, reloadCurrent } = useScopedWorldviewReadback(project, activeGroupId)
   const copilot = useMasterCopilot({
@@ -90,9 +92,10 @@ export default function StoryCorePanel({ project, initialStoryCoreId, resizableI
     })
   }, [storyCore])
 
-  const save = (key: string, v: string) => {
+  const save = (key: string, v: string, intent?: LocalSaveIntentV1) => {
     const field = FIELDS.find(f => f.key === key)!
-    return saveStoryCore({ projectId: project.id!, [field.saveKey]: v }, authorScope)
+    const data = { projectId: project.id!, [field.saveKey]: v }
+    return intent ? saveStoryCore(data, authorScope, intent) : saveStoryCore(data, authorScope)
   }
 
   const pendingStoryCoreCandidates = copilot.pendingCandidates.filter(candidate => (
@@ -167,9 +170,13 @@ export default function StoryCorePanel({ project, initialStoryCoreId, resizableI
               resizableInputs={resizableInputs}
               field={f}
               value={values[f.key] ?? ''}
-              onChange={v => {
+              localSave={confirmedLocalSaves ? {
+                identity: { ...authorScope, table: 'storyCores', field: f.saveKey, worldGroupId: null },
+                witness: storyCoreSaveWitnesses?.[f.saveKey] ?? null,
+              } : undefined}
+              onChange={(v, intent) => {
                 setValues(prev => ({ ...prev, [f.key]: v }))
-                return save(f.key, v)
+                return save(f.key, v, intent)
               }}
               project={project}
               activeGroupId={activeGroupId}
@@ -199,6 +206,7 @@ function FieldEditor({
   resizableInputs = false,
   field,
   value,
+  localSave,
   onChange,
   project,
   activeGroupId,
@@ -212,7 +220,8 @@ function FieldEditor({
   field: FieldDef
   resizableInputs?: boolean
   value: string
-  onChange: (v: string) => void | Promise<void>
+  localSave?: LocalSaveContractV1
+  onChange: InlineSave
   project: Project
   activeGroupId: number | null
   copilot: ReturnType<typeof useMasterCopilot>
@@ -270,6 +279,7 @@ function FieldEditor({
       {/* 内容区 — 行内编辑 */}
       <div className="bg-bg-surface border border-border rounded-lg p-4">
         <InlineTextarea markdownRead
+          localSave={localSave}
           inputAreaLayout={inputAreaLayoutV1(resizableInputs, `story.${field.key}`)}
           value={value}
           onChange={onChange}

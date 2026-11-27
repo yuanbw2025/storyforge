@@ -19,11 +19,21 @@ export const LOCAL_SAVE_WORLDVIEW_LEAF_FIELDS_V1 = [
 ] as const
 export const LOCAL_SAVE_WORLDVIEW_FIELDS_V1 = [...LOCAL_SAVE_WORLDVIEW_TEXT_FIELDS_V1, ...LOCAL_SAVE_WORLDVIEW_LEAF_FIELDS_V1] as const
 export type LocalSaveWorldviewFieldV1 = typeof LOCAL_SAVE_WORLDVIEW_FIELDS_V1[number]
-export interface LocalSaveIdentityV1 extends WorkspaceScope {
+export const LOCAL_SAVE_STORY_CORE_FIELDS_V1 = [
+  'logline', 'concept', 'theme', 'centralConflict', 'plotPattern', 'mainPlot', 'subPlots',
+] as const
+export type LocalSaveStoryCoreFieldV1 = typeof LOCAL_SAVE_STORY_CORE_FIELDS_V1[number]
+interface LocalSaveWorldviewIdentityV1 extends WorkspaceScope {
   table: 'worldviews'
   field: LocalSaveWorldviewFieldV1
   worldGroupId: number | null
 }
+interface LocalSaveStoryCoreIdentityV1 extends WorkspaceScope {
+  table: 'storyCores'
+  field: LocalSaveStoryCoreFieldV1
+  worldGroupId: null
+}
+export type LocalSaveIdentityV1 = LocalSaveWorldviewIdentityV1 | LocalSaveStoryCoreIdentityV1
 export interface LocalSaveWitnessV1 {
   version: 1
   source: 'database-read' | 'committed-write'
