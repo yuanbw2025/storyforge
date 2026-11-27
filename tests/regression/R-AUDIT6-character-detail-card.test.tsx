@@ -3,6 +3,16 @@ import { createRoot } from 'react-dom/client'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import CharacterDetailCard from '../../src/components/character/CharacterDetailCard'
 import type { Character, Project, WorldGroup } from '../../src/lib/types'
+import { AuthorRecordSaveScopeV1 } from '../../src/components/shared/AuthorRecordSaveScope'
+import type { LocalSaveAckV1, LocalSaveIntentV1 } from '../../src/lib/authoring/local-save-evidence'
+import { flushPendingEditsV1, resetPendingEditCoordinatorForTestsV1 } from '../../src/lib/authoring/pending-edit-coordinator'
+
+vi.mock('../../src/lib/authoring/record-text-save-evidence', () => ({
+  readRecordTextWitnessesV1: vi.fn(async () => Object.fromEntries([['name', '林照雪'], ['shortDescription', '守城人']].map(([field, value]) => {
+    const identity = { projectId: 1, worldId: 11, workId: 12, table: 'characters', field, recordId: 7, worldGroupId: null }
+    return [field, { version: 1, source: 'database-read', identity, recordId: 7, resourceUid: 'character-header', present: true, value, valueHash: `hash-${value}`, confirmedAt: 1 }]
+  }))),
+}))
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
@@ -14,6 +24,7 @@ afterEach(async () => {
     await act(async () => item.root.unmount())
     item.host.remove()
   }
+  resetPendingEditCoordinatorForTestsV1()
 })
 
 function character(patch: Partial<Character> = {}): Character {
@@ -62,7 +73,7 @@ const project = {
   updatedAt: 1,
 } satisfies Project
 
-async function renderCard(overrides: Partial<Parameters<typeof CharacterDetailCard>[0]> = {}) {
+async function renderCard(overrides: Partial<Parameters<typeof CharacterDetailCard>[0]> = {}, verified = false) {
   const host = document.createElement('div')
   document.body.append(host)
   const root = createRoot(host)
@@ -79,11 +90,30 @@ async function renderCard(overrides: Partial<Parameters<typeof CharacterDetailCa
     onDelete: vi.fn(),
     ...overrides,
   }
-  await act(async () => root.render(createElement(CharacterDetailCard, props)))
+  await act(async () => root.render(createElement(AuthorRecordSaveScopeV1.Provider,
+    { value: verified ? { projectId: 1, worldId: 11, workId: 12 } : null }, createElement(CharacterDetailCard, props))))
   return { host, props }
 }
 
 describe('AUDIT-6 / HEALTH-4 · 角色详情卡', () => {
+  it.each([['name', '角色姓名', '林照雪'], ['shortDescription', '角色一句话简介', '守城人']] as const)('header %s forwards its exact record proof to the original parent callback', async (field, label, oldValue) => {
+    const onUpdateField = vi.fn(async (_field: keyof Character, value: string, intent?: LocalSaveIntentV1): Promise<LocalSaveAckV1> => ({
+      kind: 'natural-field-local-save-ack-v1', session: intent!.session, generation: intent!.generation,
+      witness: { ...intent!.expected, source: 'committed-write', value, valueHash: `hash-${value}` },
+    }))
+    const { host } = await renderCard({ onUpdateField }, true)
+    const readView = Array.from(host.querySelectorAll<HTMLElement>('.cursor-text')).find(el => el.textContent?.replace(/[“”]/g, '') === oldValue)!
+    await act(async () => readView.click())
+    const input = host.querySelector<HTMLInputElement>(`input[aria-label="${label}"]`)!
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, '作者新文本')
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    await act(async () => flushPendingEditsV1())
+    expect(onUpdateField).toHaveBeenCalledExactlyOnceWith(field, '作者新文本', expect.objectContaining({
+      expected: expect.objectContaining({ value: oldValue, identity: expect.objectContaining({ table: 'characters', field, recordId: 7, worldId: 11, workId: 12 }) }),
+    }))
+  })
   it('把世界归属、三轴和删除命令交还父级，不在子组件直接写 store', async () => {
     const { host, props } = await renderCard()
     expect(host.textContent).toContain('林照雪')

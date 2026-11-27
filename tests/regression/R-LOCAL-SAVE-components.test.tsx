@@ -1,7 +1,7 @@
 import { act } from 'react'
 import { createRoot } from 'react-dom/client'
 import { afterEach, expect, it, vi } from 'vitest'
-import { InlineTextarea, type InlineSave } from '../../src/components/shared/InlineEdit'
+import { InlineInput, InlineTextarea, type InlineSave } from '../../src/components/shared/InlineEdit'
 import { flushPendingEditsV1, resetPendingEditCoordinatorForTestsV1 } from '../../src/lib/authoring/pending-edit-coordinator'
 import type { LocalSaveAckV1, LocalSaveContractV1, LocalSaveIntentV1 } from '../../src/lib/authoring/local-save-evidence'
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -80,4 +80,35 @@ it('returning to the original value still checks the frozen field witness after 
   expect(save).toHaveBeenCalledOnce(); expect(area.value).toBe('old'); expect(status(ui.host)).toBe('failed')
   await act(async () => area.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })))
   expect(ui.host.querySelector('textarea')).toBe(area); expect(status(ui.host)).toBe('failed')
+})
+
+it('inline input retains failed text and accepts only the matching explicit retry receipt', async () => {
+  const save = vi.fn().mockResolvedValueOnce(undefined).mockImplementation((text: string, intent: LocalSaveIntentV1) => ack(text, intent))
+  const ui = await mount(save)
+  const render = async (value: string) => act(async () => ui.root.render(<InlineInput label="姓名" value={value} localSave={contract()} onChange={save} />))
+  await render('old'); expect(status(ui.host)).toBe('saved')
+  await act(async () => (ui.host.querySelector('.cursor-text') as HTMLElement).click())
+  const input = ui.host.querySelector('input')!
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, '新姓名')
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+  expect(status(ui.host)).toBe('dirty')
+  await act(async () => { await expect(flushPendingEditsV1()).rejects.toThrow('没有匹配') })
+  expect(status(ui.host)).toBe('failed'); expect(input.value).toBe('新姓名')
+  await act(async () => (ui.host.querySelector('[aria-label="重试保存姓名"]') as HTMLElement).click())
+  await render('新姓名'); expect(status(ui.host)).toBe('saved'); expect(save).toHaveBeenCalledTimes(2)
+})
+
+it('inline input keeps legacy callback arity and makes no saved claim without evidence', async () => {
+  const save = vi.fn().mockResolvedValue(undefined); const ui = await mount(save)
+  await act(async () => ui.root.render(<InlineInput value="old" onChange={save} />))
+  await act(async () => (ui.host.querySelector('.cursor-text') as HTMLElement).click())
+  const input = ui.host.querySelector('input')!
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, 'legacy')
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+  })
+  expect(save).toHaveBeenCalledExactlyOnceWith('legacy'); expect(status(ui.host)).toBeUndefined()
 })
