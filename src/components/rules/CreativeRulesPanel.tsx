@@ -23,6 +23,8 @@ import {
 } from '../shared/initial-record-target'
 import HarnessEvidencePanel from '../agent/HarnessEvidencePanel'
 import { useActiveWork } from '../../hooks/useActiveWork'
+import { readCreativeRuleSaveWitnessesV1 } from '../../lib/authoring/creative-rules-local-save-evidence'
+import type { LocalSaveContractV1, LocalSaveCreativeRuleFieldV1, LocalSaveIntentV1, LocalSaveWitnessV1 } from '../../lib/authoring/local-save-evidence'
 
 const POV_OPTIONS: { value: NarrativePOV; label: string; desc: string }[] = [
   { value: 'first-person', label: '第一人称', desc: '以"我"的视角叙述' },
@@ -34,13 +36,14 @@ const POV_OPTIONS: { value: NarrativePOV; label: string; desc: string }[] = [
 interface Props {
   project: Project
   initialRulesId?: number | null
+  confirmedLocalSaves?: boolean
 }
 
-export default function CreativeRulesPanel({ project, initialRulesId }: Props) {
-  return <ScopedCreativeRulesPanel key={`${project.id}:${project.activeWorldId}:${project.activeWorkId}`} project={project} initialRulesId={initialRulesId} />
+export default function CreativeRulesPanel({ project, initialRulesId, confirmedLocalSaves = false }: Props) {
+  return <ScopedCreativeRulesPanel key={`${project.id}:${project.activeWorldId}:${project.activeWorkId}`} project={project} initialRulesId={initialRulesId} confirmedLocalSaves={confirmedLocalSaves} />
 }
 
-function ScopedCreativeRulesPanel({ project, initialRulesId }: Props) {
+function ScopedCreativeRulesPanel({ project, initialRulesId, confirmedLocalSaves = false }: Props) {
   const activeWork = useActiveWork(project)
   const { creativeRules: cachedRules, loadAll, save } = useCreativeRulesStore()
   const scope = useMemo<WorkspaceScope | null>(() => (
@@ -68,6 +71,8 @@ function ScopedCreativeRulesPanel({ project, initialRulesId }: Props) {
   const [ready, setReady] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [savingElements, setSavingElements] = useState(false)
+  const [localWitnesses, setLocalWitnesses] = useState<Partial<Record<LocalSaveCreativeRuleFieldV1, LocalSaveWitnessV1>>>({})
+  const [witnessReadComplete, setWitnessReadComplete] = useState(false)
   useInitialRecordTarget(initialRulesId, creativeRules?.id === initialRulesId)
 
   useEffect(() => {
@@ -97,11 +102,27 @@ function ScopedCreativeRulesPanel({ project, initialRulesId }: Props) {
     }
   }, [creativeRules])
 
-  const commitField = useCallback(async (data: Record<string, unknown>) => {
+  useEffect(() => {
+    if (!confirmedLocalSaves || !scope || !ready) return
+    let active = true
+    void readCreativeRuleSaveWitnessesV1(scope).then(witnesses => {
+      if (active) { setLocalWitnesses(witnesses); setWitnessReadComplete(true) }
+    }).catch(error => {
+      if (active) { setLocalWitnesses({}); setWitnessReadComplete(true); setSaveError(error instanceof Error ? error.message : '本机保存状态未确认') }
+    })
+    return () => { active = false }
+  }, [scope, ready, creativeRules, confirmedLocalSaves])
+
+  const localSaveFor = (field: LocalSaveCreativeRuleFieldV1): LocalSaveContractV1 | undefined => confirmedLocalSaves && scope && witnessReadComplete
+    ? { identity: { ...scope, table: 'creativeRules', field, worldGroupId: null }, witness: localWitnesses[field] ?? null } : undefined
+
+  const commitField = useCallback(async (data: Record<string, unknown>, intent?: LocalSaveIntentV1) => {
     if (!scope || !ready) throw new Error('创作规则仍在读取，请稍后保存。')
     try {
-      await save({ projectId: scope.projectId, ...data }, scope)
+      const ack = intent ? await save({ projectId: scope.projectId, ...data }, scope, intent)
+        : await save({ projectId: scope.projectId, ...data }, scope)
       setSaveError(null)
+      return ack
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : '保存失败，当前输入已保留')
       throw error
@@ -314,8 +335,9 @@ function ScopedCreativeRulesPanel({ project, initialRulesId }: Props) {
           </button>
         </div>
         <InlineTextarea markdownRead minRows={3}
+          localSave={localSaveFor('writingStyle')}
           value={writingStyle}
-          onChange={writingStyle => commitField({ writingStyle })}
+          onChange={(writingStyle, intent) => commitField({ writingStyle }, intent)}
           placeholder="描述期望的写作风格，如：简洁凌厉、文笔华丽、幽默诙谐、冷峻写实..."
           className="w-full h-24 p-3 bg-bg-surface border border-border rounded-lg text-text-primary text-sm resize-y focus:outline-none focus:border-accent"
         />
@@ -363,8 +385,9 @@ function ScopedCreativeRulesPanel({ project, initialRulesId }: Props) {
           </button>
         </div>
         <InlineTextarea markdownRead minRows={3}
+          localSave={localSaveFor('atmosphere')}
           value={atmosphere}
-          onChange={atmosphere => commitField({ atmosphere })}
+          onChange={(atmosphere, intent) => commitField({ atmosphere }, intent)}
           placeholder="描述作品的整体基调和氛围，如：黑暗压抑、热血激昂、温馨治愈..."
           className="w-full h-20 p-3 bg-bg-surface border border-border rounded-lg text-text-primary text-sm resize-y focus:outline-none focus:border-accent"
         />
@@ -456,8 +479,9 @@ function ScopedCreativeRulesPanel({ project, initialRulesId }: Props) {
           </button>
         </div>
         <InlineTextarea markdownRead minRows={3}
+          localSave={localSaveFor('specialRequirements')}
           value={specialRequirements}
-          onChange={specialRequirements => commitField({ specialRequirements })}
+          onChange={(specialRequirements, intent) => commitField({ specialRequirements }, intent)}
           placeholder="其他需要 AI 遵守的特殊创作要求..."
           className="w-full h-24 p-3 bg-bg-surface border border-border rounded-lg text-text-primary text-sm resize-y focus:outline-none focus:border-accent"
         />

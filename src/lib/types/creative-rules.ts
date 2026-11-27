@@ -20,6 +20,8 @@ export interface SystemFictionElementsV1 {
 export interface CreativeRules {
   id?: number
   projectId: number
+  /** Existing PROJECT_TABLES resource identity; absent only on unverified legacy rows. */
+  ragDocumentId?: string
   /** 当前数据由统一 Work owner 门盖章，旧类型调用可在保存前尚未携带。 */
   workId?: number
   writingStyle: string         // 写作风格描述

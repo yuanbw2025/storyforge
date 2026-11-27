@@ -23,6 +23,8 @@ export const LOCAL_SAVE_STORY_CORE_FIELDS_V1 = [
   'logline', 'concept', 'theme', 'centralConflict', 'plotPattern', 'mainPlot', 'subPlots',
 ] as const
 export type LocalSaveStoryCoreFieldV1 = typeof LOCAL_SAVE_STORY_CORE_FIELDS_V1[number]
+export const LOCAL_SAVE_CREATIVE_RULE_FIELDS_V1 = ['writingStyle', 'atmosphere', 'specialRequirements'] as const
+export type LocalSaveCreativeRuleFieldV1 = typeof LOCAL_SAVE_CREATIVE_RULE_FIELDS_V1[number]
 interface LocalSaveWorldviewIdentityV1 extends WorkspaceScope {
   table: 'worldviews'
   field: LocalSaveWorldviewFieldV1
@@ -33,7 +35,12 @@ interface LocalSaveStoryCoreIdentityV1 extends WorkspaceScope {
   field: LocalSaveStoryCoreFieldV1
   worldGroupId: null
 }
-export type LocalSaveIdentityV1 = LocalSaveWorldviewIdentityV1 | LocalSaveStoryCoreIdentityV1
+interface LocalSaveCreativeRuleIdentityV1 extends WorkspaceScope {
+  table: 'creativeRules'
+  field: LocalSaveCreativeRuleFieldV1
+  worldGroupId: null
+}
+export type LocalSaveIdentityV1 = LocalSaveWorldviewIdentityV1 | LocalSaveStoryCoreIdentityV1 | LocalSaveCreativeRuleIdentityV1
 export interface LocalSaveWitnessV1 {
   version: 1
   source: 'database-read' | 'committed-write'

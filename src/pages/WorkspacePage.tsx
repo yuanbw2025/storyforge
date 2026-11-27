@@ -507,6 +507,7 @@ export default function WorkspacePage({ embeddedProjectId, embeddedModule, embed
       case 'rules':
         return <CreativeRulesPanel
           project={project}
+          confirmedLocalSaves={isLongform && activeWork.id === project.activeWorkId && activeWork.projectId === project.id}
           initialRulesId={impactHandoff?.targetModule === 'rules' && impactHandoffTarget?.table === 'creativeRules'
             ? impactHandoffTarget.moduleRecordId
             : null}
