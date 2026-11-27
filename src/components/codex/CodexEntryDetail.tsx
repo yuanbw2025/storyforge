@@ -86,7 +86,9 @@ export default function CodexEntryDetail({
 
   return (
     <div className="p-4 space-y-3 max-w-2xl" {...composition}
-      onInputCapture={event => {
+      // Observe after the editor's input dispatch. A capture-phase state update
+      // can restore the old controlled DOM value before React onChange reads it.
+      onInput={event => {
         const target = event.target
         if (!(target instanceof HTMLTextAreaElement)) return
         const key = target.closest('[data-codex-source-field]')?.getAttribute('data-codex-source-field')
