@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import {
   isConsistencyAgentCurrent,
@@ -7,6 +7,7 @@ import {
   runBackgroundConsistencyAgent,
   runConsistencyAgent,
 } from '../../src/lib/agent/consistency-agent'
+import { discoverModelCapacityV1, resetModelCapacityForTestsV1 } from '../../src/lib/ai/model-capacity'
 import { AgentTeamBudgetTracker } from '../../src/lib/agent/team-budget'
 import { fingerprintSettingSource } from '../../src/lib/fact-ledger/setting-assertions'
 import { stampNewRecord } from '../../src/lib/workspace/scope'
@@ -150,6 +151,8 @@ describe('AGENT-1 27.2c · 一致性 Agent', () => {
 
   afterEach(() => {
     db.close()
+    vi.restoreAllMocks()
+    resetModelCapacityForTestsV1()
   })
 
   it('后台 Fast Guard 只跑确定性检查，模型调用与上下文 token 均为零', async () => {
@@ -224,6 +227,29 @@ describe('AGENT-1 27.2c · 一致性 Agent', () => {
     expect(candidate.findings.some(finding => (
       finding.category === '物品' && finding.severity === 'hard'
     ))).toBe(true)
+  })
+
+  it('显式审计保留完整连接的已证实容量，不退回未知模型的小窗口', async () => {
+    const { project, scope, targetChapterId, targetOutlineId } = await seedConsistencyProject()
+    const config = { provider: 'ollama' as const, model: 'consistency-service-test',
+      baseUrl: 'https://consistency-capacity.invalid/v1', apiKey: '', temperature: 0, maxTokens: 16_000 }
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
+      models: [{ model: config.model, context_length: 128_000 }],
+    }), { headers: { 'Content-Type': 'application/json' } }))
+    const modelCapacity = await discoverModelCapacityV1(config, fetcher)
+    expect(modelCapacity.confidence).toBe('service')
+    let calls = 0
+    const candidate = await runConsistencyAgent({
+      scope, projectId: project.id!, chapterId: targetChapterId, outlineNodeId: targetOutlineId,
+      chapterTitle: '第二章 重逢', worldGroupId: null, chapterContent: targetHtml, mode: 'deep',
+      provider: config.provider, model: config.model, modelConfig: { ...config, modelCapacity },
+      budget: new AgentTeamBudgetTracker('economy'),
+      call: async () => { calls++; return JSON.stringify({ findings: [], cognitionReferences: [], lifecycleReferences: [] }) },
+    })
+    expect(candidate.context.inputBudget).toBeGreaterThan(16_000)
+    expect(candidate.context.inputBudget).toBeLessThanOrEqual(32_000)
+    expect(calls).toBe(1)
+    expect(fetcher).toHaveBeenCalledTimes(1)
   })
 
   it.each(['正文', '证据'] as const)('混入伪造%s时整份拒绝，不保存有效子集或自动重发', async kind => {

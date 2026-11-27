@@ -1,5 +1,9 @@
 # Troubleshooting
 
+## November 23: ordinary feedback remains available
+
+Settings removes Creative reliability experience feedback and its scoring/save/export/clear controls. No rescoring or history clearing is required: existing local score records remain untouched and are not read/rewritten when opening settings. Bug reports, feature suggestions, formal quality checks and Harness retain their separate entries/boundaries. Continue providing diagnostics, versions and reproduction steps below. Based on #579.
+
 ## November 21: feedback drafts, diagnostics and entry points
 
 Bug and Feature drafts independently retain follow-up choices and unknown requests. Success clears only the current draft; the next feedback starts without follow-up selected. A successful feature submission does not clear another pending bug's diagnostic preview. Retrying preserves the original ID, credential and request content. Based on #550.

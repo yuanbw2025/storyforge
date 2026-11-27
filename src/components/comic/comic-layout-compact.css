@@ -1,0 +1,109 @@
+/* 023: comic-private workspace geometry. The 025 source-row contract stays intact. */
+.comic-app .lf-content { overflow: visible; }
+.comic-app.comic-app .lf-content:has(>.cp-subnav) { gap: 12px; }
+.comic-app .comic-studio { gap: 12px; }
+.comic-app :is(fieldset, label, section, article, main) { min-width: 0; }
+.comic-app :is(h2, h3, h4, p, label, summary) { overflow-wrap: anywhere; }
+.comic-app .lf-content :is(input:not([type=checkbox]):not([type=radio]):not([type=range]), select, textarea) { padding: 7px 10px; }
+.comic-app select:not([multiple]) { max-width: 28rem; text-overflow: ellipsis; }
+.comic-app .cp-fields { gap: 12px 16px; margin: 12px 0; }
+.comic-app .cp-fields label { gap: 5px; }
+.comic-app .cp-fields label :is(input:not([type=checkbox]), select, textarea) { width: 100%; }
+.comic-app .cp-fields select[multiple] { min-height: 100px; }
+.comic-app .cp-record { padding: 14px; margin: 12px 0; border-radius: 12px; }
+.comic-app .cp-record h4 { font-size: 18px; margin: 0 0 8px; }
+.comic-app .cp-record button, .comic-app .cp-planning>fieldset>button { padding: 8px 14px; margin: 6px 8px 0 0; }
+.comic-app :is(.cp-source-status, .cp-planning, .cp-reader, .cp-source, .comic-toolbar) { padding: 12px 14px; border-radius: 14px; }
+.comic-app .cp-source-status>div { gap: 6px 14px; }
+.comic-app .cp-source-status button { margin-top: 8px; }
+.comic-app :is(.cp-planning, .cp-source) h3 { font-size: 20px; margin: 0; }
+.comic-app .cp-planning p, .comic-app .cp-source>p { margin: 6px 0 12px; font-size: 14px; }
+.comic-app .comic-studio h3 { font-size: 20px; }
+.comic-app .comic-pipeline { padding: 0; border-radius: 14px; }
+.comic-app .comic-pipeline>header { gap: 10px; padding: 10px 14px; }
+.comic-app .comic-pipeline>header h3 { font-size: 20px; }
+.comic-app .comic-pipeline>header p { font-size: 13px; }
+.comic-app .comic-pipeline-body { padding: 12px 14px; gap: 10px; }
+.comic-app .cp-instruction { margin: 0; gap: 5px; font-size: 14px; }
+.comic-app .cp-instruction textarea { min-height: 4.5rem; }
+.comic-app .comic-pipeline-targets { gap: 10px 16px; }
+.comic-app .comic-pipeline-targets label { flex: 0 1 24rem; width: 100%; min-width: 0; font-size: 14px; }
+.comic-app .comic-pipeline-targets select { width: 100%; max-width: 100%; }
+.comic-app .comic-pipeline-steps { grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr)); gap: 8px; }
+.comic-app .comic-pipeline-steps button { padding: 10px 12px; border-radius: 10px; }
+.comic-app .comic-pipeline-steps button small { font-size: 13px; white-space: normal; overflow: visible; }
+.comic-app .comic-professional-candidate { padding: 14px; border-radius: 12px; }
+/* Human-readable candidate fields must not inherit the raw-JSON editor's 240px height. */
+.comic-app .comic-professional-candidate .cp-fields textarea { min-height: 0; font: inherit; line-height: 1.65; }
+.comic-app .comic-professional-candidate :is(header, footer) { flex-wrap: wrap; }
+.comic-app .comic-candidate-items :is(strong, small) { font-size: 13px; white-space: normal; overflow-wrap: anywhere; }
+.comic-app .comic-review-list :is(p, blockquote) { font-size: 14px; line-height: 1.65; }
+.comic-app .comic-review-list footer { flex-wrap: wrap; gap: 8px; }
+.comic-app .comic-toolbar { gap: 8px; }
+.comic-app .comic-provider-settings { flex-wrap: wrap; min-width: 0; gap: 8px; }
+.comic-app .comic-provider-settings label { font-size: 13px; }
+.comic-app .comic-layout { grid-template-columns: 180px minmax(0, 1fr); min-height: 0; border-radius: 14px; }
+.comic-app .comic-pages { padding: 10px; }
+.comic-app .comic-pages>.comic-page-row { grid-template-columns: 46px minmax(0, 1fr) auto; gap: 6px; padding: 6px; }
+.comic-app .comic-page-thumbnail { width: 44px; }
+.comic-app .comic-page-copy :is(strong, small, em) { white-space: normal; overflow-wrap: anywhere; font-size: 13px; }
+.comic-app .comic-pages>header small { font-size: 13px; }
+.comic-app .comic-canvas-heading { padding: 10px 12px; gap: 10px; flex-wrap: wrap; }
+.comic-app .comic-canvas-heading>div { min-width: 0; }
+.comic-app .comic-canvas-heading strong { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+.comic-app .comic-canvas-heading small { font-size: 13px; }
+.comic-app .comic-page-controls { flex-wrap: wrap; padding: 8px 12px; gap: 6px; }
+.comic-app .comic-page-controls>input { min-width: 0; flex: 1 1 14rem; }
+.comic-app .comic-zoom-control { min-width: 0; flex: 0 1 12rem; font-size: 13px; }
+.comic-app .comic-zoom-control input { min-width: 0; width: 100%; }
+.comic-app .comic-page-desk { min-height: 0; max-height: 75vh; padding: 14px; }
+.comic-app .comic-page-board { min-width: 0; }
+.comic-app .comic-inspector { padding: 14px; border-radius: 0; }
+.comic-app .comic-inspector section { margin-top: 12px; padding-top: 12px; }
+.comic-app .comic-inspector :is(.comic-field, .comic-section-hint, .comic-number-grid label, .comic-check-list label, .comic-source-units legend) { font-size: 13px; }
+.comic-app .comic-number-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.comic-app .comic-select-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.comic-app .comic-visual-layout { min-height: 0; border-radius: 14px; }
+.comic-app .comic-visual-layout main { padding: 14px; }
+.comic-app .comic-visual-form label { font-size: 13px; }
+.comic-app .comic-subject-hero { min-height: 0; margin-bottom: 14px; }
+.comic-app .comic-subject-reference, .comic-app .comic-subject-reference>div { min-height: 120px; }
+.comic-app .comic-subject-reference>div { padding: 14px; }
+.comic-app .comic-subject-summary { padding: 14px; }
+.comic-app .comic-subject-summary h3 { margin: 4px 0 8px; }
+.comic-app .comic-subject-summary p { font-size: 14px; }
+.comic-app .comic-subject-summary>div { margin-top: 10px; }
+.comic-app .comic-qa { padding: 14px; border-radius: 14px; }
+.comic-app .comic-qa>header { gap: 10px; flex-wrap: wrap; }
+.comic-app .comic-qa :is(small, li, .comic-release-tiers article p) { font-size: 13px; }
+.comic-app .comic-release-tiers { gap: 10px; margin-top: 12px; }
+.comic-app .comic-release-tiers article { min-height: 0; padding: 12px; }
+.comic-app .comic-qa li { grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) auto; }
+.comic-app .comic-qa-summary { flex-wrap: wrap; }
+.comic-app .comic-export-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr)); }
+.comic-app .comic-release-list article { flex-wrap: wrap; }
+.comic-app .cp-reading-page>svg { width: 100%; height: auto; }
+.comic-app .cp-reader header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
+.comic-app .cp-library-tools { gap: 10px; align-items: center; margin-bottom: 14px; }
+.comic-app .cp-library-tools input { flex: 0 1 22rem; }
+.comic-app .cp-library-tools select { width: auto; max-width: 12rem; }
+.comic-app .cp-books { gap: 16px; }
+.comic-app .cp-cover { min-height: 120px; padding: 14px; margin: 0 0 14px; box-shadow: none; }
+.comic-app .cp-cover h3 { font-size: 22px; overflow-wrap: anywhere; margin: 8px 0; }
+.comic-app .cp-book-actions { gap: 8px; margin-top: 12px; }
+.comic-app .cp-create { margin-bottom: 14px; }
+.comic-app :is(.comic-empty, .comic-loading) { min-height: 100px; padding: 16px; }
+@media (max-width: 760px) {
+  .comic-app .comic-layout { grid-template-columns: minmax(0, 1fr); }
+  .comic-app .comic-pages { flex-wrap: wrap; max-height: 160px; }
+  .comic-app .comic-pages>header, .comic-app .comic-create-page { min-width: 0; flex: 1 1 9rem; }
+  .comic-app .comic-pages>.comic-page-row { min-width: 0; flex: 0 0 160px; }
+  .comic-app .comic-canvas-area { grid-row: 1; }
+  .comic-app .comic-pages { grid-row: 2; }
+  .comic-app .comic-inspector { grid-row: 3; }
+  .comic-app .comic-number-grid, .comic-app .comic-select-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .comic-app .comic-visual-form, .comic-app .comic-rights, .comic-app .comic-release-tiers { grid-template-columns: minmax(0, 1fr); }
+  .comic-app .comic-lettering>div:first-child { grid-template-columns: minmax(0, 1fr) auto; }
+  .comic-app .comic-continuity-row { grid-template-columns: minmax(0, 1fr); }
+  .comic-app .comic-qa li { grid-template-columns: minmax(0, 1fr); }
+}

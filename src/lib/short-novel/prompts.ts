@@ -40,7 +40,7 @@ export function buildShortNovelPromptV1(input: {
   if (input.kind === 'brief') {
     objective = `生成 ShortNovelBriefV1。字段严格且仅为：${SHORT_NOVEL_CONTRACT_KEYS.BRIEF_KEYS.join(', ')}。version 必须是数字 1；pointOfView 只能逐字使用 first-person、third-limited、third-omniscient 之一；tense 只能逐字使用 past、present 之一；targetWordCount 和 chapterCount 必须是 JSON 数字并精确沿用 REGISTERED CONTEXT 中的当前 Work 骨架。premise 必须忠实压缩当前 Work 简介，不得另拟主角、职业、关系、地点、谜团或故事引擎；简介中明确的人物、关系、引爆事件、期限和核心两难必须逐项进入 premise 或 mustKeep，明确禁区必须进入 forbidden。目标字数范围 5,000～25,000，章节数范围 3～8；coreChange 表达该名主人公经历后不可逆的变化；storyPromise 可在结尾检验。`
   } else if (input.kind === 'story-design') {
-    objective = `生成 ShortNovelStoryDesignV1。字段严格且仅为：${SHORT_NOVEL_CONTRACT_KEYS.DESIGN_KEYS.join(', ')}。version 必须是数字 1；escalation 必须是含 2～5 个非空字符串的 JSON 数组。用一个主角、一条主冲突和有限角色完成闭环；climaxChoice 必须迫使主角用行动回答 thematicQuestion；endingImage 与开场形成变化对照。`
+    objective = `生成 ShortNovelStoryDesignV1。字段严格且仅为：${SHORT_NOVEL_CONTRACT_KEYS.DESIGN_KEYS.join(', ')}。version 必须是数字 1；escalation 必须是非空字符串的 JSON 数组，按故事实际推进的递进层次自然安排数量。用一个主角、一条主冲突和有限角色完成闭环；climaxChoice 必须迫使主角用行动回答 thematicQuestion；endingImage 与开场形成变化对照。`
   } else if (input.kind === 'scene-plan') {
     objective = `生成章节计划 JSON 数组，数量必须等于 Brief.chapterCount。每项字段严格且仅为：${SHORT_NOVEL_CONTRACT_KEYS.PLAN_KEYS.join(', ')}。数组元素没有 version 字段，绝对不要添加 version、characters、scenes 或其他键。每项必须精确采用这个 JSON 形状：{"stableKey":"chapter-1","order":0,"title":"非空标题","purpose":"非空文本","viewpoint":"非空文本","openingPressure":"非空文本","conflict":"非空文本","turn":"非空文本","exitState":"非空文本","targetWordCount":1667}。stableKey/order 从 chapter-1/order=0 连续递增；targetWordCount 使用 JSON 数字且总和接近 Work 目标字数；每章包含目标、冲突、转折、离场状态，开头尽快施压，高潮前不给出最终答案。`
   } else if (input.kind === 'chapter-draft') {

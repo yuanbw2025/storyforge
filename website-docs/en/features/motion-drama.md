@@ -1,9 +1,15 @@
 ---
 productId: independent.motion-drama
 status: released
-lastVerified: 2026-11-13
+lastVerified: 2026-11-25
 ---
 # Motion-comic materials and preproduction
+
+## November 25: compact preproduction and capacity
+
+Motion-material pages reduce repeated titles while retaining full work name, format, duration, episode count and episode selection. Materials, references, prompts, candidates and execution packs use tighter spacing; validation errors remain visible above modals. Save, verify sources and explicitly adopt through existing paths without automatic production or version replacement. Based on #587.
+
+Episode/material input follows evidenced bound-connection capacity, with 64k retained as an unknown-capacity reference. Full requests and stage structures remain checked. Delivery still ends before external video generation; reference frames and prompt packs are not finished video. Based on #631.
 
 ## November 13: saving, recovery and usage checks
 

@@ -3,7 +3,7 @@ import type { AiTownAuthoringSettingsV1 } from '../../lib/ai-town/authoring-cont
 export default function AuthorSettings({settings,onChange,page}:{settings:AiTownAuthoringSettingsV1;onChange:(s:AiTownAuthoringSettingsV1)=>void;page:string}){
  const t=settings.town;
  const set=<K extends keyof AiTownAuthoringSettingsV1['town']>(key:K,value:AiTownAuthoringSettingsV1['town'][K])=>onChange({...settings,town:{...t,[key]:value}});
- const text=(key:'playerName'|'homeConcept'|'sharedProjectConcept',label:string)=><label key={key}>{label}<textarea value={t[key]} maxLength={1000} onChange={e=>set(key,e.target.value)}/></label>;
+ const text=(key:'playerName'|'homeConcept'|'sharedProjectConcept',label:string)=><label key={key} className={key==='playerName'?'town-name-field':undefined}>{label}<textarea value={t[key]} maxLength={1000} onChange={e=>set(key,e.target.value)}/></label>;
  const num=(key:'elapsedDays'|'residentTarget'|'majorLocationTarget'|'actionsPerDay'|'offlineMaximumDays'|'startingMoney',label:string,min:number,max:number)=><label key={key}>{label}<input type="number" min={min} max={max} value={t[key]} onChange={e=>set(key,Number(e.target.value))}/></label>;
  const toggle=(key:'offlineEnabled'|'portraits'|'expressions'|'locationCards'|'ambientAudio',label:string)=><label className="town-check" key={key}><input type="checkbox" checked={t[key]} onChange={e=>set(key,e.target.checked)}/>{label}</label>;
  return <div className="avg-form town-settings">

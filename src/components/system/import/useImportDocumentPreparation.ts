@@ -1,9 +1,15 @@
 import { useMemo, useRef, useState } from 'react'
-import { extractTextFromFile } from '../../../lib/doc-parser'
+import { extractTextFromFile, textLayerReportLineV1, type ExtractResult } from '../../../lib/doc-parser'
+import type { CsvGridV1 } from '../../../lib/import/csv-grid'
+import { publishCsvGridViewV1 } from './ImportDocOverview'
 import { chunkDocument, type ChunkPlan } from '../../../lib/import/chunker'
 import { detectVolumeStructure, type VolumeDetectResult } from '../../../lib/import/volume-detector'
 
 const DEFAULT_CHUNK_SIZE = 50000
+
+/** 032-L1-a：准备阶段遇到"没有可复制文本"时的显式状态。
+ * 只拦截进入分块/候选/adopt，不改抽取文本、不改上限、不碰原件存档路径。 */
+export interface TextLayerBlockedV1 { filename: string; sizeBytes: number; pageCount?: number; status: ExtractResult['status']; warnings: ExtractResult['warnings'] }
 
 export default function useImportDocumentPreparation() {
   const [filename, setFilename] = useState('')
@@ -15,6 +21,9 @@ export default function useImportDocumentPreparation() {
   const [chunkSize, setChunkSize] = useState(DEFAULT_CHUNK_SIZE)
   const [showConfirm, setShowConfirm] = useState(false)
   const [volumeDetect, setVolumeDetect] = useState<VolumeDetectResult | null>(null)
+  const [textLayerBlocked, setTextLayerBlocked] = useState<TextLayerBlockedV1 | null>(null)
+  /** 032-L1-c：仅 csv 成功抽取后出现的只读侧车快照，不进 AI/adopt/persistence。 */
+  const [csvGrid, setCsvGrid] = useState<CsvGridV1 | null>(null)
   const lastUploadedFile = useRef<File | null>(null)
 
   const handleFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -26,16 +35,29 @@ export default function useImportDocumentPreparation() {
     setFilename(file.name)
     setRawText('')
     setPlans(null)
+    setTextLayerBlocked(null)
     setLoadingFile(true)
     lastUploadedFile.current = file
     try {
       const result = await extractTextFromFile(file)
+      if (result.status === 'empty') {
+        // 不进入分块/候选/adopt，也不清掉已选文件：原件仍可由既有 saveBlob 路径存档。
+        setTextLayerBlocked({ filename: file.name, sizeBytes: file.size, pageCount: result.pageCount, status: result.status, warnings: result.warnings })
+        setFileError(textLayerReportLineV1({ filename: file.name, sizeBytes: file.size, pageCount: result.pageCount, status: result.status }))
+        setCsvGrid(null)
+        publishCsvGridViewV1(null)
+        setRawText('')
+        return
+      }
+      setCsvGrid(result.csvGrid ?? null)
+      publishCsvGridViewV1(result.csvGrid ?? null)
       setRawText(result.text)
       const parts = [
         `文件 ${(file.size / 1024 / 1024).toFixed(2)} MB`,
         `抽取 ${result.rawChars.toLocaleString()} 字符`,
       ]
       if (result.pageCount) parts.push(`${result.pageCount} 页`)
+      if (result.warnings.includes('pdf-text-layer-sparse')) parts.push('部分页面文字极少')
       setExtractInfo(parts.join(' · '))
     } catch (error) {
       setFilename('')
@@ -47,13 +69,15 @@ export default function useImportDocumentPreparation() {
   }
 
   const handleRawTextChange = (text: string) => {
+    if (text.trim()) { setTextLayerBlocked(null); setFileError(null); setCsvGrid(null); publishCsvGridViewV1(null) }
     setRawText(text)
     setPlans(null)
     lastUploadedFile.current = null
   }
 
   const prepareConfirmation = () => {
-    if (!rawText.trim()) return
+    // 没有可复制文本时，作者手动补文字前不允许进入确认/解析。
+    if (textLayerBlocked || !rawText.trim()) return
     setPlans(chunkDocument(rawText, { targetChars: chunkSize }))
     setVolumeDetect(detectVolumeStructure(rawText))
     setShowConfirm(true)
@@ -85,6 +109,8 @@ export default function useImportDocumentPreparation() {
     showConfirm,
     volumeDetect,
     previewPlans,
+    textLayerBlocked,
+    csvGrid,
     handleFile,
     handleRawTextChange,
     prepareConfirmation,

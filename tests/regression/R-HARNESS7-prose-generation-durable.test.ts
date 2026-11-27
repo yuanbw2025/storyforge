@@ -468,14 +468,15 @@ describe.sequential('R-HARNESS7 · 正文生成 durable run', { timeout: 15_000 
   it('新 V2 合同缺少信息边界证据时拒绝候选，不能降级为旧 V1 校验', async () => {
     const pending = await preparePending('正文边界必需')
     const { durable: _durable, informationBoundaryHash: _boundary, ...candidateBody } = pending.candidate
-    const candidateWithoutBoundary: ProseGenerationCandidateV1 = {
+    // Deliberately malformed external candidate: exercise runtime rejection without claiming it satisfies the schema.
+    const candidateWithoutBoundary = {
       ...candidateBody,
       durable: {
         ...pending.candidate.durable,
-        candidateHash: await hashProseGenerationCandidateV1(candidateBody),
+        candidateHash: await hashProseGenerationCandidateV1(candidateBody as Omit<ProseGenerationCandidateV1, 'durable'>),
       },
     }
-    expect(await isProseGenerationCandidateCurrentV1(candidateWithoutBoundary)).toBe(false)
+    expect(await isProseGenerationCandidateCurrentV1(candidateWithoutBoundary as ProseGenerationCandidateV1)).toBe(false)
   })
   it.each(['confirmation.recorded', 'adoption.started', 'adoption.committed', 'step.succeeded',
     'verification.started', 'verification.accepted', 'memory.settlement.recorded'])(

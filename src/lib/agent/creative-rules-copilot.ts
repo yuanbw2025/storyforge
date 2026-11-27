@@ -448,8 +448,13 @@ export function createCreativeRulesCopilotNodeV1(
   const runAI = dependencies.runAI ?? (messages => chat(messages, input.config, {
     category: input.routingCategory,
     projectId: input.projectId,
+    // B20a: only an explicit author limit caps the wire output; without one,
+    // dispatch follows the bound connection's evidenced capacity (the old
+    // fixed 4k application quota is gone).
     configOverrides: {
-      maxTokens: input.generationOverrides?.maxTokens ?? 4_000,
+      ...(input.generationOverrides?.maxTokens != null
+        ? { maxTokens: input.generationOverrides.maxTokens }
+        : {}),
       temperature: input.generationOverrides?.temperature ?? 0.45,
     },
     contextOverflowPolicy: 'reject',

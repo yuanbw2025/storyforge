@@ -1,9 +1,17 @@
 ---
 productId: upper.ai-town
 status: preview
-lastVerified: 2026-11-13
+lastVerified: 2026-11-25
 ---
 # Epilogue AI town
+
+## November 25: director-task input capacity
+
+Director tasks assemble resident state, events and memory using evidenced bound-connection capacity, with the same budget in the contract and request. The 20k value remains an unknown/default reference; it does not enlarge author limits or bypass admission. Knowledge, event versions, explicit start and life-save rules remain; larger capacity does not establish long-run quality or cost acceptance. Based on #638.
+
+## November 23: library search and compact authoring
+
+New and search sit in the library toolbar. Use Clear search when no work matches; an empty library still offers a new production plan or community works. Current page/work titles remain visible with long-title wrapping. Forms, actions and community cards use tighter spacing, with single-column mobile forms. Player name retains its editable, resizable textarea and original 1,000-character limit. Work versions and life saves remain separate; source selection, explicit start, save-conflict handling and publication keep their existing rules. Based on [#582](https://github.com/yuanbw2025/storyforge/pull/582).
 
 ## November 21: source-consultation readback
 

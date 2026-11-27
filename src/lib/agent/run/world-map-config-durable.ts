@@ -1,4 +1,6 @@
-import { chat } from '../../ai/client'
+import { requireFixedBudgetValueV1 } from '../finite-budget'
+import { chat, resolveRequestConfig } from '../../ai/client'
+import { evidencedInputBudgetV1, prepareModelCapacityV1 } from '../../ai/model-capacity'
 import {
   buildVoronoiMapPromptFromRegisteredContextV1,
   parseVoronoiMapConfig,
@@ -26,6 +28,19 @@ import { createVerificationReceiptV1 } from './verification-receipt'
 import { canonicalStringify, hashCanonicalValue } from './hash'
 
 export const WORLD_MAP_CONFIG_STEP_ID_V1 = 'world-origin:map-config' as const
+
+/**
+ * B20a: the frozen contract budget is an accounting/governance ceiling, never a
+ * substitute for the author's own choice. `maxTokens: 0` means automatic, so it
+ * must stay automatic instead of being fabricated into a 6k dispatch cap; only
+ * an explicit author limit is narrowed by the contract ceiling.
+ */
+export function worldMapDraftDispatchConfigV1(config: AIConfig, contractCeiling: number | null): AIConfig {
+  const explicit = config.maxTokens
+  if (!Number.isInteger(explicit) || explicit <= 0) return config
+  if (contractCeiling === null || !Number.isSafeInteger(contractCeiling) || contractCeiling <= 0) return config
+  return { ...config, maxTokens: Math.min(explicit, contractCeiling) }
+}
 export const WORLD_MAP_CONFIG_VERIFIER_SET_V1 = 'world-map-config-terminal-v1' as const
 export const WORLD_MAP_CONTEXT_SOURCE_KEYS_V1 = ['worldview', 'geography', 'codex', 'locations'] as const
 
@@ -129,7 +144,7 @@ async function readTargetNode(
   return node as WorldNode & { id: number }
 }
 
-function contract(scope: WorkspaceScope, worldGroupId: number | null, node: WorldNode & { id: number }, atlas = false) {
+function contract(scope: WorkspaceScope, worldGroupId: number | null, node: WorldNode & { id: number }, atlas = false, inputBudgetTokens: number = WORLD_MAP_DEFAULT_INPUT_TOKENS_V1) {
   const skill = getAgentSkillV1('world-origin.map-config', 'world-origin')
   return {
     version: 1 as const,
@@ -148,7 +163,7 @@ function contract(scope: WorkspaceScope, worldGroupId: number | null, node: Worl
     budget: {
       maxModelCalls: 1,
       maxToolCalls: 0,
-      maxInputTokens: 30_000,
+      maxInputTokens: inputBudgetTokens,
       maxOutputTokens: skill.maxOutputTokens,
       maxAttemptsPerStep: 1,
       maxProtocolErrors: 0,
@@ -172,14 +187,72 @@ function contract(scope: WorkspaceScope, worldGroupId: number | null, node: Worl
   }
 }
 
-async function assembleWorldMapContext(scope: WorkspaceScope, worldGroupId: number | null) {
-  return assembleContext({
+/**
+ * B34：世界地图的四类登记来源都是 L2 非原子来源，固定装配预算会静默裁剪它们，
+ * 而提示词只使用 assembled.text——地图证据可能在作者不知情的情况下丢失。
+ * 这里改为显式完整性门：非空来源必须完整进入；登记装配器明确记录为空的来源
+ * 可以省略。无证据的遗漏或截断仍失败且不发起模型生成，不做静默截断。
+ */
+export function assertWorldMapContextCompleteV1(input: {
+  included: readonly string[]
+  trimmed: readonly string[]
+  sourceEvidence?: ReadonlyArray<{ key: string; delivery?: string; status?: string; originalCharacters?: number }>
+}): void {
+  const incomplete = WORLD_MAP_CONTEXT_SOURCE_KEYS_V1.filter(key => (
+    (!input.included.includes(key) && !input.sourceEvidence?.some(source => source.key === key
+      && source.status === 'omitted' && source.delivery === 'none' && source.originalCharacters === 0))
+    || input.trimmed.includes(key)
+    || input.sourceEvidence?.some(source => source.key === key && source.delivery === 'truncated')
+  ))
+  if (incomplete.length) {
+    throw new Error(`世界地图登记来源未完整进入上下文预算：${incomplete.join('、')}；`
+      + '请缩小材料或改用更大上下文模型后重试，未发起模型生成。')
+  }
+}
+
+/** B34：装配预算跟随实际生成路由的已证实容量并预留输出。
+ * 仅未知容量使用旧缺省；已证实的小窗口也不能被缺省放大。 */
+export const WORLD_MAP_DEFAULT_INPUT_TOKENS_V1 = 30_000
+
+export async function worldMapInputBudgetV1(input: {
+  aiConfig?: AIConfig
+  projectId: number
+  outputReservation: number
+}): Promise<number> {
+  if (!input.aiConfig) return WORLD_MAP_DEFAULT_INPUT_TOKENS_V1
+  try {
+    const resolved = resolveRequestConfig(input.aiConfig, {
+      category: 'geography.world-map', projectId: input.projectId,
+    }).config
+    const prepared = await prepareModelCapacityV1(resolved)
+    const value = evidencedInputBudgetV1({ config: prepared, outputReservation: input.outputReservation })
+    if (value != null && prepared.modelCapacity?.confidence !== 'fallback') return value
+  } catch {
+    // 容量未证实（离线/未知模型）时退回缺省下限。
+  }
+  return WORLD_MAP_DEFAULT_INPUT_TOKENS_V1
+}
+
+/** 恢复/stale 重核使用冻结合同的预算，保证与生成时冻结值一致。 */
+export function frozenWorldMapInputBudgetV1(snapshot: AgentRunSnapshotV1): number {
+  const value = (snapshot as unknown as { contract?: { budget?: { maxInputTokens?: unknown } } }).contract?.budget?.maxInputTokens
+  return typeof value === 'number' && Number.isSafeInteger(value) && value > 0 ? value : WORLD_MAP_DEFAULT_INPUT_TOKENS_V1
+}
+
+async function assembleWorldMapContext(
+  scope: WorkspaceScope,
+  worldGroupId: number | null,
+  inputBudgetTokens: number = WORLD_MAP_DEFAULT_INPUT_TOKENS_V1,
+) {
+  const assembled = await assembleContext({
     projectId: scope.projectId,
     scope,
     worldGroupId,
     sourceKeys: [...WORLD_MAP_CONTEXT_SOURCE_KEYS_V1],
-    inputBudgetTokens: 30_000,
+    inputBudgetTokens,
   })
+  assertWorldMapContextCompleteV1(assembled)
+  return assembled
 }
 
 async function promptEvidence(contextText: string, nodeName: string, atlas = false) {
@@ -280,9 +353,13 @@ function assertCandidateTarget(
   ) throw new Error('世界地图候选与当前 World、Work 或世界组不匹配。')
 }
 
-async function currentEvidence(scope: WorkspaceScope, candidate: WorldMapConfigCandidateV1) {
+async function currentEvidence(
+  scope: WorkspaceScope,
+  candidate: WorldMapConfigCandidateV1,
+  inputBudgetTokens: number = WORLD_MAP_DEFAULT_INPUT_TOKENS_V1,
+) {
   const node = await readTargetNode(scope, candidate.worldGroupId, candidate.worldNodeId)
-  const assembled = await assembleWorldMapContext(scope, candidate.worldGroupId)
+  const assembled = await assembleWorldMapContext(scope, candidate.worldGroupId, inputBudgetTokens)
   const prompt = await promptEvidence(assembled.text, node.name, !!candidate.mapConfig.atlasDraft)
   const currentConfigHash = await hashAdoptFieldValueV1(node.mapConfigJSON)
   return {
@@ -307,7 +384,7 @@ async function assertFreshBeforeWrite(
   snapshot: AgentRunSnapshotV1,
   candidate: WorldMapConfigCandidateV1,
 ): Promise<AgentRunSnapshotV1> {
-  const evidence = await currentEvidence(scope, candidate)
+  const evidence = await currentEvidence(scope, candidate, frozenWorldMapInputBudgetV1(snapshot))
   if (evidence.sourceFresh && evidence.nodeNameFresh && evidence.promptFresh && evidence.baselineFresh) return snapshot
   const reason = !evidence.baselineFresh
     ? 'world-map-config-baseline-changed'
@@ -335,15 +412,20 @@ export async function generateWorldMapConfigCandidateV1(input: {
 }): Promise<{ snapshot: AgentRunSnapshotV1; candidate: WorldMapConfigCandidateV1 }> {
   if (!input.runAI && !input.aiConfig) throw new Error('世界地图生成缺少 AI 配置。')
   const node = await readTargetNode(input.scope, input.worldGroupId, input.worldNodeId)
+  const inputBudgetTokens = await worldMapInputBudgetV1({
+    aiConfig: input.aiConfig,
+    projectId: input.scope.projectId,
+    outputReservation: requireFixedBudgetValueV1(getAgentSkillV1('world-origin.map-config', 'world-origin').maxOutputTokens),
+  })
   let snapshot = await createAgentRunV1({
     scope: input.scope,
     worldGroupId: input.worldGroupId,
-    contract: contract(input.scope, input.worldGroupId, node, input.atlasDraft),
+    contract: contract(input.scope, input.worldGroupId, node, input.atlasDraft, inputBudgetTokens),
   })
   snapshot = await append(input.scope, snapshot, 'step.scheduled', { stepId: WORLD_MAP_CONFIG_STEP_ID_V1 })
   snapshot = await append(input.scope, snapshot, 'step.started', { stepId: WORLD_MAP_CONFIG_STEP_ID_V1, attempt: 1 })
 
-  const assembled = await assembleWorldMapContext(input.scope, input.worldGroupId)
+  const assembled = await assembleWorldMapContext(input.scope, input.worldGroupId, inputBudgetTokens)
   const manifest = await createContextManifestFromAssemblyV1({
     runId: snapshot.run.id,
     stepId: WORLD_MAP_CONFIG_STEP_ID_V1,
@@ -369,7 +451,7 @@ export async function generateWorldMapConfigCandidateV1(input: {
   try {
     await input.onDurableBoundary?.('model.requested', snapshot)
     const aiConfig = input.aiConfig && input.atlasDraft
-      ? { ...input.aiConfig, maxTokens: Math.min(input.aiConfig.maxTokens || 6000, snapshot.contract.budget.maxOutputTokens ?? 6000) }
+      ? worldMapDraftDispatchConfigV1(input.aiConfig, snapshot.contract.budget.maxOutputTokens)
       : input.aiConfig
     raw = await (input.runAI
       ? input.runAI(prompt.messages)
@@ -536,7 +618,7 @@ export async function adoptWorldMapConfigCandidateV1(input: {
   let intent = state.intent
   assertCandidateTarget(input.scope, input.worldGroupId, snapshot, candidate)
 
-  let evidence = await currentEvidence(input.scope, candidate)
+  let evidence = await currentEvidence(input.scope, candidate, frozenWorldMapInputBudgetV1(snapshot))
   if (snapshot.projection.state === 'completed' && snapshot.projection.terminalReceiptHash && intent) {
     if (!evidence.expectedMatches || !evidence.sourceFresh || !evidence.nodeNameFresh || !evidence.promptFresh) {
       snapshot = await staleAgentRunVerificationV1({
@@ -586,7 +668,7 @@ export async function adoptWorldMapConfigCandidateV1(input: {
 
   let adoptionHash = snapshot.projection.steps[WORLD_MAP_CONFIG_STEP_ID_V1]?.adoptionHash
   if (!adoptionHash) {
-    evidence = await currentEvidence(input.scope, candidate)
+    evidence = await currentEvidence(input.scope, candidate, frozenWorldMapInputBudgetV1(snapshot))
     if (!evidence.expectedMatches) {
       snapshot = await assertFreshBeforeWrite(input.scope, snapshot, candidate)
       const result = await adopt({
@@ -605,7 +687,7 @@ export async function adoptWorldMapConfigCandidateV1(input: {
       if (!result.written.some(row => row.id === candidate.worldNodeId && row.fields.includes('mapConfigJSON'))) {
         throw new Error(result.skipped[0]?.reason ?? '世界地图候选未写入目标节点。')
       }
-      evidence = await currentEvidence(input.scope, candidate)
+      evidence = await currentEvidence(input.scope, candidate, frozenWorldMapInputBudgetV1(snapshot))
     }
     if (!evidence.expectedMatches) {
       await pauseUnsafeRun(input.scope, snapshot, 'world-map-formal-state-diverged')
@@ -625,7 +707,7 @@ export async function adoptWorldMapConfigCandidateV1(input: {
     await input.onDurableBoundary?.('adoption.committed', snapshot)
   }
 
-  evidence = await currentEvidence(input.scope, candidate)
+  evidence = await currentEvidence(input.scope, candidate, frozenWorldMapInputBudgetV1(snapshot))
   if (!evidence.expectedMatches || !evidence.sourceFresh || !evidence.nodeNameFresh || !evidence.promptFresh) {
     await pauseUnsafeRun(input.scope, snapshot, 'world-map-terminal-evidence-stale')
     throw new Error('正式写入后地图配置、来源、节点名或 Prompt 变化，本次回执不会通过终验。')

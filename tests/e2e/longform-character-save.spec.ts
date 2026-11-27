@@ -1,3 +1,4 @@
+import { installBrowserServiceCapacityFixtureV1 } from './helpers/browser-ai-config'
 import { expect, test, type Page } from '@playwright/test'
 import { createLongform } from './helpers/product-entry'
 import { openLongformLeaf } from './helpers/longform-navigation'
@@ -5,7 +6,11 @@ import { CHARACTER_DIMENSIONS } from '../../src/lib/character/character-dimensio
 
 async function createCharacter(page: Page, weight = '主要') {
   await page.addInitScript(() => localStorage.setItem('storyforge_guide_completed', 'e2e'))
-  await page.route(/^https?:\/\//, route => ['127.0.0.1', 'localhost'].includes(new URL(route.request().url()).hostname) ? route.continue() : route.abort())
+  await page.route(/^https?:\/\//, route => {
+    const url = new URL(route.request().url())
+    if (url.hostname === 'character-terminal.invalid' && url.pathname === '/api/ps') return route.fallback()
+    return ['127.0.0.1', 'localhost'].includes(url.hostname) ? route.continue() : route.abort()
+  })
   await createLongform(page, '角色写入与归属隔离验收')
   const projectId = Number(new URL(page.url()).pathname.match(/workspace\/(\d+)/)![1])
   await openLongformLeaf(page, '角色生成'); await expect(page).toHaveURL(/module=characters/)
@@ -151,6 +156,7 @@ test('an untouched invalid character field preserves its raw data and allows nav
 
 test('rejecting the last generated character closes its durable run and survives reload', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('storyforge-ai-config', JSON.stringify({ provider: 'ollama', model: 'isolated-character', baseUrl: 'https://character-terminal.invalid/v1', maxTokens: 4000, contextWindow: 64000 })))
+  await installBrowserServiceCapacityFixtureV1(page, { provider: 'ollama', baseUrl: 'https://character-terminal.invalid/v1', model: 'isolated-character' }, 64000)
   const projectId = await createCharacter(page)
   let calls = 0
   await page.route('https://character-terminal.invalid/v1/chat/completions', async route => {

@@ -30,6 +30,12 @@ const entrypoints = [
   'src/lib/agent/index.ts',
   // 064 F0 is a headless target-conflict contract; durable/UI admission joins in a later slice.
   'src/lib/agent/candidate-target-scope.ts',
+  // 037-PROTO retains this independently tested HTML editing boundary for the
+  // private editor preview. It has no production mount or persistence authority.
+  'src/lib/editor/authoring-rich-text-session.ts',
+  // 061-A0 exposes pure portable-root/review parsing for backup tooling. Restore
+  // and UI integration remain gated; declaring this API does not enable either.
+  'src/lib/export/workspace-backup-root.ts',
   // 035 independently reviewed Work-cover foundation: upload decoding, atomic
   // Blob/Asset persistence and Draft CAS. Remove after the card input is wired.
   'src/lib/work-cover/assets.ts',

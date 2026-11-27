@@ -1,5 +1,5 @@
 import registryJson from './ai-entry-registry.json'
-import { AGENT_SKILL_BY_ID, type AgentSkillDefinitionV1 } from './skill-registry'
+import { AGENT_SKILL_BY_ID, assertProseTaskProfileV2, type AgentSkillDefinitionV1 } from './skill-registry'
 import {
   chat,
   streamChat,
@@ -9,6 +9,7 @@ import {
   type ChatRequestOptions,
   type ChatResult,
   type StreamResult,
+  type BoundPreparedAIRequestV2,
 } from '../ai/client'
 import type { AIConfig, ChatMessage } from '../types'
 import type { AgentRunFormalAIEntryBindingV1 } from '../types/agent-run'
@@ -369,6 +370,15 @@ export async function executeFrozenFormalImagePreviewV1<T>(
   return invoke()
 }
 
+/** Host-only chapter execution, carried intact from durable preparation to the
+ * existing generation node/hook. It grants no additional context or writes. */
+export interface PreparedChapterStreamV2 {
+  signal?: AbortSignal
+  binding: AgentRunFormalAIEntryBindingV1
+  skill: AgentSkillDefinitionV1
+  options: ChatRequestOptions & { preparedRequestV2: BoundPreparedAIRequestV2 }
+}
+
 export async function* streamRegisteredAIEntryV1(
   messages: ChatMessage[],
   config: AIConfig,
@@ -376,7 +386,23 @@ export async function* streamRegisteredAIEntryV1(
   signal?: AbortSignal,
   result?: StreamResult,
   frozenResolution?: AIRequestConfigResolution,
+  prepared?: PreparedChapterStreamV2,
 ): AsyncGenerator<string> {
-  if (assertFormalAIEntryCallV1(meta).outputModality !== undefined) fail(`${meta.formalEntryId} 音频入口不得借用文本模型执行器`)
+  if (prepared) {
+    if (!assertProseTaskProfileV2(prepared.skill)) fail('正文新入口的 Skill profile 不匹配。')
+    const binding = await assertFormalAIEntrySnapshotIntegrityV1(prepared.binding, new Map([[prepared.skill.id, prepared.skill]]))
+    const continuing = meta.formalEntryId === 'prose.chapter.continue.v2'
+    if (!['prose.chapter.generate.v2', 'prose.chapter.continue.v2'].includes(meta.formalEntryId)
+      || binding.entryId !== meta.formalEntryId || binding.skillId !== (continuing ? 'prose.continue.v2' : 'prose.generate.v2')
+      || prepared.skill.id !== binding.skillId || prepared.skill.requestPolicy !== 'task-request-v2'
+      || !binding.categories.includes(meta.category ?? '') || binding.outputModality !== undefined
+      || !binding.allowedCallers.includes('src/lib/generation/chapter-generation-node.ts')
+      || !prepared.options.preparedRequestV2 || !frozenResolution) fail('正文新入口需要准确的冻结 Skill、调用方与完整请求。')
+    yield* streamChat(messages, config, signal, result, meta, frozenResolution, prepared.options)
+    return
+  }
+  const entry = assertFormalAIEntryCallV1(meta)
+  if (['prose.chapter.generate.v2', 'prose.chapter.continue.v2'].includes(entry.entryId)) fail('正文新入口缺少冻结完整请求。')
+  if (entry.outputModality !== undefined) fail(`${meta.formalEntryId} 音频入口不得借用文本模型执行器`)
   yield* streamChat(messages, config, signal, result, meta, frozenResolution)
 }

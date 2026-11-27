@@ -108,6 +108,7 @@ for (const choice of ['close', 'escape', 'already-backed-up', 'backup-now'] as c
       })
       const originalOther = await protectedManuscript(page, seeded.other.projectId)
       const before = await databaseBytes(page)
+      await targetCard.getByLabel('更多操作：QUALITY100 待删除原稿', { exact: true }).click()
       await targetCard.getByRole('button', { name: '删除作品', exact: true }).click()
       const first = page.getByRole('dialog', { name: '危险操作:删除项目', exact: true })
       await expect(first).toBeVisible()

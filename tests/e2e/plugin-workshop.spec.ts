@@ -190,9 +190,9 @@ test('first-run examples create separate workspaces with real composed plugins',
 test('independent AI plugin keeps editable candidates and terminal history after plugin removal', async ({ page }) => {
   await page.addInitScript(() => {
   })
-  registerBrowserFixtureAIConfigV1(page, { provider: 'openai', baseUrl: 'https://plugin-ai.invalid/v1', model: 'gpt-4o', temperature: 0.2, maxTokens: 4000, apiKey: 'isolated-test-key' })
+  registerBrowserFixtureAIConfigV1(page, { provider: 'custom', baseUrl: 'https://plugin-ai.invalid/v1', model: 'gpt-4o', temperature: 0.2, maxTokens: 4000, apiKey: 'isolated-test-key' }, { serviceContextWindow: 64000 })
   let calls = 0
-  await page.route('https://plugin-ai.invalid/**',async route => {
+  await page.route('https://plugin-ai.invalid/v1/chat/completions',async route => {
     calls++
     expect(JSON.stringify(route.request().postDataJSON())).toContain('构思')
     await route.fulfill({json:{choices:[{message:{role:'assistant',content:JSON.stringify({title:'灯塔的选择',premise:'守灯人收到最后一封信。',turn:'她决定公开航线。'})},finish_reason:'stop'}],usage:{prompt_tokens:100,completion_tokens:100,total_tokens:200}}})
@@ -351,6 +351,7 @@ test('standard plugin composition keeps prose input responsive without repeated 
  await gotoWithBrowserFixtureAIConfigV1(page, `./workspace/${project}?module=outline`)
  await page.getByRole('navigation',{name:'长篇工作台二级导航'}).getByRole('button',{name:'大纲与章纲',exact:true}).click()
  await page.getByRole('button',{name:'添加卷',exact:true}).click();await page.getByRole('button',{name:'添加章节',exact:true}).click();await page.getByTitle('编辑章节',{exact:true}).click()
+  await page.getByRole('group', { name: '编辑模式', exact: true }).getByRole('button', { name: '富文本', exact: true }).click()
  const editor=page.locator('.tiptap-editor');await expect(editor).toBeVisible();await editor.fill('灯塔的光越过海雾。'.repeat(300))
  await page.evaluate(()=>{
   const records={frames:[] as number[],longTasks:[] as number[]};Reflect.set(window,'sfPluginInputMetrics',records)

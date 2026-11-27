@@ -26,7 +26,7 @@ vi.mock('../../src/lib/outline/harness', () => ({
 
 import { useOutlineBatchGeneration } from '../../src/components/outline/useOutlineBatchGeneration'
 
-globalThis.IS_REACT_ACT_ENVIRONMENT = true
+Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
 
 function outlineNode(id: number, type: OutlineNode['type'], parentId: number | null, title: string, order = 0): OutlineNode {
   return {
@@ -93,7 +93,7 @@ async function mount(options: Parameters<typeof useOutlineBatchGeneration>[0], s
   return host
 }
 
-function options(patch: Partial<Parameters<typeof useOutlineBatchGeneration>[0]> = {}) {
+function options(patch: Partial<Parameters<typeof useOutlineBatchGeneration>[0]> = {}): Parameters<typeof useOutlineBatchGeneration>[0] {
   const volumes = [
     { ...outlineNode(1, 'volume', null, '第一卷'), worldGroupId: 11 },
     { ...outlineNode(2, 'volume', null, '第二卷', 1), worldGroupId: 22 },

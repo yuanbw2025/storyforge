@@ -147,8 +147,12 @@ export function readStaticContextSources(sourcePath) {
     const selectionMetadata = explicitSelectionOnly ? { explicitSelectionOnly: true } : {}
     const budgetExpression = property(element, 'budgetTokens', source, key)
     if (budgetExpression.kind === ts.SyntaxKind.NullKeyword) {
-      if (!['referenceDerivedBaseline', 'referenceAnalysisPrivateChunk', 'references'].includes(key) && !expectedVersion) fail(source, budgetExpression, key, 'complete task budget is restricted to registered reference executors')
-      return { key, label: text('label', key), scope: text('scope', key), layer: text('layer', key), budget: key === 'references' ? '按请求容量选读' : '完整任务基线', ...selectionMetadata }
+      // B21a/B20b：manualText 是 L0 全文来源，改为按本次任务的请求预算参与装配，
+      // 不再携带固定 100k 应用额度；请求级准入与总窗口仍约束它。
+      const completeTaskBudgetKeys = ['referenceDerivedBaseline', 'referenceAnalysisPrivateChunk', 'references', 'manualText']
+      if (!completeTaskBudgetKeys.includes(key) && !expectedVersion) fail(source, budgetExpression, key, 'complete task budget is restricted to registered reference executors')
+      return { key, label: text('label', key), scope: text('scope', key), layer: text('layer', key),
+        budget: key === 'references' ? '按请求容量选读' : key === 'manualText' ? '按任务请求预算全文交付' : '完整任务基线', ...selectionMetadata }
     }
     const budget = number(source, budgetExpression, key, new Set())
     if (!Number.isSafeInteger(budget) || budget <= 0) fail(source, budgetExpression, key, 'budget must be a positive safe integer')

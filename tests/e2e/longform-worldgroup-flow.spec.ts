@@ -23,7 +23,9 @@ async function origin(page: Page, value?: string) {
   if (value !== undefined) {
     await page.locator('div.cursor-text:visible').first().click()
     const input = page.locator('textarea:visible').first()
-    await input.fill(value); await input.press('Tab'); await expect(input).not.toBeVisible()
+    await input.fill(value)
+    await page.getByRole('heading', { name: /世界来源/ }).click()
+    await expect(input).not.toBeVisible()
   }
   return page.locator('div.cursor-text:visible').first()
 }

@@ -5,7 +5,7 @@ import HistoryOverviewTab from '../../src/components/history/HistoryOverviewTab'
 import HistoryKeywordCard from '../../src/components/history/HistoryKeywordCard'
 import HistoryTimelineEventCard from '../../src/components/history/HistoryTimelineEventCard'
 import WorldRuleEntryEditor from '../../src/components/worldview/WorldRuleEntryEditor'
-import WorldviewFieldCandidateReview from '../../src/components/worldview/WorldviewFieldCandidateReview'
+import WorldviewFieldCandidateReview, { worldviewReviewSessionKeyV1, type WorldviewReviewViewV1 } from '../../src/components/worldview/WorldviewFieldCandidateReview'
 import CandidateDraftEditor from '../../src/components/agent/CandidateDraftEditor'
 import { inputAreaLayoutV1, worldviewInputAreaFieldV1 } from '../../src/lib/input-area-layout'
 
@@ -36,10 +36,17 @@ async function resize(host: HTMLElement) {
   await act(async () => { handle.focus(); handle.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true })); handle.dispatchEvent(new KeyboardEvent('keyup', { key: 'ArrowDown', bubbles: true })) })
   return { frame, handle }
 }
+let nextCandidateId = 27000
+function syntheticView(candidate: any): WorldviewReviewViewV1 {
+  const identity = { projectId: 1, worldId: 2, workId: 3, worldGroupId: null, field: candidate.payload.worldviewField, eventId: candidate.event.id, conversationId: 4, taskId: candidate.payload.taskId, runId: 5, runStepId: 'worldview-test', runGeneration: 1, skillId: 'world-origin.worldview-field' }
+  return { ...identity, version: 'worldview-review-view-v1', status: 'verified', generation: 1, sessionKey: worldviewReviewSessionKeyV1(identity) }
+}
+async function editMode(host: HTMLElement) { const button = [...host.querySelectorAll('button')].find(item => item.textContent === '编辑候选'); if (button) await act(async () => button.click()) }
 function pending(operation: 'create' | 'expand' | 'rewrite' | 'polish', value: unknown = '完整候选正文') {
+  const id = ++nextCandidateId
   return {
-    event: { id: 17, content: JSON.stringify({ field: typeof value === 'string' ? 'races' : 'divineDesign', value }) },
-    payload: { label: '种族与民族', worldviewField: typeof value === 'string' ? 'races' : 'divineDesign', worldviewFieldOperation: operation, baseSnapshot: { values: { races: '前版正文' } } },
+    event: { id, projectId: 1, workId: 3, conversationId: 4, durableRunId: 5, kind: 'candidate', content: JSON.stringify({ field: typeof value === 'string' ? 'races' : 'divineDesign', value }) },
+    payload: { taskId: `synthetic-${id}`, skillId: 'world-origin.worldview-field', workspaceScope: { projectId: 1, worldId: 2, workId: 3 }, runId: 5, runStepId: 'worldview-test', runGeneration: 1, label: '种族与民族', worldviewField: typeof value === 'string' ? 'races' : 'divineDesign', worldviewFieldOperation: operation, baseSnapshot: { values: { races: '前版正文' } } },
   } as ComponentProps<typeof WorldviewFieldCandidateReview>['candidate']
 }
 const lane = { candidate: null, runId: null, busy: false, message: null, unsafeRunId: null, adoptionPending: false }
@@ -101,7 +108,8 @@ describe('047 actual consumers keep their content authority', () => {
   })
   it.each(['create', 'expand', 'rewrite', 'polish'] as const)('keeps %s worldview candidate editing, original readonly state, and capture guards', async operation => {
     const candidate = pending(operation), update = vi.fn(), invalid = vi.fn(), snapshot = JSON.stringify(candidate)
-    const ui = await mount(<WorldviewFieldCandidateReview candidate={candidate} busy={false} onUpdate={update} onInvalidEdit={invalid} resizableInputs />)
+    const ui = await mount(<WorldviewFieldCandidateReview candidate={candidate} viewBinding={syntheticView(candidate)} busy={false} onUpdate={update} onInvalidEdit={invalid} resizableInputs />)
+    await editMode(ui.host)
     const editor = ui.host.querySelector<HTMLTextAreaElement>('textarea[aria-label="种族与民族候选内容"]')!
     const original = ui.host.querySelector<HTMLTextAreaElement>('textarea[aria-label="种族与民族原文"]')
     if (original) expect(original.readOnly).toBe(true)
@@ -114,24 +122,28 @@ describe('047 actual consumers keep their content authority', () => {
     await edit(editor, '作者修改候选')
     expect(update).toHaveBeenCalledExactlyOnceWith(JSON.stringify({ field: 'races', value: '作者修改候选' }, null, 2), '作者修改候选')
   })
-  it('preserves actual candidate scroll refs and busy controls', async () => {
+  it('preserves actual candidate ref and busy controls with one shared comparison scroller', async () => {
     const candidate = pending('expand'), update = vi.fn()
-    const ui = await mount(<WorldviewFieldCandidateReview candidate={candidate} busy onUpdate={update} resizableInputs />)
-    const left = ui.host.querySelector<HTMLTextAreaElement>('textarea[aria-label="种族与民族原文"]')!, right = ui.host.querySelector<HTMLTextAreaElement>('textarea[aria-label="种族与民族候选内容"]')!
-    expect(right.disabled).toBe(true); expect(left.readOnly).toBe(true)
-    for (const area of [left, right]) { Object.defineProperty(area, 'scrollHeight', { value: 1000 }); Object.defineProperty(area, 'clientHeight', { value: 200 }) }
+    const ui = await mount(<WorldviewFieldCandidateReview candidate={candidate} viewBinding={syntheticView(candidate)} busy onUpdate={update} resizableInputs />)
+    const right = ui.host.querySelector<HTMLTextAreaElement>('textarea[aria-label="种族与民族候选内容"]')!
+    expect(right.disabled).toBe(true)
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 10)) })
+    const scroller = ui.host.querySelector<HTMLElement>('[data-diff-scroller]')!
+    expect(scroller).not.toBeNull(); expect(ui.host.querySelectorAll('[data-diff-scroller]')).toHaveLength(1)
+    expect(ui.host.querySelector('textarea[aria-label="种族与民族原文"]')).toBeNull()
     await resize(ui.host)
-    await act(async () => { left.scrollTop = 400; left.dispatchEvent(new Event('scroll', { bubbles: true })) })
-    expect(right.scrollTop).toBe(400); expect(update).not.toHaveBeenCalled()
+    await act(async () => { scroller.scrollTop = 400; scroller.dispatchEvent(new Event('scroll', { bubbles: true })) })
+    expect(scroller.scrollTop).toBe(400); expect(update).not.toHaveBeenCalled(); expect(right.disabled).toBe(true)
   })
   it('uses finite json/raw aliases without bypassing invalid candidate guards', async () => {
     const update = vi.fn(), invalid = vi.fn(), candidate = pending('create', { hasDivinity: false, divineRank: '', divineNames: '', divineRules: '' })
-    const json = await mount(<WorldviewFieldCandidateReview candidate={candidate} busy={false} onUpdate={update} onInvalidEdit={invalid} resizableInputs />)
+    const json = await mount(<WorldviewFieldCandidateReview candidate={candidate} viewBinding={syntheticView(candidate)} busy={false} onUpdate={update} onInvalidEdit={invalid} resizableInputs />)
     expect(json.host.querySelector('[data-input-area-layout]')!.getAttribute('data-input-area-layout')).toBe('world.divine/json')
     await edit(json.host.querySelector('textarea')!, '{')
     expect(update).not.toHaveBeenCalled(); expect(invalid).toHaveBeenCalledWith('{', expect.stringContaining('JSON'))
     candidate.event.content = '历史损坏候选'
-    const raw = await mount(<WorldviewFieldCandidateReview candidate={candidate} busy={false} onUpdate={update} onInvalidEdit={invalid} resizableInputs />)
+    candidate.event.id = ++nextCandidateId; candidate.payload.taskId = `synthetic-${candidate.event.id}` // independent historical raw fixture
+    const raw = await mount(<WorldviewFieldCandidateReview candidate={candidate} viewBinding={syntheticView(candidate)} busy={false} onUpdate={update} onInvalidEdit={invalid} resizableInputs />)
     expect(raw.host.querySelector('[data-input-area-layout]')!.getAttribute('data-input-area-layout')).toBe('world.divine/raw')
   })
   it('does not infer StoryCore admission from skillId and keeps the exact serialized content edit', async () => {

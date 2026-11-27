@@ -96,6 +96,18 @@ async function readEvidenceRunV1(scope: WorkspaceScope, runId: number): Promise<
   return readAgentRunByOwnerV1(scope, runId)
 }
 
+/** Chapter length revisions reuse a step/attempt in a new, explicitly bound
+ * contract generation. Evidence uniqueness/order is generation-local; the full
+ * immutable event history remains on every returned Run snapshot. */
+function currentEvidenceEvents(snapshot: AgentRunSnapshotV1, sourceGeneration?: number) {
+  const chapterV4 = snapshot.contract.version === 3 && snapshot.contract.executionBindings.length === 1
+    && ['prose.generate.v2', 'prose.continue.v2'].includes(snapshot.contract.executionBindings[0].skillId)
+    && snapshot.contract.verificationPlan.some(step => step.verifier === 'prose-generation-terminal-v4-task-length')
+  if (sourceGeneration !== undefined && (!chapterV4 || !Number.isSafeInteger(sourceGeneration) || sourceGeneration < 1
+    || sourceGeneration > snapshot.projection.generation)) fail('source-generation', '来源代次只适用于准确的正文 V4 已发生请求')
+  return chapterV4 ? snapshot.events.filter(event => event.generation === (sourceGeneration ?? snapshot.projection.generation)) : snapshot.events
+}
+
 function exactPayload(value: unknown): string {
   return typeof value === 'string' ? value : canonicalStringify(value)
 }
@@ -371,7 +383,7 @@ export async function readRunningContextGatewayRequestV1(input: {
   const snapshot = await readEvidenceRunV1(input.scope, input.runId), step = snapshot.projection.steps[input.stepId]
   if (!step || step.status !== 'running' || step.attempt !== input.attempt) fail('running-request', '只读预检必须属于当前running step/attempt')
   const exact = async (kind: 'rendered-request' | 'context-packet') => {
-    const matches = snapshot.events.filter(e => e.type === 'evidence.artifact.recorded' && e.payload.stepId === input.stepId
+    const matches = currentEvidenceEvents(snapshot).filter(e => e.type === 'evidence.artifact.recorded' && e.payload.stepId === input.stepId
       && e.payload.attempt === input.attempt && e.payload.artifactKind === kind)
     if (matches.length !== 1 || matches[0].type !== 'evidence.artifact.recorded') fail('running-request', `原${kind}事件缺失或不唯一`)
     const event = matches[0], body = await readAndVerifyArtifactBodyV1(input.scope.projectId,
@@ -523,25 +535,28 @@ export async function finalizeContextGatewayAttemptEvidenceV1(input: {
     fail('sequence-conflict', '运行已推进，拒绝基于过期 response finalize')
   }
   const boundary = input.executionBoundary ?? { kind: 'model' as const }
-  const requested = snapshot.events.filter(event => boundary.kind === 'model'
+  const requested = currentEvidenceEvents(snapshot).filter(event => boundary.kind === 'model'
     ? event.type === 'model.requested'
       && event.payload.stepId === input.stepId && event.payload.attempt === input.attempt
     : event.type === 'tool.called'
       && event.payload.stepId === input.stepId && event.payload.attempt === input.attempt
       && event.payload.toolName === boundary.toolName)
-  const responded = snapshot.events.filter(event => boundary.kind === 'model'
+  const responded = currentEvidenceEvents(snapshot).filter(event => boundary.kind === 'model'
     ? event.type === 'model.responded'
       && event.payload.stepId === input.stepId && event.payload.attempt === input.attempt
     : event.type === 'tool.returned'
       && event.payload.stepId === input.stepId && event.payload.attempt === input.attempt
       && event.payload.toolName === boundary.toolName)
-  const alreadyAssembled = snapshot.events.some(event => event.type === 'context.assembled'
+  const alreadyAssembled = currentEvidenceEvents(snapshot).some(event => event.type === 'context.assembled'
     && event.payload.stepId === input.stepId && event.payload.attempt === input.attempt)
   if (requested.length !== 1 || responded.length !== 1
-    || snapshot.events.indexOf(responded[0]) <= snapshot.events.indexOf(requested[0])) {
+    || currentEvidenceEvents(snapshot).indexOf(responded[0]) <= currentEvidenceEvents(snapshot).indexOf(requested[0])) {
     fail('execution-boundary', 'finalize 需要唯一且有序的 model 或 deterministic tool 执行边界证据')
   }
   if (alreadyAssembled) fail('duplicate-finalize', '同一 step/attempt 不得重复 finalize')
+  // Exact bodies are intentionally deduplicated across contract generations.
+  // Reuse remains valid only for the same owned Run/step/attempt and only when
+  // the immutable bytes were recorded before this generation's actual request.
   const requestEventIndex = snapshot.events.indexOf(requested[0])
   for (const ref of input.preflight.artifacts) {
     const artifactEventIndex = snapshot.events.findIndex(event => event.type === 'evidence.artifact.recorded'
@@ -609,9 +624,10 @@ export async function readContextGatewayManifestV3ForAttemptV1(input: {
   runId: number
   stepId: string
   attempt: number
+  sourceGeneration?: number
 }): Promise<{ manifest: ContextManifestV3; manifestArtifactHash: string; snapshot: AgentRunSnapshotV1 }> {
   const snapshot = await readEvidenceRunV1(input.scope, input.runId)
-  const assembled = snapshot.events.filter((event): event is Extract<typeof event, { type: 'context.assembled' }> => (
+  const assembled = currentEvidenceEvents(snapshot, input.sourceGeneration).filter((event): event is Extract<typeof event, { type: 'context.assembled' }> => (
     event.type === 'context.assembled'
       && event.payload.stepId === input.stepId && event.payload.attempt === input.attempt
   ))
@@ -674,6 +690,7 @@ export async function verifyContextGatewayCandidateEvidenceV1(input: {
   stepId: string
   attempt: number
   candidateHash: string
+  sourceGeneration?: number
 }): Promise<{
   manifest: ContextManifestV3
   manifestArtifactHash: string
@@ -681,12 +698,12 @@ export async function verifyContextGatewayCandidateEvidenceV1(input: {
 }> {
   const restored = await readContextGatewayManifestV3ForAttemptV1(input)
   const generatedCandidateHash = restored.manifest.candidate.candidateHash
-  const candidateEvents = restored.snapshot.events.filter(event => event.type === 'candidate.persisted'
+  const candidateEvents = currentEvidenceEvents(restored.snapshot).filter(event => event.type === 'candidate.persisted'
     && event.payload.stepId === input.stepId && event.payload.attempt === input.attempt
     && event.payload.candidateHash === generatedCandidateHash)
   if (candidateEvents.length !== 1) fail('candidate-event', '缺少唯一 candidate.persisted 证据')
   let linkedCandidateHash = generatedCandidateHash
-  for (const event of restored.snapshot.events) {
+  for (const event of currentEvidenceEvents(restored.snapshot)) {
     if (event.type !== 'candidate.revised'
       || event.payload.stepId !== input.stepId
       || event.payload.attempt !== input.attempt) continue
@@ -699,7 +716,7 @@ export async function verifyContextGatewayCandidateEvidenceV1(input: {
     fail('candidate-link', '当前 candidateHash 未由 ContextManifestV3 绑定的生成候选连续修订而来')
   }
   const manifestEventIndex = restored.snapshot.events.findIndex(event => event.type === 'context.assembled'
-    && event.payload.stepId === input.stepId && event.payload.attempt === input.attempt)
+    && event.payload.stepId === input.stepId && event.payload.attempt === input.attempt && event.payload.manifestHash === restored.manifest.manifestHash)
   const candidateEventIndex = restored.snapshot.events.indexOf(candidateEvents[0])
   if (manifestEventIndex < 0 || candidateEventIndex <= manifestEventIndex) {
     fail('event-order', 'candidate.persisted 必须发生在 final ContextManifestV3 之后')

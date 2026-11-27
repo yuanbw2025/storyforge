@@ -22,13 +22,18 @@ function exact(value: Record<string, unknown>, keys: readonly string[], label: s
   }
 }
 
-function text(value: unknown, label: string, max = 4_000): string {
-  if (typeof value !== 'string' || !value.trim() || value.length > max) throw new Error(`[short-novel] ${label} 必须是非空文本`)
+/** Non-empty text validation without a per-field character quota: field
+ * length follows the task material. Identity labels (title, stableKey) keep
+ * their short-label bounds because they are structural, not content. */
+function text(value: unknown, label: string, max?: number): string {
+  if (typeof value !== 'string' || !value.trim() || (max != null && value.length > max)) throw new Error(`[short-novel] ${label} 必须是非空文本`)
   return value.trim()
 }
 
-function strings(value: unknown, label: string, max = 20): string[] {
-  if (!Array.isArray(value) || value.length > max || value.some(item => typeof item !== 'string' || !item.trim())) {
+/** Non-empty string arrays without entry-count quotas: list length follows
+ * the manuscript and review findings. */
+function strings(value: unknown, label: string): string[] {
+  if (!Array.isArray(value) || value.some(item => typeof item !== 'string' || !item.trim())) {
     throw new Error(`[short-novel] ${label} 必须是非空文本数组`)
   }
   return value.map(item => item.trim())
@@ -74,7 +79,7 @@ export function parseShortNovelStoryDesignV1(value: unknown): ShortNovelStoryDes
     protagonist: text(row.protagonist, 'StoryDesign.protagonist'),
     desire: text(row.desire, 'StoryDesign.desire'),
     pressure: text(row.pressure, 'StoryDesign.pressure'),
-    escalation: strings(row.escalation, 'StoryDesign.escalation', 8),
+    escalation: strings(row.escalation, 'StoryDesign.escalation'),
     irreversibleTurn: text(row.irreversibleTurn, 'StoryDesign.irreversibleTurn'),
     climaxChoice: text(row.climaxChoice, 'StoryDesign.climaxChoice'),
     endingImage: text(row.endingImage, 'StoryDesign.endingImage'),
@@ -107,7 +112,7 @@ export function parseShortNovelChapterPlanV1(value: unknown): ShortNovelChapterP
 
 export function parseShortNovelReviewV1(value: unknown): ShortNovelReviewV1 {
   const row = record(value, 'Review'); exact(row, REVIEW_KEYS, 'Review')
-  if (row.version !== 1 || !Array.isArray(row.issues) || row.issues.length > 40) throw new Error('[short-novel] Review 结构无效')
+  if (row.version !== 1 || !Array.isArray(row.issues)) throw new Error('[short-novel] Review 结构无效')
   const seen = new Set<string>()
   const issues = row.issues.map((item, index) => {
     const issue = record(item, `Review.issues[${index}]`); exact(issue, ISSUE_KEYS, `Review.issues[${index}]`)
@@ -121,20 +126,20 @@ export function parseShortNovelReviewV1(value: unknown): ShortNovelReviewV1 {
       stableKey,
       severity: issue.severity as ShortNovelReviewV1['issues'][number]['severity'],
       category: issue.category as ShortNovelReviewV1['issues'][number]['category'],
-      chapterKeys: strings(issue.chapterKeys, `Review.issues[${index}].chapterKeys`, 8),
+      chapterKeys: strings(issue.chapterKeys, `Review.issues[${index}].chapterKeys`),
       evidence: text(issue.evidence, `Review.issues[${index}].evidence`),
       problem: text(issue.problem, `Review.issues[${index}].problem`),
       suggestion: text(issue.suggestion, `Review.issues[${index}].suggestion`),
       status: 'open' as const,
     }
   })
-  return { version: 1, summary: text(row.summary, 'Review.summary'), strengths: strings(row.strengths, 'Review.strengths', 12), issues }
+  return { version: 1, summary: text(row.summary, 'Review.summary'), strengths: strings(row.strengths, 'Review.strengths'), issues }
 }
 
 export function parseShortNovelChapterDraftV1(value: unknown): ShortNovelChapterDraftV1 {
   const row = record(value, 'ChapterDraft'); exact(row, DRAFT_KEYS, 'ChapterDraft')
   if (row.version !== 1 || !/^chapter-[1-8]$/.test(String(row.chapterKey))) throw new Error('[short-novel] ChapterDraft identity 无效')
-  return { version: 1, chapterKey: String(row.chapterKey), title: text(row.title, 'ChapterDraft.title', 160), content: text(row.content, 'ChapterDraft.content', 120_000) }
+  return { version: 1, chapterKey: String(row.chapterKey), title: text(row.title, 'ChapterDraft.title', 160), content: text(row.content, 'ChapterDraft.content') }
 }
 
 export const SHORT_NOVEL_CONTRACT_KEYS = { BRIEF_KEYS, DESIGN_KEYS, PLAN_KEYS, REVIEW_KEYS, ISSUE_KEYS, DRAFT_KEYS }

@@ -109,12 +109,11 @@ function extractJsonObject(raw: string): Record<string, unknown> | null {
   }
 }
 
-function strings(value: unknown, max = 24): string[] {
+function strings(value: unknown): string[] {
   if (!Array.isArray(value)) return []
   return value
     .map(item => String(item ?? '').trim())
     .filter(Boolean)
-    .slice(0, max)
 }
 
 function optionalString(value: unknown): string | undefined {
@@ -183,12 +182,10 @@ function reconciliationItems(
       const evidenceQuotes = rawQuotes
         .map(quote => locateEvidenceQuote(normalizedText, quote))
         .filter((quote): quote is NonNullable<typeof quote> => quote !== null)
-        .slice(0, 6)
       if (!evidenceQuotes.length) return null
       return { text, evidenceQuotes }
     })
     .filter((item): item is NonNullable<typeof item> => item !== null)
-    .slice(0, 16)
 }
 
 export function parseChapterMemoryOutput(args: {
@@ -214,7 +211,6 @@ export function parseChapterMemoryOutput(args: {
   const evidenceQuotes = rawQuotes
     .map(quote => locateEvidenceQuote(args.normalizedText, quote))
     .filter((quote): quote is NonNullable<typeof quote> => quote !== null)
-    .slice(0, 24)
 
   let planReconciliation: ChapterPlanReconciliation | undefined
   const rawReconciliation = parsed.planReconciliation

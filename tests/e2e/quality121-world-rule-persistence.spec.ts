@@ -80,7 +80,7 @@ test('世界规则精确保存和刷新；写入失败保稿重试，删除后�
   expect(recovered.profile.globalNote).toBe(deletedDraft)
   const settings = page.getByRole('navigation', { name: '长篇一级导航' }).getByRole('button', { name: '通用设置', exact: true })
   await settings.click()
-  await expect(page.getByRole('heading', { name: '⚖️ 真实与幻想', exact: true })).toBeVisible()
+  await expect(page).toHaveURL(/module=world-rules/)
   await expect(note).toHaveValue(deletedDraft)
   expect(await read()).toBeUndefined()
   await page.getByRole('button', { name: '放弃未保存规则输入', exact: true }).click()

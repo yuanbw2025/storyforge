@@ -112,6 +112,12 @@ export interface PreparedStoryCoreCopilot {
   targetField: StoryCoreField
   label: string
   modelIdentity: MasterCandidateModelIdentityV1
+  /** Team-budget reservation forecast — an accounting number, never a
+   * dispatch cap. Explicit author limits lead; the capacity-derived
+   * outputBudget follows (B20a: this is the same number old runs reserved,
+   * kept so the real pre-dispatch budget gate and restored-run accounting
+   * stay unchanged while the wire dispatch no longer projects it). */
+  outputForecastTokens: number
   promptExecutionEvidence?: PromptExecutionEvidenceV1
   contextGatewayExecution?: ContextGatewayExecutionV1
 }
@@ -410,6 +416,9 @@ export async function prepareStoryCoreCopilot(
     useAIConfigStore.getState().config,
     { category: routingCategory },
   ).config)
+  // B20a: capacity-derived budgets legitimately bound context assembly (input
+  // side, evidence-based); only the wire dispatch no longer projects
+  // outputBudget as an explicit quota (see createStoryCoreCopilotNode).
   const capacityBudget = modelInputBudgetV1(getModelCapacityV1(config), input.generationOverrides?.maxTokens ?? config.maxTokens)
   const contextProfile = input.contextProfile ?? 'balanced'
   const contextPolicy = resolveAgentContextPolicy(skill.contextTaskKind, contextProfile)
@@ -521,7 +530,6 @@ export async function prepareStoryCoreCopilot(
       ],
     })
     const generationOverrides = {
-      maxTokens: capacityBudget.outputBudget,
       temperature: 0.5,
       ...rendered.generationOverrides,
       ...input.generationOverrides,
@@ -546,6 +554,11 @@ export async function prepareStoryCoreCopilot(
     targetField,
     label: STORY_CORE_FIELD_LABELS[targetField],
     modelIdentity: { provider: config.provider, model: config.model },
+    // Accounting forecast only (see PreparedStoryCoreCopilot): explicit author
+    // limit leads, capacity-derived outputBudget follows — the exact value
+    // old runs reserved, so the pre-dispatch budget gate and restored-run
+    // accounting are unchanged while dispatch carries no application quota.
+    outputForecastTokens: input.generationOverrides?.maxTokens ?? capacityBudget.outputBudget,
     promptExecutionEvidence: nodeInput.promptExecutionEvidence,
     contextGatewayExecution,
   }
@@ -575,8 +588,14 @@ export function createStoryCoreCopilotNode(
     const meta = {
       category: input.routingCategory,
       projectId: input.projectId,
+      // B20a: only an explicit author limit caps the wire output; without one,
+      // dispatch follows the bound connection's evidenced capacity. The old
+      // path projected modelInputBudgetV1(...).outputBudget — a capacity
+      // derivative, not an author limit — as an explicit quota on every call.
       configOverrides: {
-        maxTokens: input.generationOverrides?.maxTokens ?? modelInputBudgetV1(getModelCapacityV1(input.config), input.config.maxTokens).outputBudget,
+        ...(input.generationOverrides?.maxTokens != null
+          ? { maxTokens: input.generationOverrides.maxTokens }
+          : {}),
         temperature: input.generationOverrides?.temperature ?? 0.5,
       },
       contextOverflowPolicy: 'reject' as const,

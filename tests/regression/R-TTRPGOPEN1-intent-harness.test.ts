@@ -9,6 +9,7 @@ import { generateTtrpgOpenIntentCandidateV1, executeTtrpgOpenIntentRequestV1,
   readTtrpgOpenIntentCandidateV1, recoverTtrpgOpenRuntimeCandidateV1 } from '../../src/lib/ttrpg/open-intent-harness'
 import { prepareTtrpgOpenIntentInputV1 } from '../../src/lib/ttrpg/open-intent-input'
 import { startTtrpgOpenEpochV1, startTtrpgOpenIntentCandidateOperationV1, changeTtrpgSafetyStatus } from '../../src/lib/ttrpg/runtime-commands'
+import { parseTtrpgRuntimeStateV2 } from '../../src/lib/ttrpg/open-runtime-contract'
 import { readProductRuntimeState } from '../../src/lib/product/runtime-core'
 import { readInstanceAgentRunV1 } from '../../src/lib/agent/run/event-store'
 import { readAgentRunArtifactExactV1 } from '../../src/lib/memory/artifact-store'
@@ -50,15 +51,22 @@ describe('R-TTRPGOPEN1 governed one-send intent transport and recoverable candid
     const {candidateHash,...body}=generated.candidate
     expect(await hashCanonicalValue(body)).toBe(candidateHash)
     expect(await readAgentRunArtifactExactV1({projectId:fixture.scope.projectId,artifactKind:'raw-response',contentHash:generated.candidate.rawResponseHash})).toBe(raw)
-    // This patch preserves retained bytes, not the old semantic parser/budget
-    // policy. A large invalid/non-admissible result must still never act.
-    expect(generated.candidate.intent).toBeNull();expect(generated.candidate.artifact.status).toBe('blocked')
-    expect(generated.candidate.artifact.issues.some(i=>i.code==='ttrpg-open-intent-protocol')).toBe(true)
-    expect(generated.candidate.artifact.validFragments).toEqual([]);expect(generated.candidate.artifact.rejectedFragments).toEqual([])
+    // B35/B39：完整合法 JSON 不再因固定字符帽被拒；超大响应仍受冻结预算约束，
+    // 且不执行任何行动。非法文本仍按协议阻断。
+    if (kind === 'invalid-text') {
+      expect(generated.candidate.intent).toBeNull();expect(generated.candidate.artifact.status).toBe('blocked')
+      expect(generated.candidate.artifact.issues.some(i=>i.code==='ttrpg-open-intent-protocol')).toBe(true)
+      expect(generated.candidate.artifact.validFragments).toEqual([])
+    } else {
+      expect(generated.candidate.intent?.goal).toBeTruthy()
+      expect(generated.candidate.artifact.issues.some(i=>i.code==='ttrpg-open-intent-protocol')).toBe(false)
+      expect(generated.candidate.artifact.issues.some(i=>i.code==='ttrpg-open-intent-budget')).toBe(true)
+    }
+    expect(generated.candidate.artifact.rejectedFragments).toEqual([])
     await expect(readTtrpgOpenIntentCandidateV1({...read,viewerKey:'viewer.not-the-author'})).rejects.toThrow()
     const after=await readProductRuntimeState(fixture.sessionId)
     expect(after.entities).toEqual(before.entities);expect(after.ttrpg!.checks).toEqual(before.ttrpg!.checks)
-    expect(after.ttrpg!.openRun!.worldTime).toEqual(before.ttrpg!.openRun!.worldTime);expect(after.ttrpg!.openRun!.operations).toEqual([])
+    expect(parseTtrpgRuntimeStateV2(after.ttrpg)!.openRun!.worldTime).toEqual(parseTtrpgRuntimeStateV2(before.ttrpg)!.openRun!.worldTime);expect(parseTtrpgRuntimeStateV2(after.ttrpg)!.openRun!.operations).toEqual([])
     await expect(startTtrpgOpenIntentCandidateOperationV1({...await openEnvelopeV1(fixture.sessionId,'fullraw.invalid-adopt'),...read,candidateHash,decision:'start'})).rejects.toThrow()
     db.close();await db.open()
     expect(await readTtrpgOpenIntentCandidateV1(read)).toEqual(generated.candidate)
@@ -67,7 +75,7 @@ describe('R-TTRPGOPEN1 governed one-send intent transport and recoverable candid
     expect(runAI).toHaveBeenCalledOnce()
     const snapshot=await readInstanceAgentRunV1(fixture.scope,generated.prepared.runId)
     expect(snapshot.events.some(e=>e.type==='confirmation.recorded'||e.type==='runtime.candidate.adopted')).toBe(false)
-    expect((await readProductRuntimeState(fixture.sessionId)).ttrpg!.openRun!.operations).toEqual([])
+    expect(parseTtrpgRuntimeStateV2((await readProductRuntimeState(fixture.sessionId)).ttrpg)!.openRun!.operations).toEqual([])
   })
 
   it('keeps a genuinely retained legacy clipped candidate and its saved hash unchanged instead of regenerating it with the new full-text default',async()=>{
@@ -128,8 +136,8 @@ describe('R-TTRPGOPEN1 governed one-send intent transport and recoverable candid
       artifactKind: 'raw-response', contentHash: generated.candidate.rawResponseHash }))
     const after = await readProductRuntimeState(fixture.sessionId)
     expect(after.entities).toEqual(before.entities)
-    expect(after.ttrpg!.openRun!.worldTime).toEqual(before.ttrpg!.openRun!.worldTime)
-    expect(after.ttrpg!.openRun!.coordination.calls[0].usage!.actualCostUsd).toBeNull()
+    expect(parseTtrpgRuntimeStateV2(after.ttrpg)!.openRun!.worldTime).toEqual(parseTtrpgRuntimeStateV2(before.ttrpg)!.openRun!.worldTime)
+    expect(parseTtrpgRuntimeStateV2(after.ttrpg)!.openRun!.coordination.calls[0].usage!.actualCostUsd).toBeNull()
     await db.agentRunCheckpoints.where('runId').equals(generated.prepared.runId).delete()
     db.close(); await db.open()
     expect(await readTtrpgOpenIntentCandidateV1(resume(generated.prepared))).toEqual(generated.candidate)
@@ -138,18 +146,20 @@ describe('R-TTRPGOPEN1 governed one-send intent transport and recoverable candid
     const snapshot = await readInstanceAgentRunV1(fixture.scope, generated.prepared.runId)
     expect(snapshot.events.some(event => event.type === 'confirmation.recorded' || event.type === 'runtime.candidate.adopted')).toBe(false)
   })
-  it('keeps an overlong declared assumption in raw evidence and a repair candidate without throwing or sending again', async () => {
+  it('retains long declared assumptions as complete content without throwing or sending again (B35/B39)', async () => {
     const { fixture, input, resume } = await setup(), raw = JSON.stringify({ ...JSON.parse(output), declaredAssumptions: ['a'.repeat(2001)] })
     const runAI = vi.fn(async () => raw), before = await readProductRuntimeState(fixture.sessionId)
     const generated = await generateTtrpgOpenIntentCandidateV1({ ...input, runAI })
-    expect(generated.candidate.intent).toBeNull(); expect(generated.candidate.artifact.assumptions).toEqual([])
+    // B35：语义内容不再设固定文字帽；长声明完整进入候选与假设证据。
+    expect(generated.candidate.intent?.declaredAssumptions).toEqual(['a'.repeat(2001)])
+    expect(generated.candidate.artifact.assumptions.map(row => row.text)).toEqual(['a'.repeat(2001)])
     expect(generated.candidate.artifact.originalText).toBe(raw)
-    expect(generated.candidate.artifact.issues.some(row => row.code === 'ttrpg-open-intent-protocol')).toBe(true)
+    expect(generated.candidate.artifact.issues.some(row => row.code === 'ttrpg-open-intent-protocol')).toBe(false)
     expect(await readTtrpgOpenIntentCandidateV1(resume(generated.prepared))).toEqual(generated.candidate)
     expect(await executeTtrpgOpenIntentRequestV1({ ...resume(generated.prepared), runAI })).toEqual({ status: 'not-sent' })
     expect(runAI).toHaveBeenCalledTimes(1)
     const after = await readProductRuntimeState(fixture.sessionId)
-    expect(after.entities).toEqual(before.entities); expect(after.ttrpg!.openRun!.worldTime).toEqual(before.ttrpg!.openRun!.worldTime)
+    expect(after.entities).toEqual(before.entities); expect(parseTtrpgRuntimeStateV2(after.ttrpg)!.openRun!.worldTime).toEqual(parseTtrpgRuntimeStateV2(before.ttrpg)!.openRun!.worldTime)
   })
   it.each(['not-json', JSON.stringify({ ...JSON.parse(output), actorKey: 'other-human' }),
     JSON.stringify({ ...JSON.parse(output), targetRefs: ['secret.hidden-owner'] })])('retains invalid raw output with no automatic repair (%s)', async raw => {

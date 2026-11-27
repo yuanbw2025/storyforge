@@ -1,8 +1,10 @@
+import { installBrowserServiceCapacityFixtureV1 } from './helpers/browser-ai-config'
 import { expect, test, type Page } from '@playwright/test'
 import { createLongform } from './helpers/product-entry'
 
 async function setup(page: Page, includeSummary = false) {
   await page.addInitScript(() => localStorage.setItem('storyforge-ai-config', JSON.stringify({ provider: 'ollama', baseUrl: 'https://quality-revision.invalid/v1', model: 'quality-revision-test', maxTokens: 4000, temperature: 0, contextWindow: 128000 })))
+  await installBrowserServiceCapacityFixtureV1(page, { provider: 'ollama', baseUrl: 'https://quality-revision.invalid/v1', model: 'quality-revision-test' }, 128000)
   await createLongform(page, '作者选题修订')
   const target = await page.evaluate(async includeSummary => {
     const imp = new Function('path', 'return import(path)')
@@ -22,7 +24,7 @@ async function setup(page: Page, includeSummary = false) {
 }
 
 function mock(page: Page, state: { calls: any[]; gate?: Promise<void>; removeWholeParagraph?: boolean }, recheckFails = false) {
-  return page.route('https://quality-revision.invalid/**', async route => {
+  return page.route('https://quality-revision.invalid/v1/chat/completions', async route => {
     const body = route.request().postDataJSON(); state.calls.push(body)
     const system = body.messages[0].content
     let report: any

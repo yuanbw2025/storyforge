@@ -11,8 +11,8 @@ for (const rejected of [false, true]) test(`records promises only after review a
   await page.addInitScript(() => {
     localStorage.setItem('storyforge_guide_completed', 'e2e')
   })
-  registerBrowserFixtureAIConfigV1(page, { provider: 'openai', baseUrl: 'https://commitment-test.invalid/v1', model: 'test', maxTokens: 6000, apiKey: 'isolated-test-key' })
-  await page.route('https://commitment-test.invalid/**', async route => {
+  registerBrowserFixtureAIConfigV1(page, { provider: 'custom', baseUrl: 'https://commitment-test.invalid/v1', model: 'test', maxTokens: 6000, apiKey: 'isolated-test-key' }, { serviceContextWindow: 64000 })
+  await page.route('https://commitment-test.invalid/v1/chat/completions', async route => {
           if (await fulfillChatActionChoiceFixture(route)) return
     const messages = route.request().postDataJSON().messages as Array<{content: string}>
     const review = messages[1].content.includes('本次持久化行动候选')

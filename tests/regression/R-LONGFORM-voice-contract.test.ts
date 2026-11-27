@@ -18,6 +18,7 @@ describe('长篇语音有限边界', () => {
   })
   it('朗读去除代码与装饰，明确限制一次长度', () => {
     expect(speechText('**回复** [链接](https://a)\n```json\n{"key":123}\n```')).toBe('回复 链接')
-    expect(speechText('文'.repeat(2100))).toHaveLength(2000)
+    // B40：清理后保留完整文字，不再静默截断（真实上限由协议/显式守卫决定）。
+    expect(speechText('文'.repeat(2100))).toHaveLength(2100)
   })
 })

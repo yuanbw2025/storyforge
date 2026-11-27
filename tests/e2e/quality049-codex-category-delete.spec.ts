@@ -245,6 +245,7 @@ function expectedAfterSystemBootstrap049(before: Record<string, string>, after: 
     }
     expected[table] = JSON.stringify(previous.map((row, index) => {
       const next = current[index]
+      if (JSON.stringify(row) === JSON.stringify(next)) return row
       if (row.scope !== 'system' || typeof row.name !== 'string' || !seedNames.has(row.name)
         || lastSystemRowByName.get(row.name) !== row.id) return row
       if (typeof next.updatedAt !== 'number' || !Number.isFinite(next.updatedAt)

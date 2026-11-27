@@ -416,6 +416,15 @@ export async function selectContextResourcesV1(input: ContextSelectorInputV1): P
     fail('selector-policy-mismatch', 'ContextAccessPolicy.selectorPolicyId 与 task kind 冻结策略不一致')
   }
   const selectorPolicy = getContextSelectorPolicyV1(input.taskKind)
+  const proseTask = input.taskKind === 'agent-prose' && [
+    'skill-prose.generate.v2-prose-task-full-length-v2-gateway-v1',
+    'skill-prose.continue.v2-prose-task-full-length-v2-gateway-v1',
+  ].includes(input.accessPolicy.policyId)
+  const depthFor = (descriptor: ContextResourceDescriptorV1, focused = false) =>
+    proseTask && input.accessPolicy.allowedDepths.includes('full') && descriptor.availableDepths.includes('full')
+      ? 'full' as const : selectDepth(descriptor, input.accessPolicy, focused)
+  const readTokens = (descriptor: ContextResourceDescriptorV1, depth: ContextResourceDepthV1, whole = false) =>
+    estimatedTokens(descriptor, depth, whole || proseTask)
   const mandatoryKeys = sortedKeys(input.mandatoryResourceKeys, 'mandatoryResourceKeys')
   const mandatoryFullKeys = sortedKeys(input.mandatoryFullResourceKeys, 'mandatoryFullResourceKeys')
   const mandatoryOriginalKeys = sortedKeys(input.mandatoryOriginalResourceKeys, 'mandatoryOriginalResourceKeys')
@@ -566,7 +575,7 @@ export async function selectContextResourcesV1(input: ContextSelectorInputV1): P
       ? 'original'
       : mandatoryFullSet.has(entry.descriptor.resourceKey)
         ? 'full'
-      : selectDepth(entry.descriptor, input.accessPolicy, focused)
+      : depthFor(entry.descriptor, focused)
     if (depth === 'full' && !entry.descriptor.availableDepths.includes('full')) {
       fail('full-forbidden', `${entry.descriptor.resourceKey} 不支持完整资源读取`)
     }
@@ -581,7 +590,7 @@ export async function selectContextResourcesV1(input: ContextSelectorInputV1): P
       kind: entry.descriptor.kind,
       category: category(entry.descriptor),
       depth,
-      estimatedTokens: estimatedTokens(entry.descriptor, depth, mandatoryFullSet.has(entry.descriptor.resourceKey)),
+      estimatedTokens: readTokens(entry.descriptor, depth, mandatoryFullSet.has(entry.descriptor.resourceKey)),
       hardRequirement: entry.hard,
       reasonCodes: [...entry.reasons].sort(),
       contentRevision: entry.descriptor.contentRevision,
@@ -599,9 +608,9 @@ export async function selectContextResourcesV1(input: ContextSelectorInputV1): P
       return true
     }
     const automaticCount = [...selected.values()].filter(entry => !entry.hard).length
-    if (automaticCount >= selectorPolicy.maxAutomaticResources) return false
-    const depth = selectDepth(descriptor, input.accessPolicy)
-    const tokens = estimatedTokens(descriptor, depth)
+    if (!proseTask && automaticCount >= selectorPolicy.maxAutomaticResources) return false
+    const depth = depthFor(descriptor)
+    const tokens = readTokens(descriptor, depth)
     if (selectedTokens + tokens > input.budgetTokens) return false
     mark(descriptor, reason, false)
     selectedTokens += tokens
@@ -618,7 +627,7 @@ export async function selectContextResourcesV1(input: ContextSelectorInputV1): P
 
   const categoryTargets = Object.fromEntries(CONTEXT_SELECTOR_CATEGORIES_V1.map(item => [
     item,
-    Math.floor(input.budgetTokens * selectorPolicy.categoryShares[item]),
+    proseTask ? 0 : Math.floor(input.budgetTokens * selectorPolicy.categoryShares[item]),
   ])) as Record<ContextSelectorCategoryV1, number>
   for (const [kind, minimum] of Object.entries(input.accessPolicy.perKindMinimumTokens ?? {})) {
     const selectorCategory = CATEGORY_BY_KIND[kind as ContextResourceKind]
@@ -629,7 +638,7 @@ export async function selectContextResourcesV1(input: ContextSelectorInputV1): P
     .sort(([left], [right]) => left.localeCompare(right))) {
     const pool = available.filter(descriptor => descriptor.kind === kind)
     const availableTokens = pool.reduce((sum, descriptor) => (
-      sum + estimatedTokens(descriptor, selectDepth(descriptor, input.accessPolicy))
+      sum + readTokens(descriptor, depthFor(descriptor))
     ), 0)
     const goal = Math.min(availableTokens, minimum ?? 0)
     let delivered = [...selected.values()]
@@ -642,9 +651,9 @@ export async function selectContextResourcesV1(input: ContextSelectorInputV1): P
     }
   }
 
-  for (const selectorCategory of CONTEXT_SELECTOR_CATEGORIES_V1) {
+  for (const selectorCategory of proseTask ? [] : CONTEXT_SELECTOR_CATEGORIES_V1) {
     const pool = available.filter(descriptor => category(descriptor) === selectorCategory)
-    const availableTokens = pool.reduce((sum, descriptor) => sum + estimatedTokens(descriptor, selectDepth(descriptor, input.accessPolicy)), 0)
+    const availableTokens = pool.reduce((sum, descriptor) => sum + readTokens(descriptor, depthFor(descriptor)), 0)
     const goal = pool.length && availableTokens > 0
       ? Math.min(availableTokens, Math.max(1, categoryTargets[selectorCategory]))
       : 0
@@ -671,9 +680,9 @@ export async function selectContextResourcesV1(input: ContextSelectorInputV1): P
   const categoryBudgets: ContextSelectionCategoryBudgetV1[] = CONTEXT_SELECTOR_CATEGORIES_V1.map(selectorCategory => {
     const pool = available.filter(descriptor => category(descriptor) === selectorCategory)
     const chosen = decisions.filter(decision => decision.category === selectorCategory)
-    const availableTokens = pool.reduce((sum, descriptor) => sum + estimatedTokens(descriptor, selectDepth(descriptor, input.accessPolicy)), 0)
+    const availableTokens = pool.reduce((sum, descriptor) => sum + readTokens(descriptor, depthFor(descriptor)), 0)
     const rawTarget = categoryTargets[selectorCategory]
-    const targetTokens = pool.length && availableTokens > 0
+    const targetTokens = !proseTask && pool.length && availableTokens > 0
       ? Math.min(availableTokens, Math.max(1, rawTarget))
       : 0
     return {
@@ -788,7 +797,7 @@ export async function selectContextResourcesV1(input: ContextSelectorInputV1): P
     const present = available.filter(descriptor => descriptor.kind === kind)
     const evidence = decisions.filter(decision => decision.kind === kind)
     const availableTokens = present.reduce((sum, descriptor) => (
-      sum + estimatedTokens(descriptor, selectDepth(descriptor, input.accessPolicy))
+      sum + readTokens(descriptor, depthFor(descriptor))
     ), 0)
     const deliveredTokens = evidence.reduce((sum, decision) => sum + decision.estimatedTokens, 0)
     const targetTokens = Math.min(availableTokens, minimum ?? 0)
@@ -879,7 +888,7 @@ export async function selectContextResourcesV1(input: ContextSelectorInputV1): P
       resourceKey: descriptor.resourceKey,
       sourceKey: descriptor.sourceKey,
       kind: descriptor.kind,
-      estimatedTokens: estimatedTokens(descriptor, selectDepth(descriptor, input.accessPolicy)),
+      estimatedTokens: readTokens(descriptor, depthFor(descriptor)),
       reasonCode: selectedTokens >= input.budgetTokens ? 'budget-exhausted' as const : 'lower-relevance' as const,
     })),
   ].sort((left, right) => left.resourceKey.localeCompare(right.resourceKey))

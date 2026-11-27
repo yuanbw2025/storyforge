@@ -5,6 +5,8 @@ import {
   selectContextResourcesV1,
 } from '../../src/lib/context-gateway/selector'
 import { createContextSufficiencyReportV1 } from '../../src/lib/context-gateway/contracts'
+import { getAgentSkillV1 } from '../../src/lib/agent/skill-registry'
+import { createContextAccessPolicyForExecutionV1 } from '../../src/lib/context-gateway/skill-policy'
 import type {
   ContextAccessPolicyV1,
   ContextResourceDescriptorV1,
@@ -85,6 +87,18 @@ function accessPolicy(taskKind: AgentContextTaskKind, maxRetrievedTokens = 30_00
 const scope = { projectId: 1, worldId: 11, worldGroupId: 21, workId: 31 }
 
 describe('R-CTXG5 Context Gateway deterministic selector', () => {
+  it('B03 exact V2 chapter policy selects all 75 relevant full resources without old count, category-share or per-resource token caps', async () => {
+    const resources = Array.from({ length: 75 }, (_, index) => ({
+      ...descriptor({ key: `character:w:gate-${index}`, kind: 'character', title: `盐门同伴${index}`, tokens: 400 }), tokenCap: 1,
+    }))
+    const policy = createContextAccessPolicyForExecutionV1(getAgentSkillV1('prose.generate.v2', 'prose'))
+    const result = await selectContextResourcesV1({ taskKind: 'agent-prose', accessPolicy: { ...policy, maxRetrievedTokens: 30_000 },
+      scope, descriptors: resources, budgetTokens: 30_000, query: '盐门', readsAllowed: false })
+    expect(result.selected).toHaveLength(75)
+    expect(result.selected.every(read => read.depth === 'full' && read.estimatedTokens === 400)).toBe(true)
+    expect(result.overBudget).toBe(false)
+  })
+
   it('defines one frozen selector policy for every registered task kind', () => {
     expect(Object.keys(CONTEXT_SELECTOR_POLICIES_V1).sort()).toEqual([...AGENT_CONTEXT_TASK_KINDS].sort())
     for (const taskKind of AGENT_CONTEXT_TASK_KINDS) {

@@ -1,0 +1,135 @@
+/* 022: product-private layout. Keep source, save, adoption and release contracts intact. */
+.screenplay-app .lf-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 24px 0; }
+.screenplay-app .lf-heading h2 { font-size: 24px; margin: 0; }
+.screenplay-app .lf-body { padding: 14px 24px 24px; }
+.screenplay-app .lf-content { overflow: visible; }
+.screenplay-app .lf-paper { padding: 16px; }
+.screenplay-app .lf-sidebar { padding-top: 16px; }
+.screenplay-app .lf-sidebar h1 { font-size: 20px; margin: 0 4px 12px; }
+.screenplay-app .lf-current { padding: 10px 12px; margin-bottom: 14px; border-radius: 12px; }
+.screenplay-app .lf-sidebar nav { gap: 4px; }
+.screenplay-app .lf-sidebar nav button { padding: 10px 14px; }
+.screenplay-app :is(input, select, textarea, button, fieldset, label, section, article, nav) { min-width: 0; }
+.screenplay-app :is(h2, h3, h4, p, strong, small, button, summary) { overflow-wrap: anywhere; }
+.screenplay-app .lf-content :is(input:not([type=checkbox]):not([type=radio]), select, textarea) { padding: 7px 10px; }
+.screenplay-app select:not([multiple]) { width: 100%; max-width: 28rem; text-overflow: ellipsis; }
+.screenplay-app .sp-fields { gap: 12px 16px; margin: 12px 0; }
+.screenplay-app .sp-fields label { gap: 5px; }
+.screenplay-app .sp-fields select[multiple] { width: 100%; min-height: 100px; }
+.screenplay-app .sp-fields input[type=checkbox] { width: auto; }
+.screenplay-app .sp-record { padding: 14px; margin: 12px 0; border-radius: 12px; }
+.screenplay-app .sp-record h4 { font-size: 18px; margin: 0 0 8px; }
+.screenplay-app .sp-record button, .screenplay-app .sp-planning>fieldset>button { margin: 6px 8px 0 0; padding: 8px 14px; }
+.screenplay-app.screenplay-app .screenplay-studio,
+.screenplay-app.screenplay-app .screenplay-studio:has(.sp-subnav) { grid-template-columns: minmax(0, 1fr); gap: 12px; min-height: 0; }
+.screenplay-app.screenplay-app .screenplay-studio > :not(.sp-subnav) { grid-column: 1; }
+.screenplay-app .sp-subnav { grid-row: auto; grid-column: 1; position: static; flex-direction: row; flex-wrap: wrap; gap: 6px; padding: 6px; border-radius: 12px; }
+.screenplay-app .sp-subnav button { padding: 8px 14px; border-radius: 9px; }
+.screenplay-app :is(.screenplay-top, .screenplay-pipeline, .sp-source, .sp-planning, .screenplay-completion, .screenplay-toolbar) { padding: 14px 16px; border-radius: 14px; }
+.screenplay-app .screenplay-top { flex-wrap: wrap; align-items: center; gap: 8px 20px; }
+.screenplay-app .screenplay-top>div:first-child { flex: 1 1 16rem; }
+.screenplay-app .screenplay-top h2 { font-size: 20px; margin: 0; }
+.screenplay-app .screenplay-top p { margin: 4px 0 0; }
+.screenplay-app .screenplay-source { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.screenplay-app .screenplay-source small { font-size: 13px; }
+.screenplay-app .screenplay-source button { margin: 0; }
+.screenplay-app :is(.sp-planning, .sp-source) h3 { font-size: 20px; margin: 0; }
+.screenplay-app :is(.sp-planning, .sp-source)>p, .screenplay-app .sp-planning header p { margin: 6px 0 12px; font-size: 14px; }
+.screenplay-app .sp-source-layout { grid-template-columns: minmax(160px, 220px) minmax(0, 1fr); gap: 16px; }
+.screenplay-app .sp-source-layout nav { gap: 6px; }
+.screenplay-app .sp-source-layout nav button { padding: 9px 12px; border-radius: 10px; }
+.screenplay-app .sp-source-layout small { margin-top: 3px; font-size: 13px; }
+.screenplay-app .sp-source-layout pre { margin: 0; overflow-wrap: anywhere; }
+.screenplay-app .screenplay-pipeline { gap: 10px; }
+.screenplay-app .screenplay-pipeline>header { align-items: center; flex-wrap: wrap; }
+.screenplay-app .screenplay-pipeline>header h3 { font-size: 20px; margin: 0; }
+.screenplay-app .screenplay-pipeline>header>strong { font-size: 13px; }
+.screenplay-app .sp-instruction { margin: 0; gap: 5px; font-size: 14px; }
+.screenplay-app .sp-instruction textarea { min-height: 4.5rem; }
+.screenplay-app .screenplay-pipeline-targets { gap: 10px 16px; }
+.screenplay-app .screenplay-pipeline-targets label { flex: 0 1 24rem; width: 100%; min-width: 0; font-size: 14px; }
+.screenplay-app .screenplay-pipeline-targets select { width: 100%; max-width: 100%; }
+.screenplay-app .screenplay-pipeline-steps { grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); gap: 8px; }
+.screenplay-app .screenplay-pipeline-steps button { padding: 10px 12px; border-radius: 10px; }
+.screenplay-app .screenplay-pipeline-steps small { font-size: 13px; white-space: normal; overflow: visible; }
+.screenplay-app .sp-ai-tools>summary { padding: 9px 14px; border-radius: 12px; }
+.screenplay-app .sp-ai-tools[open]>summary { margin-bottom: 8px; }
+.screenplay-app .screenplay-author-review-actions { flex-wrap: wrap; gap: 8px; margin-top: 0; }
+.screenplay-app .screenplay-professional-candidate { padding: 14px; border-radius: 12px; }
+/* Structured candidate fields are two-line editors, not raw JSON textareas. */
+.screenplay-app .screenplay-professional-candidate .sp-fields textarea { min-height: 0; font: inherit; line-height: 1.65; }
+.screenplay-app .screenplay-professional-candidate :is(header, footer) { flex-wrap: wrap; }
+.screenplay-app .screenplay-professional-candidate header span { font-size: 13px; }
+.screenplay-app .screenplay-candidate-items :is(strong, small) { font-size: 13px; white-space: normal; overflow: visible; }
+.screenplay-app .screenplay-candidate-items input { flex: 0 0 auto; }
+.screenplay-app .screenplay-review-list { min-width: 0; }
+.screenplay-app .screenplay-review-list summary { font-size: 14px; }
+.screenplay-app .screenplay-review-list :is(article>div, footer) { flex-wrap: wrap; gap: 8px; }
+.screenplay-app .screenplay-review-list :is(p, blockquote, small) { font-size: 14px; line-height: 1.65; }
+.screenplay-app .screenplay-review-list article { padding: 12px; margin-top: 10px; }
+.screenplay-app .screenplay-toolbar { gap: 8px; }
+.screenplay-app .screenplay-toolbar button { padding: 8px 12px; border-radius: 10px; }
+.screenplay-app .screenplay-toolbar>span { font-size: 13px; }
+.screenplay-app .screenplay-export-tools { max-width: 100%; }
+.screenplay-app .screenplay-export-tools>summary { cursor: pointer; padding: 8px 10px; border: 1px solid var(--skin-border, #cfddcc); border-radius: 10px; }
+.screenplay-app .screenplay-export-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding-top: 8px; }
+.screenplay-app .screenplay-release-picker { white-space: nowrap; gap: 8px; font-size: 14px; }
+.screenplay-app .screenplay-completion { display: block; }
+.screenplay-app .screenplay-completion summary { cursor: pointer; font-weight: 600; }
+.screenplay-app .screenplay-completion[open]>p { margin: 6px 0; }
+.screenplay-app .screenplay-layout { grid-template-columns: 180px minmax(0, 1fr) 200px; min-height: 0; border-radius: 14px; }
+.screenplay-app .screenplay-tree { max-height: 650px; overflow: auto; }
+.screenplay-app .screenplay-tree button>div { min-width: 0; }
+.screenplay-app .screenplay-tree :is(strong, small, header) { font-size: 13px; }
+.screenplay-app .screenplay-editor { padding: 14px; }
+.screenplay-app .screenplay-scene-meta { grid-template-columns: repeat(4, minmax(0, 1fr)); align-items: center; }
+.screenplay-app .screenplay-scene-meta>select:first-child { grid-column: span 2; }
+.screenplay-app .screenplay-scene-meta label { font-size: 14px; }
+.screenplay-app .screenplay-scene-meta label input { width: 100%; }
+.screenplay-app .screenplay-edit-actions { flex-wrap: wrap; gap: 6px; }
+.screenplay-app .screenplay-edit-actions button { padding: 8px 10px; }
+.screenplay-app .screenplay-blocks article { grid-template-columns: 120px minmax(0, 1fr); }
+.screenplay-app .screenplay-blocks article>div:first-child { gap: 4px; }
+.screenplay-app .screenplay-blocks article>div:first-child>button { flex-shrink: 0; }
+.screenplay-app .screenplay-cue-edit { grid-template-columns: minmax(0, 1fr); }
+.screenplay-app .screenplay-cue-edit label { font-size: 13px; align-items: center; }
+.screenplay-app .screenplay-cue-edit input[type=checkbox] { width: auto; }
+.screenplay-app .screenplay-inspector { padding: 12px; }
+.screenplay-app .screenplay-inspector :is(h3, p, strong, small) { font-size: 14px; }
+.screenplay-app .screenplay-inspector button { padding: 8px 10px; border-radius: 10px; }
+.screenplay-app :is(.screenplay-empty, .screenplay-loading) { min-height: 100px; padding: 16px; }
+.screenplay-app .sp-library-tools { align-items: center; gap: 10px; margin-bottom: 14px; }
+.screenplay-app .sp-library-tools input { flex: 0 1 22rem; }
+.screenplay-app .sp-library-tools select { width: auto; max-width: 12rem; }
+.screenplay-app .sp-books { gap: 16px; }
+.screenplay-app .sp-cover { min-height: 120px; padding: 14px; margin: 0 0 14px; box-shadow: none; }
+.screenplay-app .sp-cover h3 { font-size: 22px; margin: 8px 0; }
+.screenplay-app .sp-book-actions { margin-top: 12px; gap: 8px; }
+.screenplay-app .sp-create { margin-bottom: 16px; }
+.screenplay-app .sp-create h3 { margin: 0 0 10px; }
+.screenplay-app .sp-create .sp-choose { display: flex; flex-wrap: wrap; gap: 8px; }
+.screenplay-app .sp-error, .screenplay-app [role=alert] { padding: 10px 12px; }
+@media (max-width: 1200px) {
+  .screenplay-app .screenplay-layout { grid-template-columns: 160px minmax(0, 1fr); }
+  .screenplay-app .screenplay-inspector { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+}
+@media (max-width: 760px) {
+  .screenplay-app .lf-heading { padding: 12px 12px 0; }
+  .screenplay-app .lf-body { padding: 12px; }
+  .screenplay-app .lf-mobile-controls { padding-top: 0; }
+  .screenplay-app .screenplay-top { flex-direction: row; }
+  .screenplay-app .screenplay-top>div:first-child { display: contents; }
+  .screenplay-app .screenplay-top h2 { flex-basis: 100%; }
+  .screenplay-app .screenplay-top p { margin: 0; }
+  .screenplay-app .screenplay-layout { grid-template-columns: minmax(0, 1fr); }
+  /* On phones, reach the active writing surface before the long scene directory. */
+  .screenplay-app .screenplay-editor { grid-row: 1; }
+  .screenplay-app .screenplay-tree { grid-row: 2; max-height: 140px; }
+  .screenplay-app .screenplay-inspector { grid-template-columns: minmax(0, 1fr); }
+  .screenplay-app .screenplay-scene-meta { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .screenplay-app .screenplay-blocks :is(article, article.character, article.dialogue, article.parenthetical) { width: 100%; grid-template-columns: minmax(0, 1fr); }
+  .screenplay-app .screenplay-blocks article>div:first-child { width: 9rem; }
+  .screenplay-app .sp-fields, .screenplay-app .sp-source-layout { grid-template-columns: minmax(0, 1fr); }
+  .screenplay-app .sp-source-layout nav { max-height: 140px; }
+  .screenplay-app :is(.screenplay-top, .screenplay-pipeline, .sp-source, .sp-planning, .screenplay-completion, .screenplay-toolbar) { padding: 12px; }
+}

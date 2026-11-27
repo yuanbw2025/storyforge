@@ -66,7 +66,12 @@ describe('R-TTRPGOPEN3 original intent review and explicit human clarification',
     const save = vi.spyOn(table,'clarifyTtrpgOpenTableCandidateV2'),accept = vi.spyOn(table,'acceptTtrpgOpenTableCandidateV1')
     await act(x.render);await until(() => !!host.querySelector('fieldset[aria-label="补充行动意图"]'))
     expect(button('确认这份行动意图')).toBeUndefined()
-    await text('补充后的行动说明','改为独立观察公开情况');await text('补充后的期望结果','获取可复核的调查结果')
+    // B35/B39：澄清文本框不得再有应用自设的 maxlength 内容帽。
+    expect(host.querySelector('textarea[aria-label="补充后的行动说明"]')!.hasAttribute('maxlength')).toBe(false)
+    expect(host.querySelector('textarea[aria-label="补充后的期望结果"]')!.hasAttribute('maxlength')).toBe(false)
+    const goal = '改为独立观察公开情况' + ('背景说明'.repeat(600)) + '【说明尾】'
+    const outcome = '获取可复核的调查结果' + ('结果条件'.repeat(600)) + '【条件尾】'
+    await text('补充后的行动说明',goal);await text('补充后的期望结果',outcome)
     await choose('补充行动规则',o => o.value.includes('investigate'))
     await act(async () => { button('保存补充并重新核对')!.click();button('保存补充并重新核对')!.click() })
     await until(() => !!button('确认这份行动意图'))

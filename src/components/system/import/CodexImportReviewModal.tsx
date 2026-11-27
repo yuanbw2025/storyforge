@@ -1,7 +1,17 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, BookOpenCheck, CheckSquare, Square, X } from 'lucide-react'
 import type { CodexImportCategoryOption } from '../../../lib/import/codex-classification'
 import type { CodexImportCandidate } from '../../../lib/types/import-session-data'
+import type { CodexEntry, WorkspaceScope } from '../../../lib/types'
+import { db } from '../../../lib/db/schema'
+import { resolveScope, readOwnedRows } from '../../../lib/workspace/scope'
+import { useProjectStore } from '../../../stores/project'
+import { verifyImportProjectTargetGroupV1 } from '../../../stores/import-session'
+import {
+  detectCodexSameNameConflictsV1,
+  CODEX_SAME_NAME_RULE_V1,
+  type CodexSameNameConflictItemV1,
+} from '../../../lib/import/dedup'
 
 interface Props {
   filename: string
@@ -9,6 +19,10 @@ interface Props {
   categories: readonly CodexImportCategoryOption[]
   onConfirm: (candidates: CodexImportCandidate[]) => Promise<void>
   onCancel: () => void
+  /** 032-L1-d-CODEX-MULTIWORLD：冻结会话的目标 scope（用于只读取目标世界词条）。 */
+  targetScope?: WorkspaceScope
+  /** 本次实际写入的世界组；与 handleConfirmCodex 口径一致。 */
+  targetWorldGroupId?: number | null
 }
 
 export default function CodexImportReviewModal({
@@ -17,6 +31,8 @@ export default function CodexImportReviewModal({
   categories,
   onConfirm,
   onCancel,
+  targetScope,
+  targetWorldGroupId = null,
 }: Props) {
   const [drafts, setDrafts] = useState(() => candidates.map(candidate => ({
     ...candidate,
@@ -26,11 +42,67 @@ export default function CodexImportReviewModal({
   })))
   const [selected, setSelected] = useState(() => new Set(candidates.map((_, index) => index)))
   const [submitting, setSubmitting] = useState(false)
+  /** 032-L1-d-CODEX：候选与目标世界既有同分类词条的同名清单（只读展示）。 */
+  const [sameNameConflicts, setSameNameConflicts] = useState<CodexSameNameConflictItemV1[]>([])
   const selectedCount = selected.size
   const categoryByRef = useMemo(
     () => new Map(categories.map(category => [category.ref, category])),
     [categories],
   )
+
+  /**
+   * 032-L1-d-CODEX：只读同名对照。
+   *
+   * - scope 由既有工作区身份解析（currentProjectId → resolveScope），沿用既有
+   *   ownership 校验，不弱化 authority；不做任何写库动作。
+   * - existing 侧读取该 scope 的真实词条行；多世界项目在世界组未确定时保守跳过，
+   *   避免跨世界误报。
+   * - incoming 侧 categoryRef 必须能在本面板已加载的分类目录里解析到 categoryId，
+   *   否则如实跳过（不猜测 builtin/custom 结构）。
+   */
+  useEffect(() => {
+    let active = true
+    const compute = async () => {
+      try {
+        const projectId = useProjectStore.getState().currentProjectId
+        if (projectId == null) { setSameNameConflicts([]); return }
+        const project = await db.projects.get(projectId)
+        if (!active) return
+        let scope: WorkspaceScope
+        let worldGroupId: number | null
+        if (project?.enableMultiWorld) {
+          // 多世界：必须已选且与冻结会话口径一致，否则保守空清单（宁缺勿误报）。
+          if (targetWorldGroupId == null || !targetScope) { setSameNameConflicts([]); return }
+          await verifyImportProjectTargetGroupV1(targetScope, targetWorldGroupId)
+          if (!active) return
+          scope = targetScope
+          worldGroupId = targetWorldGroupId
+        } else {
+          scope = await resolveScope({ projectId })
+          worldGroupId = null
+        }
+        if (!active) return
+        const entries = await readOwnedRows<CodexEntry>(scope, 'codexEntries', { owner: 'world' })
+        if (!active) return
+        setSameNameConflicts(detectCodexSameNameConflictsV1({
+          existingEntries: entries.map(entry => ({ id: entry.id, categoryId: entry.categoryId, name: entry.name, worldGroupId: entry.worldGroupId ?? null })),
+          incomingCandidates: drafts.map(draft => ({
+            categoryRef: draft.categoryRef,
+            categoryId: categoryByRef.get(draft.categoryRef)?.categoryId ?? null,
+            name: draft.name,
+          })),
+          worldGroupId,
+        }))
+      } catch {
+        // 纯展示提示：读取失败保持空清单，绝不阻断审查/确认流程。
+        if (active) setSameNameConflicts([])
+      }
+    }
+    void compute()
+    return () => { active = false }
+    // drafts 改名后重算，使提示跟随作者编辑；分类目录或目标世界组变化同样重算。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [drafts, categories, targetScope, targetWorldGroupId])
 
   const updateDraft = (index: number, patch: Partial<CodexImportCandidate>) => {
     setDrafts(current => current.map((draft, draftIndex) =>
@@ -92,6 +164,23 @@ export default function CodexImportReviewModal({
         </div>
 
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
+          {sameNameConflicts.length > 0 && (
+            <div role="status" className="rounded-lg border border-warning/30 bg-warning/10 p-3 text-xs leading-relaxed">
+              <div className="flex items-start gap-1.5 mb-1.5 text-warning">
+                <AlertTriangle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
+                <span className="font-medium">检测到 {sameNameConflicts.length} 处同名词条（目标世界同分类下已存在）</span>
+              </div>
+              <ul className="space-y-1 mb-2">
+                {sameNameConflicts.map((conflict, index) => (
+                  <li key={`${conflict.categoryRef}-${conflict.incomingName}-${index}`} className="text-text-secondary">
+                    <span className="text-text-primary font-medium">候选词条「{conflict.incomingName}」</span>
+                    <span className="text-text-muted"> → 已有同名词条「{conflict.existingName}」（同一分类）</span>
+                  </li>
+                ))}
+              </ul>
+              <p className="text-text-muted">{CODEX_SAME_NAME_RULE_V1}</p>
+            </div>
+          )}
           {drafts.map((candidate, index) => {
             const category = categoryByRef.get(candidate.categoryRef)
             const checked = selected.has(index)

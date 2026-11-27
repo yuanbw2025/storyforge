@@ -76,7 +76,7 @@ function TtrpgOpenIntentReviewBody(props: Props) {
       <p>下一步仍需核对并确认本次行动的风险。</p></div>}
     {form && <fieldset disabled={busy} className="grid gap-3" aria-label="补充行动意图">
       <p>补充这次要做什么，并从共同可见的规则和对象中选择。保存补充不会调用模型或执行行动。</p>
-      <label>补充后的行动说明<textarea aria-label="补充后的行动说明" value={goal} maxLength={2000} onChange={e => setGoal(e.target.value)} /></label>
+      <label>补充后的行动说明<textarea aria-label="补充后的行动说明" value={goal} onChange={e => setGoal(e.target.value)} /></label>
       <label>补充行动规则<select aria-label="补充行动规则" value={selected} onChange={e => {
         setSelected(e.target.value);setBindings({});setDiscoveryKey('');setDiscoveryBindings({})
         const next = review.catalog.rules.find(r => key(r) === e.target.value);setTarget(next?.targets.length === 1 ? JSON.stringify(next.targets[0].key) : '')
@@ -88,7 +88,7 @@ function TtrpgOpenIntentReviewBody(props: Props) {
         {paths.length > 0 && <label>补充检查线索<select aria-label="补充检查线索" value={discoveryKey} onChange={e => { setDiscoveryKey(e.target.value);setDiscoveryBindings({}) }}><option value="">本次不进行线索发现</option>{paths.map(d => <option key={d.key} value={d.key} disabled={!d.available}>{d.label}{!d.available ? '（需作者修订）' : ''}</option>)}</select></label>}
         {discovery?.parameters.map((p,i) => <label key={p.key}>补充线索后果对象 {i + 1}<select aria-label={`补充线索后果对象 ${i + 1}`} value={discoveryBindings[p.key] ?? (p.required ? '' : 'null')} onChange={e => setDiscoveryBindings(v => ({ ...v,[p.key]: e.target.value }))}><option value="">选择对象</option>{!p.required && <option value="null">不绑定</option>}{p.options.map(o => <option key={o.key} value={JSON.stringify(o.key)}>{o.name}</option>)}</select></label>)}
       </>}
-      <label>补充后的期望结果<textarea aria-label="补充后的期望结果" value={outcome} maxLength={2000} onChange={e => setOutcome(e.target.value)} /></label>
+      <label>补充后的期望结果<textarea aria-label="补充后的期望结果" value={outcome} onChange={e => setOutcome(e.target.value)} /></label>
       <button disabled={!goal.trim() || !fieldsReady} onClick={() => action(async () => {
         if (discoveryKey && !discovery?.available) return
         const chosenTarget: unknown = target ? JSON.parse(target) : null

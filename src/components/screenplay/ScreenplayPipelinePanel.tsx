@@ -212,7 +212,7 @@ export default function ScreenplayPipelinePanel({ scope, adaptation, sourceUnits
   ]
 
   return <section className="screenplay-pipeline">
-    <header><div><span>PROFESSIONAL ADAPTATION PIPELINE</span><h3>{allowedStages?'AI 辅助与作者确认':'十步小说转剧本'}</h3></div><strong>manifest v{adaptation.activeSourceManifestVersion}</strong></header>
+    <header><div><h3>{allowedStages?'AI 辅助与作者确认':'十步小说转剧本'}</h3></div><strong>manifest v{adaptation.activeSourceManifestVersion}</strong></header>
     <p>根据本页的要求生成候选，逐项审阅后采纳。格式不合格时最多修正一次；网络或授权错误不会自动重复请求。</p>
     <label className="sp-instruction">本次创作要求<textarea disabled={!instructionLoaded} value={instruction} onChange={e=>setInstruction(e.target.value)} placeholder="例如：保留结局，以动作代替内心独白。"/></label>
     {tasks.length>0&&<details className="sp-tasks"><summary>待处理任务（{tasks.length}）</summary>{tasks.map(task=><div key={task.id}><span>任务 {task.id} · {task.intent?'等待恢复采纳':task.status==='paused'?'结果未知，请核实后结束':task.status==='awaiting_confirmation'?'待作者确认':'处理中'}</span><button disabled={busy} onClick={()=>void(async()=>{setBusy(true);try{beforeAction?.();await flushPendingEditsV1();if(task.intent){await adoptScreenplayProfessionalCandidateV1({scope,runId:task.id});if(candidate?.runId===task.id){setCandidate(null);setAcceptedKeys(new Set())}}else {if(!await dialog.confirm({title:'结束此任务？',message:'保留运行证据，不会自动重新请求模型。',confirmText:'结束任务'}))return;await closeScreenplayTaskV1(scope,task.id);if(candidate?.runId===task.id)setCandidate(null)}await reload();await onChanged()}catch(c){setError(String(c))}finally{setBusy(false)}})()}>{task.intent?'恢复采纳':'结束任务'}</button></div>)}</details>}

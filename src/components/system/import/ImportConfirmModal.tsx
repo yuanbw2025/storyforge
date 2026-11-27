@@ -3,6 +3,7 @@ import { X, Wand2, AlertTriangle, Info, Gauge, Timer, Coins, BookOpen, ChevronDo
 import type { ChunkPlan } from '../../../lib/import/chunker'
 import type { VolumeDetectResult } from '../../../lib/import/volume-detector'
 import type { WorldGroup, ReferenceAnalysisDepth } from '../../../lib/types'
+import type { SameNameConflictItemV1 } from '../../../lib/import/dedup'
 
 interface Props {
   filename: string
@@ -19,6 +20,8 @@ interface Props {
   onChunkSizeChange: (size: number) => void
   onConfirm: (target: 'project' | 'reference', targetWorldGroupId?: number | null, depth?: ReferenceAnalysisDepth) => void
   onCancel: () => void
+  /** 032-L1-d：待导入条目与目标世界已有条目的同名清单（纯展示；空数组/缺省时不渲染区块） */
+  sameNameConflicts?: SameNameConflictItemV1[]
 }
 
 /**
@@ -35,6 +38,7 @@ export default function ImportConfirmModal({
   targetWorldGroupId = null,
   onTargetWorldGroupChange,
   onChunkSizeChange, onConfirm, onCancel,
+  sameNameConflicts,
 }: Props) {
   const [showStructure, setShowStructure] = useState(false)
   const [refDepth, setRefDepth] = useState<ReferenceAnalysisDepth>('quick')
@@ -217,6 +221,31 @@ export default function ImportConfirmModal({
               <span><strong className="text-text-primary">跨块合并</strong>：同名内容按目标世界处理；不同名字的角色不会自动合并或删除，请由作者核对。</span>
             </div>
           </div>
+
+          {/* 032-L1-d：同名冲突只读提示（仅当检测到同名条目时出现） */}
+          {sameNameConflicts && sameNameConflicts.length > 0 && (
+            <div className="bg-warning/10 border border-warning/30 rounded-lg p-3 text-xs leading-relaxed" role="status">
+              <div className="flex items-start gap-1.5 mb-1.5 text-warning">
+                <AlertTriangle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
+                <span className="font-medium">检测到 {sameNameConflicts.length} 处同名条目（目标世界内已存在）</span>
+              </div>
+              <ul className="space-y-1 mb-2 max-h-[160px] overflow-y-auto">
+                {sameNameConflicts.map((conflict, index) => (
+                  <li key={`${conflict.kind}-${conflict.incomingName}-${index}`} className="text-text-secondary">
+                    <span className="text-text-primary font-medium">
+                      即将写入{conflict.kind === 'character' ? '角色' : '大纲'}「{conflict.incomingName}」
+                    </span>
+                    <span className="text-text-muted"> → 已有同名{conflict.kind === 'character' ? '角色' : '大纲'}「{conflict.existingName}」
+                      {conflict.similarity != null && conflict.similarity !== 1 && `（相似度 ${Math.round(conflict.similarity * 100)}%）`}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              <p className="text-text-muted">
+                将按既有规则处理，不会静默覆盖或删除：世界观同名字段去重后追加；同名角色合并字段内容；同名大纲挂到已有节点；异名条目一律保留不动。确认后仍可选择导入当前项目或项目参考。
+              </p>
+            </div>
+          )}
 
           {/* 风险提示 */}
           <div className="bg-warning/10 border border-warning/30 rounded-lg p-3 text-xs text-warning leading-relaxed flex items-start gap-1.5">

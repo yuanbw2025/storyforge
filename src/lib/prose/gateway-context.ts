@@ -6,7 +6,7 @@ import { resolveAgentContextPolicy, type AgentContextProfile } from '../agent/co
 import { resolveAgentSkillV1 } from '../agent/skill-registry'
 import { executeContextGatewayV1, type ContextGatewayExecutionV1 } from '../context-gateway/execution'
 import { resolveCanonicalChapterSequence } from '../ai/chapter-memory/canonical-chapter-sequence'
-import { walkOutlineChaptersInCanonicalOrder } from '../outline/canonical-outline-walk'
+import { resolveCanonicalOutlineAncestry, walkOutlineChaptersInCanonicalOrder } from '../outline/canonical-outline-walk'
 import type { AssembleContextResult } from '../registry/types'
 import type { AIConfig, Chapter, OutlineNode, WorkspaceScope } from '../types'
 import { parseStages } from '../types/story-arc'
@@ -63,6 +63,8 @@ export async function prepareProseGatewayAssemblyV1(input: {
   perspectiveCharacterId?: number | null
   citedReferenceIds?: readonly number[]
   config: AIConfig
+  /** Exact new chapter starts only; old plans/readers keep their frozen policy. */
+  taskRequestV2?: true
   contextProfile?: AgentContextProfile
   /** The step editor requires a confirmed detail. The master Agent may opt in
    * to an outline-only, candidate-only draft; that draft still cannot bypass
@@ -71,7 +73,10 @@ export async function prepareProseGatewayAssemblyV1(input: {
   signal?: AbortSignal
 }): Promise<ProseGatewayAssemblyV1> {
   const scope = await resolveScope({ projectId: input.projectId, scope: input.scope })
-  const skill = resolveAgentSkillV1('prose', input.operation === 'revise' && input.qualityRevision ? 'prose.quality-revise'
+  const taskRequestV2 = input.taskRequestV2 === true
+  if (taskRequestV2 && !['generate', 'continue'].includes(input.operation)) throw new Error('正文新请求策略不能替换旧审稿或范围修订任务。')
+  const skill = resolveAgentSkillV1('prose', taskRequestV2 ? input.operation === 'continue' ? 'prose.continue.v2' : 'prose.generate.v2'
+    : input.operation === 'revise' && input.qualityRevision ? 'prose.quality-revise'
     : input.operation === 'review' && input.qualityRecheck ? 'prose.quality-recheck'
       : input.operation === 'review' && input.qualityReview ? 'prose.quality-review' : `prose.${input.operation}`)
   if (skill.contextGateway?.rollout !== 'required') {
@@ -79,7 +84,7 @@ export async function prepareProseGatewayAssemblyV1(input: {
   }
   const policy = resolveAgentContextPolicy(skill.contextTaskKind, input.contextProfile ?? 'full')
   const budget = Math.min(policy.maxInputTokens, skill.contextGateway.maxRetrievedTokens)
-  const [outlines, details, chapters, arcs, progress, facts, knowledge, characters, modules, nodes, beats, choices, references, work, rulesRows, storyCoreRows, states, items, timeline, cultivation, styleProfiles] = await Promise.all([
+  const [outlines, details, chapters, arcs, progress, facts, knowledge, characters, modules, nodes, beats, choices, references, work, rulesRows, storyCoreRows, states, items, timeline, cultivation, styleProfiles, worldviews] = await Promise.all([
     readOwnedRows<OutlineNode & StableRow>(scope, 'outlineNodes', { owner: 'work' }),
     readOwnedRows<StableRow>(scope, 'detailedOutlines', { owner: 'work' }),
     readOwnedRows<Chapter & StableRow>(scope, 'chapters', { owner: 'work' }),
@@ -101,6 +106,7 @@ export async function prepareProseGatewayAssemblyV1(input: {
     readOwnedRows<StableRow>(scope, 'storyTimelineEvents', { owner: 'work' }),
     readOwnedRows<StableRow>(scope, 'cultivationProgress', { owner: 'work' }),
     readOwnedRows<StableRow>(scope, 'userStyleProfiles', { owner: 'work' }),
+    taskRequestV2 ? readOwnedRows<StableRow>(scope, 'worldviews', { owner: 'world' }) : Promise.resolve([] as StableRow[]),
   ])
   // A malformed state cannot silently enter a formal prose/review packet.
   states.forEach(state => readStateCardFields({ entityName: state.entityName, fields: state.fields }))
@@ -135,7 +141,8 @@ export async function prepareProseGatewayAssemblyV1(input: {
   }
 
   const { sequence } = resolveCanonicalChapterSequence(outlines, chapters)
-  const outlineSequence = walkOutlineChaptersInCanonicalOrder(outlines).chapters
+  const outlineWalk = walkOutlineChaptersInCanonicalOrder(outlines)
+  const outlineSequence = outlineWalk.chapters
   const targetIndex = outlineSequence.findIndex(entry => entry.outlineNode.id === input.outlineNodeId)
   if (targetIndex < 0) throw new Error('正文目标章纲不在当前作品规范章序中。')
   const outlineIndex = new Map(outlineSequence.flatMap((entry, index) => (
@@ -148,7 +155,8 @@ export async function prepareProseGatewayAssemblyV1(input: {
   })
   const previous = [...sequence].reverse().find(entry => {
     const index = entry.outlineNode?.id == null ? undefined : outlineIndex.get(entry.outlineNode.id)
-    return index != null && index < targetIndex && String(entry.chapter.content ?? '').trim()
+    return index != null && index < targetIndex && (!taskRequestV2 || entry.worldGroupId === input.worldGroupId)
+      && String(entry.chapter.content ?? '').trim()
   })
 
   const outlineResources = await canonRowResourceKeysV1('outlineNodes', { ...targetOutline, projectId: scope.projectId })
@@ -252,7 +260,23 @@ export async function prepareProseGatewayAssemblyV1(input: {
   const targetTextResources = targetChapter && (input.operation === 'review' || input.operation === 'revise')
     ? await canonRowResourceKeysV1('chapters', { ...targetChapter, projectId: scope.projectId }) : null
   const targetTextOriginal = targetTextResources?.fields.content
-  const mandatoryOriginalResourceKeys = unique([...outlineOriginals, ...detailOriginals, ...rulesOriginals, ...storyCoreOriginals, ...styleOriginals, ...(targetTextOriginal ? [targetTextOriginal] : [])])
+  const baseSettingOriginals: string[] = []
+  if (taskRequestV2) {
+    const ancestry = resolveCanonicalOutlineAncestry(input.outlineNodeId, outlineWalk.nodeById)
+    for (const ancestor of ancestry.path.filter(node => node.id !== input.outlineNodeId)) {
+      const keys = await canonRowResourceKeysV1('outlineNodes', { ...ancestor, projectId: scope.projectId })
+      baseSettingOriginals.push(...['title', 'summary'].flatMap(field => keys.fields[field] ? [keys.fields[field]] : []))
+    }
+    if (previous?.chapter) {
+      const keys = await canonRowResourceKeysV1('chapters', { ...previous.chapter, projectId: scope.projectId })
+      if (keys.fields.content) baseSettingOriginals.push(keys.fields.content)
+    }
+    for (const row of worldviews.filter(row => inWorld(row, input.worldGroupId))) {
+      const keys = await canonRowResourceKeysV1('worldviews', { ...row, projectId: scope.projectId })
+      baseSettingOriginals.push(...Object.values(keys.fields))
+    }
+  }
+  const mandatoryOriginalResourceKeys = unique([...baseSettingOriginals, ...outlineOriginals, ...detailOriginals, ...rulesOriginals, ...storyCoreOriginals, ...styleOriginals, ...(targetTextOriginal ? [targetTextOriginal] : [])])
   const mandatoryFullResourceKeys = unique([
     authorIntentKey,
     targetOutlineRecord,
@@ -304,7 +328,7 @@ export async function prepareProseGatewayAssemblyV1(input: {
     additionalReadsEnabled: false,
     signal: input.signal,
   })
-  const assembled = assembleContextGatewayPacketV1(execution, budget)
+  const assembled = assembleContextGatewayPacketV1(execution, taskRequestV2 ? execution.selector.budgetTokens : budget)
   const result: ProseGatewayAssemblyV1 = { ...assembled, contextGatewayExecution: execution }
   projectContextGatewayInputStateV1(skill, execution, result)
   return result

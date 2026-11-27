@@ -414,10 +414,34 @@ function buildProseMessages(input: ProseCopilotInput) {
 
 function proseRequestOverridesV1(request: ChapterPromptRequestV1, supplied: ProseCopilotInput['generationOverrides']) {
   const temperature = supplied?.temperature ?? request.modelOverride?.temperature
+  // Only an explicit author limit or the author's own template override caps
+  // the wire output; without one, dispatch follows the bound connection's
+  // evidenced model capacity instead of a fixed application quota.
+  const maxTokens = supplied?.maxTokens ?? request.modelOverride?.maxTokens
   return {
-    maxTokens: supplied?.maxTokens ?? request.modelOverride?.maxTokens ?? 16_000,
+    ...(maxTokens == null ? {} : { maxTokens }),
     ...(temperature == null ? {} : { temperature }),
   }
+}
+
+/** Team-budget reservation forecast for prose calls — an accounting number,
+ * never a dispatch or content cap. Explicit author limits lead; the author's
+ * explicit length intent (字数 range/target) follows; the automatic
+ * single-chapter reference (~4,000 words ≈ 6,000 tokens) is the fallback. */
+export function proseOutputForecastTokensV1(input: {
+  generationOverrides?: { maxTokens?: number }
+  authorRequest: string
+  parameterValues?: Record<string, unknown> | null
+}): number {
+  const explicit = input.generationOverrides?.maxTokens
+  if (explicit != null && explicit > 0) return explicit
+  const expectation = proseLengthExpectationV1(input.authorRequest, input.parameterValues?.wordCount)
+  if (expectation) {
+    const words = expectation.max
+      ?? (expectation.target != null ? Math.ceil(expectation.target * 1.2) : null)
+    if (words != null && words > 0) return Math.max(2_000, Math.ceil(words * 1.5))
+  }
+  return 6_000
 }
 
 async function adoptCandidate(input: {
@@ -855,7 +879,7 @@ export async function runProseCreativeReliabilityV1(input: {
     validate: input.validate,
     budget: input.budget,
     callLabel: '正文领域 Agent',
-    maxOutputTokens: input.prepared.input.generationOverrides?.maxTokens ?? 16_000,
+    maxOutputTokens: proseOutputForecastTokensV1(input.prepared.input),
     qualityMode: input.qualityMode,
     modelIdentity: input.prepared.modelIdentity,
     canonEvidenceRefs: input.prepared.contextEvidence.sourceEvidence

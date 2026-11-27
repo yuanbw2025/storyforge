@@ -151,6 +151,7 @@ test('047 native story core, history blur, and rule native inputs preserve real 
   await history.getByRole('button', { name: '恢复自适应', exact: true }).click()
   expect(await snapshot(page)).toBe(historyBeforeLeave)
   await page.getByRole('button', { name: '历史总述与纪年', exact: true }).click()
+  await expect.poll(async () => (await snapshot(page)).includes('历史原稿：灯塔建立。')).toBe(true)
   await page.reload()
   await page.getByRole('button', { name: '历史总述与纪年', exact: true }).click()
   await expect(history.locator('textarea')).toHaveValue('历史原稿：灯塔建立。')
@@ -232,7 +233,11 @@ test('047 native natural, humanity, power and cultivation editors receive only U
   ]) {
     await page.goto(`./workspace/${ids.projectId}?module=${module}`)
     if (module === 'worldview-humanity') await page.getByRole('button', { name: /种族与民族/ }).click()
-    await page.getByText(text, { exact: true }).click()
+    const rendered = page.getByText(text, { exact: true })
+    await expect(rendered).toBeVisible()
+    const markdown = rendered.locator('xpath=ancestor::section[@data-markdown-read-view]')
+    if (await markdown.count()) await markdown.getByRole('button', { name: '编辑源码', exact: true }).click()
+    else await rendered.click()
     const before = await snapshot(page), frame = await nudge(page, key)
     await frame.getByRole('button', { name: '恢复自适应', exact: true }).click()
     await noAreaOverflow(page)
@@ -242,7 +247,11 @@ test('047 native natural, humanity, power and cultivation editors receive only U
   await page.locator('h2:visible').first().click()
   await page.getByText('测试起境', { exact: true }).click()
   for (const [text, key] of [['原生境界特征', 'power.stageFeatures/current'], ['原生突破条件', 'power.breakthrough/current']]) {
-    await page.getByText(text, { exact: true }).click()
+    const rendered = page.getByText(text, { exact: true })
+    await expect(rendered).toBeVisible()
+    const markdown = rendered.locator('xpath=ancestor::section[@data-markdown-read-view]')
+    if (await markdown.count()) await markdown.getByRole('button', { name: '编辑源码', exact: true }).click()
+    else await rendered.click()
     const before = await snapshot(page), frame = await nudge(page, key)
     await frame.getByRole('button', { name: '恢复自适应', exact: true }).click()
     expect(await snapshot(page)).toBe(before)
@@ -258,35 +267,24 @@ for (const operation of ['rewrite', 'expand', 'polish'] as const) {
     }, operation)
     await page.goto(`./workspace/${seed.scope.projectId}?module=worldview-origin&originField=origin`)
     const right = page.locator('[data-input-area-layout="world.origin/candidate"]')
+    if (operation !== 'rewrite') {
+      await expect(page.getByRole('region', { name: '原文与候选精确对照' })).toBeVisible()
+      await page.getByRole('button', { name: '编辑候选', exact: true }).click()
+    }
     await expect(right).toBeVisible()
     if (operation === 'rewrite') await page.getByText('查看重写前原文', { exact: true }).click()
     const left = page.locator('[data-input-area-layout="world.origin/original"]')
-    if (operation !== 'rewrite') {
-      await expect(left).toBeVisible()
-      expect(await left.locator('textarea').getAttribute('readonly')).not.toBeNull()
-    } else {
-      await expect(left).toHaveCount(0) // The existing rewrite branch uses a pre, not a new input.
-      await expect(page.locator('details[open] pre')).toContainText('盐约生效后才开放城门。')
-    }
-    const before = await snapshot(page), original = operation === 'rewrite' ? '' : await left.locator('textarea').inputValue(), candidate = await right.locator('textarea').inputValue()
+    await expect(left).toHaveCount(0) // V2 uses one aligned read-only diff viewport.
+    if (operation === 'rewrite') await expect(page.locator('details[open] pre')).toContainText('盐约生效后才开放城门。')
+    const before = await snapshot(page), candidate = await right.locator('textarea').inputValue()
     await right.locator('textarea').evaluate(area => { const input = area as HTMLTextAreaElement; input.focus(); input.setSelectionRange(2, 5); Object.assign(window, { inputAreaCandidateNode: input }) })
     await nudge(page, 'world.origin/candidate')
     expect(await right.locator('textarea').evaluate(area => { const input = area as HTMLTextAreaElement; return input === Reflect.get(window, 'inputAreaCandidateNode') && input.selectionStart === 2 && input.selectionEnd === 5 })).toBe(true)
-    if (operation !== 'rewrite') {
-      await nudge(page, 'world.origin/original', 'ArrowLeft')
-      for (const frame of [left, right]) {
-        const handle = frame.getByRole('button', { name: '调整输入区大小', exact: true })
-        for (let step = 0; step < 12; step++) await handle.press('ArrowUp')
-      }
-      await left.locator('textarea').evaluate(area => { area.scrollTop = (area.scrollHeight - area.clientHeight) / 2; area.dispatchEvent(new Event('scroll')) })
-      await expect.poll(() => right.locator('textarea').evaluate(area => area.scrollTop / Math.max(1, area.scrollHeight - area.clientHeight))).toBeGreaterThan(0.4)
-    }
-    if (operation !== 'rewrite') await expect(left.locator('textarea')).toHaveValue(original)
     await expect(right.locator('textarea')).toHaveValue(candidate)
     expect(await snapshot(page)).toBe(before)
     await right.getByRole('button', { name: '恢复自适应', exact: true }).click()
-    if (operation !== 'rewrite') await left.getByRole('button', { name: '恢复自适应', exact: true }).click()
     await page.reload()
+    if (operation !== 'rewrite') await page.getByRole('button', { name: '编辑候选', exact: true }).click()
     await expect(right.locator('textarea')).toHaveValue(candidate)
     expect(await snapshot(page)).toBe(before)
   })
@@ -344,7 +342,9 @@ test('047 native StoryCore raw toggle preserves the governed candidate and has a
   await nudge(page, 'story.logline/candidate')
   await page.getByRole('button', { name: '查看原始结构', exact: true }).click()
   const raw = page.locator('[data-input-area-layout="story.logline/raw"]')
-  expect(JSON.parse(await raw.locator('textarea').inputValue())).toEqual({ field: 'logline', value: text })
+  await expect.poll(async () => {
+    try { return JSON.parse(await raw.locator('textarea').inputValue()) } catch { return null }
+  }).toEqual({ field: 'logline', value: text })
   await nudge(page, 'story.logline/raw')
   await raw.getByRole('button', { name: '恢复自适应', exact: true }).click()
   expect(await snapshot(page)).toBe(before)

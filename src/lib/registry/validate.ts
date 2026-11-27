@@ -285,7 +285,14 @@ export function checkRegistry(): RegistryValidationResult {
         && source.fullCapture.sourceVersion === 'worldview-field-baseline-full-v2'
         || source.key === 'worldviewFieldContextV2' && source.scope === 'project' && source.ownerFrom === 'work'
         && source.fullCapture.sourceVersion === 'worldview-field-constraints-full-v2')
-    if (source.budgetTokens === null ? !['referenceDerivedBaseline', 'referenceAnalysisPrivateChunk', 'references'].includes(source.key) && !completeWorldviewSource : source.budgetTokens <= 0) {
+    // B21a/B20b：manualText 是已登记的全文来源，改为按本次任务的请求预算交付，
+    // 不再携带固定 100k 应用额度；其捕获协议仍被严格冻结，调用方预算与请求级
+    // 准入继续约束它。
+    const taskBudgetFullCaptureSource = source.fullCapture?.version === 'registered-host-full-v2'
+      && source.key === 'manualText' && source.scope === 'manual' && source.layer === 'L0'
+      && source.fullCapture.sourceVersion === 'manualText-full-v2'
+    if (source.budgetTokens === null ? !['referenceDerivedBaseline', 'referenceAnalysisPrivateChunk', 'references'].includes(source.key)
+      && !completeWorldviewSource && !taskBudgetFullCaptureSource : source.budgetTokens <= 0) {
       errors.push(`CONTEXT_SOURCES budgetTokens 必须为正数: ${source.key}`)
     }
     if (source.resources) {

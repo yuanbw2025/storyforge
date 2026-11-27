@@ -1,5 +1,15 @@
 # Longform: settings, characters, and story design
 
+## November 25: outline, story-core and inspiration capacity
+
+Outline, whole-volume planning, replanning, story-arc, story-core, inspiration and creative-rule copilots no longer automatically turn old small output forecasts into dispatch caps. Explicit author/template limits and existing Skill checks remain. Batch scene outlines persist chapter candidates individually; on recovery, verify completed chapters and continue unfinished ones without resending completed work. Longer plans do not establish whole-volume production or literary-quality acceptance. Based on #602/#604/#605/#606/#607/#611; see [usage](/en/guides/token-cost).
+
+## November 23: complete plans and long candidates
+
+New Master plans, dependencies, long instructions and summaries no longer lose later material to old fixed-count limits. Missing-dependency, cycle, authorization and field checks remain. Complete returned long-prose candidates retain matching raw responses, author edits, reload recovery and adoption without former 120k/200k character caps. Larger length hints must remain reliably representable positive integers; they do not guarantee service output capability or literary quality. Historical finite budgets and independent review/revision settings retain their contracts. Based on #565/#569/#573.
+
+Size controls remain inside the editing area; tabbing to them does not leave/save it. Click an outside heading/navigation and check actual save status. In natural-field reading views, use Edit source to edit again. Failed saves retain drafts for explicit retry, not data clearing. Based on the current interaction checks in #576/#577.
+
 ## November 21: preparation actions and story core
 
 Choose organization, direction comparison, focused deepening or uncertain/defined creative positioning instead of always running full reverse planning. Edit and confirm a preparation version for the same work; it does not automatically rewrite worlds, characters, story core or synopsis. Full reverse planning retains single-/multi-world modes. Based on #526/#531.

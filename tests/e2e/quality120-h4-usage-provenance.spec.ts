@@ -13,7 +13,7 @@ for (const suite of ['h4', 'h85'] as const) {
     if (origin.protocol !== 'http:' || !['127.0.0.1', 'localhost'].includes(origin.hostname)) {
       throw new Error('SFQA120 refuses non-loopback browser origins')
     }
-    const baseUrl = new URL('sfqa120-synthetic/v1', baseURL).href
+    const baseUrl = 'https://api.openai.com/v1'
     const endpoint = `${baseUrl}/chat/completions`
     const context = await browser.newContext({ baseURL, serviceWorkers: 'block', acceptDownloads: true })
     try {
@@ -107,7 +107,7 @@ for (const suite of ['h4', 'h85'] as const) {
         choices: [{ message: { role: 'assistant', content: JSON.stringify(seed.output) }, finish_reason: 'stop' }],
         ...(measured ? { usage: { prompt_tokens: 200, completion_tokens: 0, total_tokens: 200 } } : {}),
       }
-      await page.goto('./home/settings')
+      await page.goto('./home/settings?developerTools=1')
       const development = page.getByTestId(`${suite}-development-section`)
       const score = development.getByTestId(`${suite}-development-score`)
       const counts = measured ? '实测 2 · 缺完整实测 0' : '实测 0 · 缺完整实测 1'

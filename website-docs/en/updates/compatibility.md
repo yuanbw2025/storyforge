@@ -1,5 +1,17 @@
 # Versions, upgrades, and data compatibility
 
+## November 25, 2026 · Mainline editing and capacity fixes
+
+The latest public formal release remains [v4.0.8](https://github.com/yuanbw2025/storyforge/releases/tag/v4.0.8) (`41a6e865`, November 19 at 16:02 UTC, database v14/backup v18). v4.0.9 is still an unpublished draft without a formal date. Reviewed mainline `a6362b7e` uses database v16/backup v20; aligning matrices/fixtures is not another format upgrade.
+
+Use editing modes, import hints, exact comparison and capacity fixes through each guide's actual entries; historical tasks restore under frozen identities. Keep original backups before upgrading; older programs must not directly open newer databases. See [development](/en/updates/development-status) for remaining037 editor/032 import and real-device/provider long-task acceptance.
+
+## November 23, 2026 · Mainline complete-content fixes
+
+The latest formal release remains v4.0.8 (`41a6e865`, database v14/backup v18); v4.0.9 is still an unpublished draft. Mainline `e91a0955` uses database v16/backup v20. This round's JSON/candidate/compilation-envelope fixes do not add schema or backup-format versions.
+
+Setting V2/extraction, shared complete-content handling and shortform layout are bounded by their actual merged scope. This is not removal of every product, sharing-package, prose/post-chapter or model-service limit. Historical finite budgets and explicit caller resume limits remain. Keep original backups; older programs must not directly open newer databases. See individual guides and [development](/en/updates/development-status) for unmerged follow-ups.
+
 ## November 21, 2026 · Released v4.0.8 and later mainline
 
 [v4.0.8](https://github.com/yuanbw2025/storyforge/releases/tag/v4.0.8) was published at **16:02 UTC on November 19, 2026 (00:02 Beijing time on November 20)**, tagged at `41a6e8652499e0805f44798fbd54ca39d3c51234`, using **database v14 / complete backup v18**. Twelve assets include the new Arch x86_64 desktop package, Windows, both Macs, Android, four portable ZIPs and checksum/update metadata. v4.0.9 remains an unpublished draft with no formal publication date.

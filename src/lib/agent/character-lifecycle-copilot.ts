@@ -449,7 +449,12 @@ export async function prepareCharacterLifecycleCopilotV1(
       await (dependencies.runAI ?? (messages => chat(messages, config, {
         category: routingCategory,
         projectId: input.projectId,
-        configOverrides: { maxTokens: 4_000, temperature: 0.3 },
+        // B20a: no fixed application output quota on the wire. Dispatch follows
+        // the bound connection's evidenced capacity; the Skill's registered
+        // maxOutputTokens stays the team-budget reservation forecast in the
+        // orchestrator (accounting), which is where this 4k used to double as
+        // a dispatch cap.
+        configOverrides: { temperature: 0.3 },
         contextOverflowPolicy: 'reject',
       }, input.signal)))(prompt),
       after.snapshot,

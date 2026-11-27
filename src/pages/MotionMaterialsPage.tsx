@@ -21,6 +21,7 @@ import { useGistAutoBackup } from '../hooks/useGistAutoBackup'
 import { downloadJSON, exportProjectJSON } from '../lib/export/json-export'
 import '../components/longform/longform.css'
 import '../components/motion-drama/motion-materials.css'
+import '../components/motion-drama/motion-layout-compact.css'
 import { MOTION_PAGES, MOTION_GROUPS, MOTION_CONTENT_GROUPS, motionDescription } from '../components/motion-drama/navigation'
 import { countWords } from '../lib/utils/html'
 const Studio=lazy(()=>import('../components/motion-drama/MotionDramaStudio'))

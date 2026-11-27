@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from 'react'
 import { liveQuery } from 'dexie'
 import { X, ShieldCheck, Bot, TrendingUp, Loader2, ScanSearch } from 'lucide-react'
 import { describeResolvedAIRequestSettingsV1, resolveRequestConfig, type ChatResult } from '../../lib/ai/client'
+import { prepareModelCapacityV1 } from '../../lib/ai/model-capacity'
 import { executeRegisteredAIEntryV1 } from '../../lib/agent/formal-ai-entry'
 import { useReviewResultStore, selectChapterReview, type ReviewTab } from '../../stores/review-result'
 import {
@@ -200,7 +201,8 @@ export default function ReviewPanel(props: Props) {
         contextOverflowPolicy: 'reject' as const,
         transportRetryPolicy: 'none' as const,
       }
-      const resolution = resolveRequestConfig(config, meta)
+      const resolved = resolveRequestConfig(config, meta)
+      const resolution = { ...resolved, config: await prepareModelCapacityV1(resolved.config) }
       const savedChapter = await db.chapters.get(chapterId)
       if (!savedChapter) throw new Error('一致性审计章节不存在。')
       const budget = new AgentTeamBudgetTracker(
@@ -216,6 +218,7 @@ export default function ReviewPanel(props: Props) {
         mode: auditMode,
         provider: resolution.config.provider,
         model: resolution.config.model,
+        modelConfig: resolution.config,
         requestSettings: describeResolvedAIRequestSettingsV1(resolution, false, { responseFormat: 'json_object' }),
         budget,
         call: async messages => {

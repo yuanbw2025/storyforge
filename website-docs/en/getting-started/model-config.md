@@ -1,5 +1,17 @@
 # Models and APIs
 
+## November 25: capacity follows the actual connection
+
+Multiple longform, independent-creation and interactive-product paths now allocate input from evidenced capacity of the actual routed connection, reserving output/safety space. Some unknown-capacity paths retain old values only as conservative references. Full requests must pass admission; a large reference cannot force a request into a small window. Automatic output does not fabricate a small author limit. Explicit author/template overrides, Skill governance and service limits remain. Product-specific scope is in each guide.
+
+World queries retain task-remaining and Provider record/byte/token boundaries. Semantic compression sizes output from actual overage while preserving source anchors. Historical runs restore under their own frozen contracts/tool identities; unknown requests are not resent. This does not remove every product/evaluation limit. Based on #605–#615/#625/#627/#629–#632/#636/#638/#639/#641/#643/#649/#650.
+
+## November 23: service capacity and complete-content boundaries
+
+New tasks using the admitted service-capacity policy no longer truncate plans/materials at old software call-count, item-count or candidate-length quotas. Necessary semantic compression no longer mistakes this policy's zero software quota for exhausted calls. Actual service windows/output capability, permissions, balance and author authorization remain; unknown capacity stays unknown, not unlimited or free. Explicit finite caller budgets, accumulated usage and frozen historical constraints still apply. Based on #566/#567/#569.
+
+Applicable paths retain complete returned raw responses, author edits and structured evidence including their tails. Disconnected/incomplete responses keep their actual status without fabricated missing content. Independent products' explicit limits are not universally removed. See [settings](/en/features/longform/worlds-maps) and [imports](/en/guides/import) for length and recovery.
+
 ## November 19: automatic capacity and compact configuration
 
 Context capacity is discovered from evidence for the actual selected connection; the manual window field is removed. Preview and dispatch share input/output allocations. If capacity is unknown or insufficient, check the connection and model rather than entering a larger number. Task routing, provider/key/endpoint fields and the main Agent's six roles use compact rows, stacking on narrow screens and wrapping long names while retaining saved choices. Based on #469/#470/#471/#472.

@@ -1403,7 +1403,7 @@ export const AGENT_SKILLS = [
     } },
     contextCompression: compressionPolicy(['extensionRecords']), maxOutputTokens: 8000,
     writeTargets: [{ table: 'extensionRecords', fields: ['payload'], adoptionExtension: 'extension-record-lifecycle' }],
-    lastVerifiedAt: '2026-10-08', regressionTests: ['R-EXTENSION1-durable-ai'],
+    lastVerifiedAt: '2026-11-25', regressionTests: ['R-EXTENSION1-durable-ai'],
   },
   {
     version: 1,
@@ -1491,7 +1491,7 @@ export const AGENT_SKILLS = [
       table: 'worldviews',
       fields: WORLDVIEW_GENERATABLE_FIELD_SPECS.map(spec => spec.field),
     }],
-    lastVerifiedAt: '2026-10-08',
+    lastVerifiedAt: '2026-11-25',
     regressionTests: [
       'R-WE1-worldview-generatable-contract',
       'R-HARNESS32-worldview-field-agent',
@@ -1545,7 +1545,7 @@ export const AGENT_SKILLS = [
     },
     maxOutputTokens: 2_000,
     writeTargets: [],
-    lastVerifiedAt: '2026-10-08',
+    lastVerifiedAt: '2026-11-25',
     regressionTests: ['R-MW1-world-link-governance'],
   },
   {
@@ -1828,7 +1828,7 @@ export const AGENT_SKILLS = [
       table: 'storyCores',
       fields: STORY_CORE_GENERATABLE_FIELD_SPECS.map(spec => spec.field),
     }],
-    lastVerifiedAt: '2026-10-08',
+    lastVerifiedAt: '2026-11-25',
     regressionTests: [
       'R-HARNESS31-story-core-agent',
       'R-HARNESS31-story-core-panel-ui',
@@ -2094,7 +2094,7 @@ export const AGENT_SKILLS = [
         'statusProducerContractHash', 'statusProducerCandidateHash',
       ],
     }],
-    lastVerifiedAt: '2026-10-08',
+    lastVerifiedAt: '2026-11-25',
     regressionTests: ['R-CHAR1-character-gateway-contract', 'R-CHAR1-character-lifecycle-ui'],
   },
   {
@@ -2325,7 +2325,7 @@ export const AGENT_SKILLS = [
         'lastAlignedHash', 'producerRunId', 'producerCandidateHash',
       ],
     }],
-    lastVerifiedAt: '2026-10-08',
+    lastVerifiedAt: '2026-11-25',
     regressionTests: [
       'R-HARNESS30-story-arc-agent',
       'R-HARNESS30-story-arc-panel-ui',
@@ -2885,7 +2885,7 @@ export const AGENT_SKILLS = [
     contextGateway: OUTLINE_CONTEXT_GATEWAY_POLICY,
     maxOutputTokens: 12_000,
     writeTargets: [{ table: 'outlineNodes', fields: ['parentId', 'type', 'title', 'summary', 'order'] }],
-    lastVerifiedAt: '2026-10-09',
+    lastVerifiedAt: '2026-11-25',
     regressionTests: ['R-WEH0-skill-runtime-contract', 'R-AGENT1-chat-copilot-outline', 'R-HARNESS11-outline-batch-durable', 'R-HARNESS16-semantic-context-compression', 'R-HARNESS18-execution-version-freshness'],
   },
   {
@@ -2906,7 +2906,7 @@ export const AGENT_SKILLS = [
     contextGateway: OUTLINE_CONTEXT_GATEWAY_POLICY,
     maxOutputTokens: 8_000,
     writeTargets: [{ table: 'outlineNodes', fields: ['parentId', 'type', 'title', 'summary', 'order'] }],
-    lastVerifiedAt: '2026-10-09',
+    lastVerifiedAt: '2026-11-25',
     regressionTests: ['R-WEH0-skill-runtime-contract', 'R-HARNESS14-workflow-classifier', 'R-AGENT1-chat-copilot-outline', 'R-HARNESS16-semantic-context-compression', 'R-HARNESS18-execution-version-freshness'],
   },
   {
@@ -2927,7 +2927,7 @@ export const AGENT_SKILLS = [
     contextGateway: OUTLINE_CONTEXT_GATEWAY_POLICY,
     maxOutputTokens: 12_000,
     writeTargets: [{ table: 'outlineNodes', fields: ['parentId', 'type', 'title', 'summary', 'order'] }],
-    lastVerifiedAt: '2026-10-09',
+    lastVerifiedAt: '2026-11-25',
     regressionTests: ['R-WEH0-skill-runtime-contract', 'R-HARNESS14-workflow-classifier', 'R-AGENT1-chat-copilot-outline', 'R-HARNESS16-semantic-context-compression', 'R-HARNESS18-execution-version-freshness'],
   },
   {
@@ -2974,7 +2974,7 @@ export const AGENT_SKILLS = [
         'lastUsedSummary',
       ],
     }],
-    lastVerifiedAt: '2026-10-09',
+    lastVerifiedAt: '2026-11-25',
     regressionTests: [
       'R-HARNESS8-detailed-outline-generation-durable',
       'R-HARNESS37-detailed-outline-entry',
@@ -3000,6 +3000,30 @@ export const AGENT_SKILLS = [
     writeTargets: [{ table: 'chapters', fields: ['content', 'wordCount'] }],
     lastVerifiedAt: '2026-10-19',
     regressionTests: ['R-LFQ6-scene-feedback', 'R-WEH0-skill-runtime-contract', 'R-HARNESS7-prose-generation-durable', 'R-HARNESS9-information-boundary', 'R-HARNESS16-semantic-context-compression', 'R-HARNESS18-execution-version-freshness'],
+  },
+  {
+    version: 1, id: 'prose.generate.v2', agentId: 'prose', defaultForAgent: false,
+    label: '章节正文完整生成 V2', owner: 'prose-agent', requestPolicy: 'task-request-v2',
+    promptVersion: 'prose-task-full-length-v2', executionMode: 'generate', contextTaskKind: 'agent-prose',
+    readToolNames: [], contextSourceKeys: PROSE_CONTEXT_SOURCE_KEYS, optionalContextSourceKeys: [],
+    inputPolicy: PROSE_INPUT_POLICY, contextCompression: PROSE_COMPRESSION_POLICY,
+    // Finite material allocation is mandatory at execution; these compatibility
+    // values never authorize a model call or become a new text quota.
+    contextGateway: { ...PROSE_CONTEXT_GATEWAY_POLICY, retrievalBudgetMode: 'model-capacity', maxReadCalls: 1, maxRetrievedTokens: 1,
+      maxPlanningSteps: 1, maxPlanningModelTokens: 1, additionalReadToolNames: [] },
+    maxOutputTokens: null, writeTargets: [{ table: 'chapters', fields: ['content', 'wordCount'] }],
+    lastVerifiedAt: '2026-11-23', regressionTests: ['R-PROSE-LENGTH-V2-request', 'R-PROSE-LENGTH-V2-wire'],
+  },
+  {
+    version: 1, id: 'prose.continue.v2', agentId: 'prose', defaultForAgent: false,
+    label: '章节正文完整续写 V2', owner: 'prose-agent', requestPolicy: 'task-request-v2',
+    promptVersion: 'prose-task-full-length-v2', executionMode: 'continue', contextTaskKind: 'agent-prose',
+    readToolNames: [], contextSourceKeys: PROSE_CONTEXT_SOURCE_KEYS, optionalContextSourceKeys: [],
+    inputPolicy: PROSE_INPUT_POLICY, contextCompression: PROSE_COMPRESSION_POLICY,
+    contextGateway: { ...PROSE_CONTEXT_GATEWAY_POLICY, retrievalBudgetMode: 'model-capacity', maxReadCalls: 1, maxRetrievedTokens: 1,
+      maxPlanningSteps: 1, maxPlanningModelTokens: 1, additionalReadToolNames: [] },
+    maxOutputTokens: null, writeTargets: [{ table: 'chapters', fields: ['content', 'wordCount'] }],
+    lastVerifiedAt: '2026-11-23', regressionTests: ['R-PROSE-LENGTH-V2-request', 'R-PROSE-LENGTH-V2-wire'],
   },
   {
     version: 1,
@@ -3255,7 +3279,7 @@ export const AGENT_SKILLS = [
     contextGateway: { ...PROSE_CONTEXT_GATEWAY_POLICY, requiredWriteTargets: [] },
     maxOutputTokens: 3_000,
     writeTargets: [],
-    lastVerifiedAt: '2026-10-09',
+    lastVerifiedAt: '2026-11-25',
     regressionTests: ['R-WEH0-skill-runtime-contract', 'R-HARNESS19-prose-semantic-review'],
   },
   {
@@ -3339,8 +3363,66 @@ export const AGENT_SKILLS = [
     contextGateway: { ...PROSE_CONTEXT_GATEWAY_POLICY, requiredWriteTargets: [] },
     maxOutputTokens: 16_000,
     writeTargets: [],
-    lastVerifiedAt: '2026-10-09',
+    lastVerifiedAt: '2026-11-25',
     regressionTests: ['R-WEH0-skill-runtime-contract', 'R-HARNESS19-prose-semantic-review'],
+  },
+  {
+    version: 1,
+    id: 'prose.organize.v2',
+    agentId: 'prose',
+    defaultForAgent: false,
+    label: '章节七域证据整理 V2',
+    owner: 'prose-agent',
+    promptVersion: 'chapter-organization-v5',
+    executionMode: 'organize',
+    contextTaskKind: 'agent-prose',
+    readToolNames: [],
+    contextSourceKeys: PROSE_ORGANIZATION_CONTEXT_SOURCE_KEYS,
+    optionalContextSourceKeys: [],
+    inputPolicy: PROSE_POST_ADOPTION_INPUT_POLICY,
+    contextCompression: PROSE_ORGANIZATION_COMPRESSION_POLICY,
+    // Capacity-managed output: the bound connection's evidenced model limit
+    // replaces the old fixed 8k application quota. This value never becomes
+    // a content or dispatch cap for the seven-domain evidence extraction.
+    maxOutputTokens: null,
+    writeTargets: [
+      { table: 'stateCards', fields: ['category', 'entityName', 'fields', 'lastChapterId'] },
+      { table: 'temporalFacts', fields: [], adoptionExtension: 'fact-ledger' },
+      { table: 'itemLedger', fields: ['itemName', 'action', 'quantity', 'heldByName', 'characterId', 'chapterId', 'chapterTitle', 'note'] },
+      { table: 'storyTimelineEvents', fields: ['title', 'storyTime', 'importance', 'description', 'chapterId', 'chapterTitle', 'order'] },
+      { table: 'characterRelations', fields: ['fromCharacterId', 'toCharacterId', 'relationType', 'label', 'description', 'isBidirectional'] },
+      { table: 'foreshadows', fields: ['status', 'plantChapterId', 'echoChapterIds', 'resolveChapterId', 'notes'] },
+      { table: 'storylineProgress', fields: ['arcId', 'currentStageId', 'status', 'progressNote', 'lastActiveChapterId', 'lastActiveChapterTitle', 'involvedEntities', 'evidenceQuote'] },
+      { table: 'storylineCrossings', fields: ['arcIdA', 'arcIdB', 'chapterId', 'chapterTitle', 'note', 'evidenceQuote'] },
+      { table: 'storyArcs', fields: ['name', 'type', 'description', 'stages'] },
+    ],
+    lastVerifiedAt: '2026-11-24',
+    regressionTests: ['R-CHAPTER-POST-ADOPTION-ENTRY-V2'],
+  },
+  {
+    version: 1,
+    id: 'prose.memory.v2',
+    agentId: 'prose',
+    defaultForAgent: false,
+    label: '章节记忆与交接抽取 V2',
+    owner: 'prose-agent',
+    promptVersion: 'chapter-memory-v2',
+    executionMode: 'memory',
+    contextTaskKind: 'agent-prose',
+    readToolNames: [],
+    contextSourceKeys: PROSE_MEMORY_CONTEXT_SOURCE_KEYS,
+    optionalContextSourceKeys: [],
+    inputPolicy: PROSE_POST_ADOPTION_INPUT_POLICY,
+    contextCompression: PROSE_MEMORY_COMPRESSION_POLICY,
+    // Capacity-managed output: summary/handoff/reconciliation length follows
+    // the chapter's actual information density; the old 8k quota is gone.
+    maxOutputTokens: null,
+    writeTargets: [{
+      table: 'chapters',
+      fields: ['summary', 'summarySourceTextHash', 'summaryTextNormalizationVersion', 'continuityHandoff', 'planReconciliation'],
+    }],
+    lastVerifiedAt: '2026-11-24',
+    regressionTests: ['R-CHAPTER-POST-ADOPTION-ENTRY-V2'],
   },
   {
     version: 1,
@@ -3369,7 +3451,7 @@ export const AGENT_SKILLS = [
       { table: 'storylineCrossings', fields: ['arcIdA', 'arcIdB', 'chapterId', 'chapterTitle', 'note', 'evidenceQuote'] },
       { table: 'storyArcs', fields: ['name', 'type', 'description', 'stages'] },
     ],
-    lastVerifiedAt: '2026-10-09',
+    lastVerifiedAt: '2026-11-25',
     regressionTests: ['R-AGENT5-chapter-organization', 'R-HARNESS20-chapter-post-adoption-durable', 'R-PROGRESS1-post-adoption-policy'],
   },
   {
@@ -5041,7 +5123,7 @@ export const AGENT_SKILLS = [
       fields: ['userIntentSummary'],
       adoptionExtension: 'product-production-briefs',
     }],
-    lastVerifiedAt: '2026-10-06',
+    lastVerifiedAt: '2026-11-25',
     regressionTests: ['R-PRODUCTPROD1B-consultation'],
   },
   {
@@ -5062,7 +5144,7 @@ export const AGENT_SKILLS = [
     contextGateway: PRODUCT_PRODUCTION_WORLD_GATEWAY_POLICY,
     maxOutputTokens: 8_000,
     writeTargets: [],
-    lastVerifiedAt: '2026-10-08',
+    lastVerifiedAt: '2026-11-25',
     regressionTests: ['R-TTRPG3M-campaign-proposal-harness'],
   },
   {
@@ -5087,7 +5169,7 @@ export const AGENT_SKILLS = [
       fields: ['briefJson'],
       adoptionExtension: 'product-production-briefs',
     }],
-    lastVerifiedAt: '2026-10-06',
+    lastVerifiedAt: '2026-11-25',
     regressionTests: ['R-PRODUCTPROD1B-consultation', 'R-PRODUCTPROD1B-commands'],
   },
   {
@@ -5108,7 +5190,7 @@ export const AGENT_SKILLS = [
     contextGateway: PRODUCT_PRODUCTION_WORLD_GATEWAY_POLICY,
     maxOutputTokens: 12_000,
     writeTargets: [{ table: 'productBuilds', fields: ['planJson'], adoptionExtension: 'product-production-builds' }],
-    lastVerifiedAt: '2026-10-06',
+    lastVerifiedAt: '2026-11-25',
     regressionTests: ['R-PRODUCTPROD1C-plan', 'R-PRODUCTPROD1D-scheduler'],
   },
   {
@@ -5179,7 +5261,7 @@ export const AGENT_SKILLS = [
     contextGateway: PRODUCT_PRODUCTION_WORLD_GATEWAY_POLICY,
     maxOutputTokens: 16_000,
     writeTargets: [{ table: 'productBuildArtifacts', fields: ['payloadJson'], adoptionExtension: 'product-production-artifacts' }],
-    lastVerifiedAt: '2026-10-06',
+    lastVerifiedAt: '2026-11-25',
     regressionTests: ['R-PRODUCTPROD1F-production-executor'],
   },
   {
@@ -5289,7 +5371,7 @@ export const AGENT_SKILLS = [
     ]),
     maxOutputTokens: 20_000,
     writeTargets: [{ table: 'productBuildArtifacts', fields: ['payloadJson'], adoptionExtension: 'product-production-artifacts' }],
-    lastVerifiedAt: '2026-10-10',
+    lastVerifiedAt: '2026-11-25',
     regressionTests: ['R-TEXTADV3-agent-team', 'R-TEXTADV3-production-artifacts'],
   },
   {
@@ -5356,7 +5438,7 @@ export const AGENT_SKILLS = [
     ]),
     maxOutputTokens: 24_000,
     writeTargets: [{ table: 'productBuildArtifacts', fields: ['payloadJson'], adoptionExtension: 'product-production-artifacts' }],
-    lastVerifiedAt: '2026-10-10',
+    lastVerifiedAt: '2026-11-25',
     regressionTests: ['R-TEXTADV3-agent-team', 'R-TEXTADV-quest-settlement', 'R-PRODUCTPROD1F-production-executor'],
   },
   {
@@ -5813,7 +5895,7 @@ export const AGENT_SKILLS = [
     contextGateway: PRODUCT_PRODUCTION_WORLD_GATEWAY_POLICY,
     maxOutputTokens: 8_000,
     writeTargets: [{ table: 'productBuildArtifacts', fields: ['metadataJson'], adoptionExtension: 'product-production-artifacts' }],
-    lastVerifiedAt: '2026-10-06',
+    lastVerifiedAt: '2026-11-25',
     regressionTests: ['R-PRODUCTPROD1F-production-executor'],
   },
   {
@@ -5834,7 +5916,7 @@ export const AGENT_SKILLS = [
     contextGateway: PRODUCT_PRODUCTION_WORLD_GATEWAY_POLICY,
     maxOutputTokens: 4_000,
     writeTargets: [{ table: 'productBuildArtifacts', fields: [], adoptionExtension: 'product-production-artifacts' }],
-    lastVerifiedAt: '2026-10-06',
+    lastVerifiedAt: '2026-11-25',
     regressionTests: ['R-PRODUCTPROD1E-media-adapters', 'R-PRODUCTPROD1F-production-executor'],
   },
   {
@@ -5989,7 +6071,7 @@ export const AGENT_SKILLS = [
     contextGateway: PRODUCT_PRODUCTION_WORLD_GATEWAY_POLICY,
     maxOutputTokens: 6_000,
     writeTargets: [{ table: 'productBuilds', fields: ['manifestJson', 'previewManifestJson'], adoptionExtension: 'product-production-builds' }],
-    lastVerifiedAt: '2026-10-06',
+    lastVerifiedAt: '2026-11-25',
     regressionTests: ['R-PRODUCTPROD1F-production-executor'],
   },
   {
@@ -6010,7 +6092,7 @@ export const AGENT_SKILLS = [
     contextGateway: PRODUCT_PRODUCTION_WORLD_GATEWAY_POLICY,
     maxOutputTokens: 6_000,
     writeTargets: [{ table: 'productBuilds', fields: ['qualityReportJson'], adoptionExtension: 'product-production-builds' }],
-    lastVerifiedAt: '2026-10-06',
+    lastVerifiedAt: '2026-11-25',
     regressionTests: ['R-PRODUCTPROD1F-production-executor'],
   },
   {
@@ -6030,7 +6112,7 @@ export const AGENT_SKILLS = [
     contextCompression: compressionPolicy(['product-production.evolution-base']),
     maxOutputTokens: 8_000,
     writeTargets: [{ table: 'productBuilds', fields: ['compatibilityJson'], adoptionExtension: 'product-production-builds' }],
-    lastVerifiedAt: '2026-10-06',
+    lastVerifiedAt: '2026-11-25',
     regressionTests: ['R-PRODUCTPROD1B-commands', 'R-PRODUCTPROD1D-scheduler', 'R-PRODUCTPROD1F-production-executor'],
   },
 ] as const satisfies readonly AgentSkillDefinitionV1[]
@@ -6334,9 +6416,41 @@ export function assertWorldviewFullCaptureProfileV2(definition: Parameters<typeo
   }
   return true
 }
+/** Only these two chapter operations can use task-request allocation. Frozen
+ * legacy prose Skills keep their previous permissions and request semantics. */
+export function assertProseTaskProfileV2(definition: Parameters<typeof assertCodexFullCaptureProfileV2>[0]): boolean {
+  if (!['prose.generate.v2', 'prose.continue.v2'].includes(definition.id)) return false
+  const eq = (value: unknown, expected: readonly unknown[]) => Array.isArray(value)
+    && value.length === expected.length && value.every((item, index) => item === expected[index])
+  const gate = definition.contextGateway
+  if (definition.agentId !== 'prose' || definition.owner !== 'prose-agent' || definition.defaultForAgent !== false
+    || definition.requestPolicy !== 'task-request-v2' || definition.promptVersion !== 'prose-task-full-length-v2'
+    || definition.executionMode !== (definition.id === 'prose.continue.v2' ? 'continue' : 'generate')
+    || definition.contextTaskKind !== 'agent-prose' || definition.maxOutputTokens !== null || ![1, 2].includes(definition.version)
+    || definition.version === 2 && (definition.sourceDefinitionVersion !== 1 || !eq(definition.resolvedToolSourceKeys, []))
+    || !eq(definition.contextSourceKeys, PROSE_CONTEXT_SOURCE_KEYS) || !eq(definition.optionalContextSourceKeys, [])
+    || !eq(definition.readToolNames, []) || !eq(definition.inputPolicy.sourceKeys, PROSE_INPUT_POLICY.sourceKeys)
+    || !eq(definition.contextCompression.sourceKeys, PROSE_CONTEXT_SOURCE_KEYS)
+    || !gate || gate.version !== 1 || gate.rollout !== 'required' || gate.allowOriginalRead !== true
+    || !eq(gate.providerSourceKeys, PROSE_CONTEXT_GATEWAY_POLICY.providerSourceKeys)
+    || !eq(gate.allowedResourceKinds, PROSE_CONTEXT_GATEWAY_POLICY.allowedResourceKinds)
+    || !eq(gate.allowedDepths, PROSE_CONTEXT_GATEWAY_POLICY.allowedDepths)
+    || !eq(gate.additionalReadToolNames, []) || gate.retrievalBudgetMode !== 'model-capacity' || gate.maxReadCalls !== 1 || gate.maxRetrievedTokens !== 1
+    || gate.maxPlanningSteps !== 1 || gate.maxPlanningModelTokens !== 1
+    || !eq(gate.requiredWriteTargets, ['chapters.content', 'chapters.wordCount'])
+    || definition.writeTargets.length !== 1 || definition.writeTargets[0].table !== 'chapters'
+    || 'adoptionExtension' in definition.writeTargets[0] || !eq(definition.writeTargets[0].fields, ['content', 'wordCount'])) {
+    throw new Error('正文 V2 完整请求 profile 无效。')
+  }
+  for (const state of ['empty', 'partial', 'complete'] as const) {
+    if (definition.inputPolicy.states[state]?.handling !== PROSE_INPUT_POLICY.states[state].handling) throw new Error('正文 V2 输入权限无效。')
+  }
+  return true
+}
 export function assertRegisteredFullCaptureProfileV2(definition: Parameters<typeof assertCodexFullCaptureProfileV2>[0]): boolean {
-  return definition.id === 'world-origin.worldview-field.v2'
-    ? assertWorldviewFullCaptureProfileV2(definition) : assertCodexFullCaptureProfileV2(definition)
+  return definition.id === 'world-origin.worldview-field.v2' ? assertWorldviewFullCaptureProfileV2(definition)
+    : ['prose.generate.v2', 'prose.continue.v2'].includes(definition.id) ? assertProseTaskProfileV2(definition)
+      : assertCodexFullCaptureProfileV2(definition)
 }
 
 export function validateAgentSkillDefinitionsV1(
@@ -6397,7 +6511,7 @@ export function validateAgentSkillDefinitionsV1(
     if (!/^\d{4}-\d{2}-\d{2}$/.test(skill.lastVerifiedAt)) {
       throw new Error(`Agent Skill ${skill.id} 的 lastVerifiedAt 无效`)
     }
-    if (skill.maxOutputTokens === null ? !['inspiration.reference-summary', 'inspiration.reference-characters', 'inspiration.reference-analysis-private-chunk', 'world-origin.worldview-field.v2'].includes(skill.id) : !Number.isInteger(skill.maxOutputTokens) || skill.maxOutputTokens < 1) {
+    if (skill.maxOutputTokens === null ? !['inspiration.reference-summary', 'inspiration.reference-characters', 'inspiration.reference-analysis-private-chunk', 'world-origin.worldview-field.v2', 'prose.generate.v2', 'prose.continue.v2', 'prose.organize.v2', 'prose.memory.v2'].includes(skill.id) : !Number.isInteger(skill.maxOutputTokens) || skill.maxOutputTokens < 1) {
       throw new Error(`Agent Skill ${skill.id} 的输出预算无效`)
     }
     if (skill.regressionTests.length === 0) throw new Error(`Agent Skill ${skill.id} 缺少回归证据`)

@@ -41,6 +41,9 @@ export function voiceEndpoint(config: VoiceService, operation: 'transcriptions' 
 }
 
 export function speechText(text: string): string {
+  // B40：只做朗读前的文本清理，不再静默截断内容。单次请求的真实上限由实际
+  // TTS/协议与调用方显式守卫（如 useChatVoice 的 VOICE_MAX_TEXT 明确报错）
+  // 决定；静默 slice 会把长消息尾部悄悄丢掉。
   return text.replace(/```[\s\S]*?```/g, '').replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
-    .replace(/[#*_`>]/g, '').trim().slice(0, VOICE_MAX_TEXT)
+    .replace(/[#*_`>]/g, '').trim()
 }

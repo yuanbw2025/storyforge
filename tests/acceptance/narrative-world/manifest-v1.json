@@ -21,9 +21,39 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261121-063-main558-input-v2.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261127-inspiration059-input-v1.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261125-capacity-release-input-v4.json",
+        "sha256": "937ca6b59b50a4aaf816c46f432782a1c9221256f33a10a5c9e5284463d2a0b8",
+        "note": "Preserve the measured main receipt before the Work-owned inspiration059 template configuration. Remeasured deterministic observations and known gaps are unchanged; no model or product acceptance inferred."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261125-capacity-release-input-v3.json",
+        "workPackage": "CAPACITY-RELEASE-409",
+        "note": "Preserve the v3 release measurement before current tooling type fixes, test fixture typing and verified Skill freshness records. The v4 measurement preserves the corpus, deterministic observations and known gaps; no live-model or product acceptance inferred."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/ir-contract-20261125-capacity-release-input-v1.json",
+        "workPackage": "CAPACITY-RELEASE-409",
+        "note": "Preserve the IR v1 measurement before typing the malformed external-input fixtures. IR v2 retains every deterministic case outcome and refreshes only the input hashes."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261125-capacity-release-input-v2.json",
+        "workPackage": "CAPACITY-RELEASE-409",
+        "note": "Preserve the v2 release measurement before refreshing the IR receipt pointer for merged registry type inputs. Deterministic observations and known gaps must remain unchanged; no live-model or product acceptance inferred."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261125-capacity-release-input-v1.json",
+        "workPackage": "CAPACITY-RELEASE-409",
+        "note": "Preserve the prior capacity release measurement before refreshing the domain receipt pointer to current merged adoption and portability inputs. All deterministic outcomes and known gaps must remain identical; no model or product acceptance is inferred."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261121-063-main558-input-v2.json",
+        "workPackage": "CAPACITY-RELEASE-409",
+        "note": "Preserve the measured main558 input receipt before the merged capacity/budget and source declaration updates. The 2026-11-25 release receipt remeasures current inputs; all deterministic outcomes, gaps and unsupported observations are compared unchanged. No live-model or product acceptance is inferred."
+      },
       {
         "path": "tests/acceptance/narrative-world/baseline-20261120-063-producer-input-v1.json",
         "workPackage": "BUG-063-A2-MAIN558",

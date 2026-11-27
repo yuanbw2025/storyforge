@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import HistoryKeywordCard from '../../src/components/history/HistoryKeywordCard'
 import type { Chapter, HistoricalKeyword } from '../../src/lib/types'
 
-globalThis.IS_REACT_ACT_ENVIRONMENT = true
+Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
 
 const mounted: Array<{ host: HTMLDivElement; root: ReturnType<typeof createRoot> }> = []
 
@@ -133,8 +133,8 @@ describe('AUDIT-6 · 历史关键词卡', () => {
   it('展开态将字段与章节变化转成精确 patch', async () => {
     const { host, props } = await mount({ expanded: true })
     const nameInput = host.querySelector('input')!
-    const category = host.querySelector('select[aria-label="关键词分类"]')!
-    const era = host.querySelector('select[aria-label="适用历史时期"]')!
+    const category = host.querySelector<HTMLSelectElement>('select[aria-label="关键词分类"]')!
+    const era = host.querySelector<HTMLSelectElement>('select[aria-label="适用历史时期"]')!
     const description = host.querySelector('textarea')!
 
     await changeValue(nameInput, '交子')

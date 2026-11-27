@@ -1,9 +1,13 @@
 ---
 productId: upper.avg
 status: preview
-lastVerified: 2026-11-13
+lastVerified: 2026-11-25
 ---
 # AVG and visual novels
+
+## November 25: compact library and production pages
+
+The library has compact New/search tools, no-result feedback and Clear search. Long titles wrap; production/assembly reduce repeated spacing and examples use an AVG-private compact wrapper. Player stage/text sizing, save conflicts, explicit start, candidate confirmation and publication retain their behavior. Based on #585.
 
 ## November 19: draft deletion and libraries
 

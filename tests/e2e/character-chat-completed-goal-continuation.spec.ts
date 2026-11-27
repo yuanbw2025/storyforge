@@ -12,9 +12,9 @@ async function setup(page: Page) {
   await page.addInitScript(() => {
     localStorage.setItem('storyforge_guide_completed', 'e2e')
   })
-  registerBrowserFixtureAIConfigV1(page, { provider: 'openai', baseUrl: 'https://goal-continuation.invalid/v1', model: 'test', maxTokens: 8000, apiKey: 'isolated-test-key' })
+  registerBrowserFixtureAIConfigV1(page, { provider: 'custom', baseUrl: 'https://goal-continuation.invalid/v1', model: 'test', maxTokens: 8000, apiKey: 'isolated-test-key' }, { serviceContextWindow: 64000 })
   const calls: string[] = []
-  await page.route('https://goal-continuation.invalid/**', async route => {
+  await page.route('https://goal-continuation.invalid/v1/chat/completions', async route => {
     const messages = route.request().postDataJSON().messages, text = JSON.stringify(messages)
     const step = messages[0].content.startsWith('这是尚未发生的角色行动选择草稿') ? 'choice'
       : text.includes('本次持久化行动候选') ? 'review' : 'expression'

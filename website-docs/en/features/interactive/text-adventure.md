@@ -1,9 +1,15 @@
 ---
 productId: upper.text-adventure
 status: preview
-lastVerified: 2026-11-13
+lastVerified: 2026-11-25
 ---
 # Text adventure
+
+## November 25: search, layout and runtime input
+
+Text-adventure libraries filter locally by title, show matching counts/no-result feedback and offer Clear search. Configuration, toolbars, covers/details and save summaries use tighter spacing while retaining full titles/descriptions. Filtering does not mutate works, versions or sessions; start/detail/save actions remain. Based on #588.
+
+Runtime intent/dialogue tasks use evidenced connection capacity for input, retaining 16k as an unknown-capacity reference. Admission, character permissions, read-only world access and recovery remain checked; no new action is automatically taken for the player. Based on #641.
 
 ## November 19: draft deletion and libraries
 

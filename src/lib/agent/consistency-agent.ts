@@ -27,6 +27,7 @@ import {
   readLifecycleAuditSnapshot,
 } from '../consistency/lifecycle-boundary'
 import type {
+  AIConfig,
   AgentConversation,
   AgentEvent,
   ChatMessage,
@@ -290,6 +291,7 @@ export async function runConsistencyAgent(input: {
   mode: Exclude<ConsistencyAgentMode, 'background'>
   provider?: Parameters<typeof assembleContext>[0]['provider']
   model?: string
+  modelConfig?: AIConfig
   budget: AgentTeamBudgetTracker
   call: (messages: ChatMessage[]) => Promise<ConsistencyAgentModelResponseV1>
   trace?: ConsistencyAgentExecutionTraceV1
@@ -325,6 +327,7 @@ export async function runConsistencyAgent(input: {
         : CONSISTENCY_AGENT_DEEP_SOURCES_V1)],
       provider: input.provider,
       model: input.model,
+      modelConfig: input.modelConfig,
       inputBudgetMaxTokens: CONSISTENCY_AGENT_INPUT_BUDGET_V1[input.mode],
     }),
     readCognitionAuditSnapshot(input.projectId, input.chapterId, input.worldGroupId, input.outlineNodeId, scope),

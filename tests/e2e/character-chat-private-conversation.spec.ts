@@ -6,7 +6,10 @@ const input = (page: Page) => page.getByRole('textbox', {name: '发送给角色�
 const audience = (page: Page) => page.getByLabel('对话范围', {exact: true})
 const saved = (page: Page) => page.getByText('草稿已保存，仅在此存档可见', {exact: true})
 async function setup(page: Page, model = false) {
-  registerBrowserFixtureAIConfigV1(page.context(), { provider: 'openai', model: 'test', baseUrl: 'https://chat-private.invalid/v1', apiKey: model ? 'isolated-test-key' : '' })
+  registerBrowserFixtureAIConfigV1(page.context(), model
+    ? { provider: 'custom', model: 'test', baseUrl: 'https://chat-private.invalid/v1', apiKey: 'isolated-test-key' }
+    : { provider: 'openai', model: 'gpt-4o', baseUrl: 'https://api.openai.com/v1', apiKey: '' },
+  model ? { serviceContextWindow: 64000 } : {})
   await page.context().addInitScript(() => localStorage.setItem('storyforge_guide_completed', 'e2e'))
   await gotoWithBrowserFixtureAIConfigV1(page, './chat/library')
   const f = await page.evaluate(async () => {
@@ -69,7 +72,7 @@ test('two pages resolve recipient-only conflicts without silently publishing ide
 
 test('private reply and continuation keep the original conversation through import without automatic model calls', async ({page}) => {
   const calls: string[] = []
-  await page.route('https://chat-private.invalid/**', async route => {
+  await page.route('https://chat-private.invalid/v1/chat/completions', async route => {
           if (await fulfillChatActionChoiceFixture(route)) return
     const prompt = route.request().postDataJSON().messages.map((m: {content: string}) => m.content).join('\n')
     const review = prompt.includes('本次持久化行动候选')

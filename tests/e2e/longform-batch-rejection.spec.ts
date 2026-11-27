@@ -1,3 +1,4 @@
+import { installBrowserServiceCapacityFixtureV1 } from './helpers/browser-ai-config'
 import { expect, test } from '@playwright/test'
 import { createLongform } from './helpers/product-entry'
 import { openLongformLeaf } from './helpers/longform-navigation'
@@ -7,8 +8,9 @@ test('SFQA095: a failed batch rejection stays visible and restores the exact unf
     localStorage.setItem('storyforge_guide_completed', 'e2e')
     localStorage.setItem('storyforge-ai-config', JSON.stringify({ provider: 'ollama', baseUrl: 'https://batch-rejection-test.invalid/v1', model: 'batch-rejection-e2e', temperature: 0.2, maxTokens: 4000 }))
   })
+  await installBrowserServiceCapacityFixtureV1(page, { provider: 'ollama', baseUrl: 'https://batch-rejection-test.invalid/v1', model: 'batch-rejection-e2e' }, 64000)
   let modelCalls = 0
-  await page.route('https://batch-rejection-test.invalid/**', async route => {
+  await page.route('https://batch-rejection-test.invalid/v1/chat/completions', async route => {
     modelCalls++
     await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ choices: [{ message: { content: JSON.stringify([{ title: `候选章${modelCalls}`, summary: `第${modelCalls}卷推进剧情` }]) }, finish_reason: 'stop' }], usage: { prompt_tokens: 100, completion_tokens: 100, total_tokens: 200 } }) })
   })

@@ -777,7 +777,6 @@ export default function ComicStudio({ scope, page }: Props) {
         </div>
       </header>
       {page&&sourceStatus}
-      {pipeline}
       <nav className="comic-toolbar">
         <div className="comic-mode-tabs" role="group" aria-label="漫画工作区">
         <button
@@ -1135,6 +1134,7 @@ export default function ComicStudio({ scope, page }: Props) {
           act={act}
         />
       )}
+      {pipeline}
       {(error || message) && (
         <div
           className={error ? "comic-error" : "comic-message"}

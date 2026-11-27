@@ -5,7 +5,7 @@ import { BackgroundColor, Color, FontFamily, FontSize, TextStyle } from '@tiptap
 import { BlockSpacing } from './rich-editor-theme'
 
 export function richEditorExtensionsV1(placeholder = '') {
-  return [StarterKit.configure({ heading: { levels: [2, 3, 4] } }), TextStyle, Color, BackgroundColor, FontFamily, FontSize, BlockSpacing, Placeholder.configure({ placeholder })]
+  return [StarterKit.configure({ heading: { levels: [1, 2, 3, 4, 5, 6] } }), TextStyle, Color, BackgroundColor, FontFamily, FontSize, BlockSpacing, Placeholder.configure({ placeholder })]
 }
 
 /** The same schema as the author's editor, without changing its live state. */

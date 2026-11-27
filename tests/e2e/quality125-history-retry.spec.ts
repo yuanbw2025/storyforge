@@ -1,3 +1,4 @@
+import { installBrowserServiceCapacityFixtureV1 } from './helpers/browser-ai-config'
 import { expect, test, type Page } from '@playwright/test'
 import { createLongform } from './helpers/product-entry'
 import { openLongformLeaf } from './helpers/longform-navigation'
@@ -44,6 +45,7 @@ for (const mode of ['consult', 'storm'] as const) {
         temperature: 0, maxTokens: 0, contextWindow: 100000,
       }))
     })
+    await installBrowserServiceCapacityFixtureV1(page, { provider: 'ollama', baseUrl: 'http://localhost:1234/v1', model: 'history-retry-isolated' }, 100000)
     await page.route('http://localhost:1234/v1/chat/completions', async route => {
       calls++
       const request = route.request().postDataJSON() as { messages: Array<{ content: string }> }
@@ -61,7 +63,7 @@ for (const mode of ['consult', 'storm'] as const) {
     await openLongformLeaf(page, '历史年表')
     await page.getByRole('button', { name: '添加事件', exact: true }).click()
     await page.locator('input[value="新历史事件"]').fill('盐晶新律颁布')
-    await page.getByRole('heading', { name: '📜 历史年表与时间线' }).click()
+    await page.locator('input[value="盐晶新律颁布"]').blur()
     await page.getByRole('button', { name: mode === 'consult' ? 'AI 历史考据' : 'AI 头脑风暴', exact: true }).click()
     await expect(page.getByText(`修复候选${mode}-1`, { exact: false })).toBeVisible()
     const before = await audit(page)

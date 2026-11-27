@@ -18,7 +18,7 @@ export function formatHandoff(handoff: ChapterContinuityHandoff): string[] {
   if (handoff.openLoops.length) lines.push(`未闭环：${handoff.openLoops.join('；')}`)
   if (handoff.immediateNextIntent) lines.push(`下一步意图：${handoff.immediateNextIntent}`)
   if (handoff.evidenceQuotes.length) {
-    lines.push(`证据引文：${handoff.evidenceQuotes.slice(0, 6).map(item => `“${item.quote}”`).join('；')}`)
+    lines.push(`证据引文：${handoff.evidenceQuotes.map(item => `“${item.quote}”`).join('；')}`)
   }
   return lines
 }

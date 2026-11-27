@@ -1,9 +1,17 @@
 ---
 productId: independent.screenplay
 status: released
-lastVerified: 2026-11-13
+lastVerified: 2026-11-25
 ---
 # Novel to screenplay
+
+## November 25: stage-source capacity
+
+Screenplay stages assemble original and confirmed material using evidenced input capacity of the bound connection instead of treating the old 48k reference as a ceiling. Unknown capacity retains a conservative reference; the full request still undergoes admission and explicit author limits are not enlarged. Stage output, scene structure, adoption and recovery retain their rules. Preserve sources/tasks before handling capacity errors rather than repeatedly resending. Based on #627/#630.
+
+## November 23: writing first and expandable exports
+
+Screenplay pages retain the full work title, format, source state and version while reducing repeated headings. Known short metadata share rows; narrative and unknown fields keep full width. Writing comes before AI assistance, and mobile shows the active editor before the scene tree. Expand Versions and export to choose a version, export or publish. Publication blockers are also expandable; these details open by default on the versions page. AI assistance and candidate review remain available. Save, adoption, locking, source synchronization and publication checks retain existing rules. Based on [#583](https://github.com/yuanbw2025/storyforge/pull/583).
 
 ## November 13: saving, recovery and usage checks
 

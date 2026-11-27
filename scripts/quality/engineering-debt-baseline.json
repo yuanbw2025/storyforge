@@ -29828,36 +29828,6 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/e2e/avg-region-source9-read.spec.ts\",\"TS2322\",\"Type '((value: any, key?: IDBValidKey | undefined) => IDBRequest<IDBValidKey>) | ((query: IDBKeyRange | IDBValidKey) => IDBRequest<...>) | ((value: any, key?: IDBValidKey | undefined) => IDBRequest<...>) | (() => IDBRequest<...>)' is not assignable to type '(() => IDBRequest<undefined>) & ((value: any, key?: IDBValidKey | undefined) => IDBRequest<IDBValidKey>) & ((query: IDBKeyRange | IDBValidKey) => IDBRequest<...>) & ((value: any, key?: IDBValidKey | undefined) => IDBRequest<...>)'.\\n  Type '(value: any, key?: IDBValidKey | undefined) => IDBRequest<IDBValidKey>' is not assignable to type '(() => IDBRequest<undefined>) & ((value: any, key?: IDBValidKey | undefined) => IDBRequest<IDBValidKey>) & ((query: IDBKeyRange | IDBValidKey) => IDBRequest<...>) & ((value: any, key?: IDBValidKey | undefined) => IDBRequest<...>)'.\\n    Type '(value: any, key?: IDBValidKey | undefined) => IDBRequest<IDBValidKey>' is not assignable to type '() => IDBRequest<undefined>'.\\n      Target signature provides too few arguments. Expected 1 or more, but got 0.\",\"b6b34261e9810aa64248b1e9e5e373942f2fb3a40ab1244ff01b9ea806071797\",7,15]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/e2e/avg-region-source9-read.spec.ts",
-        "code": "TS2322",
-        "message": "Type '((value: any, key?: IDBValidKey | undefined) => IDBRequest<IDBValidKey>) | ((query: IDBValidKey | IDBKeyRange) => IDBRequest<...>) | ((value: any, key?: IDBValidKey | undefined) => IDBRequest<...>) | (() => IDBRequest<...>)' is not assignable to type '(() => IDBRequest<undefined>) & ((value: any, key?: IDBValidKey | undefined) => IDBRequest<IDBValidKey>) & ((query: IDBValidKey | IDBKeyRange) => IDBRequest<...>) & ((value: any, key?: IDBValidKey | undefined) => IDBRequest<...>)'.\n  Type '(value: any, key?: IDBValidKey | undefined) => IDBRequest<IDBValidKey>' is not assignable to type '(() => IDBRequest<undefined>) & ((value: any, key?: IDBValidKey | undefined) => IDBRequest<IDBValidKey>) & ((query: IDBValidKey | IDBKeyRange) => IDBRequest<...>) & ((value: any, key?: IDBValidKey | undefined) => IDBRequest<...>)'.\n    Type '(value: any, key?: IDBValidKey | undefined) => IDBRequest<IDBValidKey>' is not assignable to type '() => IDBRequest<undefined>'.\n      Target signature provides too few arguments. Expected 1 or more, but got 0.",
-        "anchor": "b6b34261e9810aa64248b1e9e5e373942f2fb3a40ab1244ff01b9ea806071797",
-        "line": 114,
-        "column": 7,
-        "start": 8976,
-        "length": 15
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/e2e/avg-region-source9-read.spec.ts\",\"TS2683\",\"'this' implicitly has type 'any' because it does not have a type annotation.\",\"b6b34261e9810aa64248b1e9e5e373942f2fb3a40ab1244ff01b9ea806071797\",94,4]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/e2e/avg-region-source9-read.spec.ts",
-        "code": "TS2683",
-        "message": "'this' implicitly has type 'any' because it does not have a type annotation.",
-        "anchor": "b6b34261e9810aa64248b1e9e5e373942f2fb3a40ab1244ff01b9ea806071797",
-        "line": 114,
-        "column": 94,
-        "start": 9063,
-        "length": 4
-      }
-    },
-    {
       "identity": "[\"typescript\",\"tests/e2e/avg-visual-planning-workbench.spec.ts\",\"TS7006\",\"Parameter 'b' implicitly has an 'any' type.\",\"24629bcf65419593f4aae0d2ead05ee3f89cd33e945d0c743d0ff3f80b607833\",40,1]",
       "count": 1,
       "diagnostic": {
@@ -35033,51 +35003,6 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-AUDIT6-history-event-card.test.tsx\",\"TS2345\",\"Argument of type 'Element' is not assignable to parameter of type 'HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement'.\\n  Type 'Element' is missing the following properties from type 'HTMLSelectElement': autocomplete, disabled, form, labels, and 154 more.\",\"283df028943aba430c4198afb15e8b8a59fec27f9bbfed4ce06cb08d3b191ce7\",23,5]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-AUDIT6-history-event-card.test.tsx",
-        "code": "TS2345",
-        "message": "Argument of type 'Element' is not assignable to parameter of type 'HTMLTextAreaElement | HTMLInputElement | HTMLSelectElement'.\n  Type 'Element' is missing the following properties from type 'HTMLSelectElement': autocomplete, disabled, form, labels, and 154 more.",
-        "anchor": "283df028943aba430c4198afb15e8b8a59fec27f9bbfed4ce06cb08d3b191ce7",
-        "line": 144,
-        "column": 23,
-        "start": 4159,
-        "length": 5
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/regression/R-AUDIT6-history-event-card.test.tsx\",\"TS2345\",\"Argument of type 'Element' is not assignable to parameter of type 'HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement'.\\n  Type 'Element' is missing the following properties from type 'HTMLSelectElement': autocomplete, disabled, form, labels, and 154 more.\",\"66ab5a25497e2db057d37c50740c8e69648bce2fe315daacb6e83e7b27dde8ac\",23,3]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-AUDIT6-history-event-card.test.tsx",
-        "code": "TS2345",
-        "message": "Argument of type 'Element' is not assignable to parameter of type 'HTMLTextAreaElement | HTMLInputElement | HTMLSelectElement'.\n  Type 'Element' is missing the following properties from type 'HTMLSelectElement': autocomplete, disabled, form, labels, and 154 more.",
-        "anchor": "66ab5a25497e2db057d37c50740c8e69648bce2fe315daacb6e83e7b27dde8ac",
-        "line": 145,
-        "column": 23,
-        "start": 4196,
-        "length": 3
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/regression/R-AUDIT6-history-event-card.test.tsx\",\"TS2345\",\"Argument of type 'Element' is not assignable to parameter of type 'HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement'.\\n  Type 'Element' is missing the following properties from type 'HTMLSelectElement': autocomplete, disabled, form, labels, and 154 more.\",\"abffe4f663e47491fa3056ba4b0ada09d5dfb00ca39e274f63431b6ce4ae7e10\",23,4]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-AUDIT6-history-event-card.test.tsx",
-        "code": "TS2345",
-        "message": "Argument of type 'Element' is not assignable to parameter of type 'HTMLTextAreaElement | HTMLInputElement | HTMLSelectElement'.\n  Type 'Element' is missing the following properties from type 'HTMLSelectElement': autocomplete, disabled, form, labels, and 154 more.",
-        "anchor": "abffe4f663e47491fa3056ba4b0ada09d5dfb00ca39e274f63431b6ce4ae7e10",
-        "line": 146,
-        "column": 23,
-        "start": 4235,
-        "length": 4
-      }
-    },
-    {
       "identity": "[\"typescript\",\"tests/regression/R-AUDIT6-history-event-card.test.tsx\",\"TS2769\",\"No overload matches this call.\\n  The last overload gave the following error.\\n    Argument of type '{ event: HistoricalTimelineEvent; chapters: Chapter[]; expanded: boolean; canEdit: boolean; worldBadge: { icon: string; name: string; }; consultActive: boolean; ... 11 more ...; onAcceptStorm: Mock<...>; }' is not assignable to parameter of type 'Attributes & Props'.\\n      Type '{ event: HistoricalTimelineEvent; chapters: Chapter[]; expanded: boolean; canEdit: boolean; worldBadge: { icon: string; name: string; }; consultActive: boolean; ... 11 more ...; onAcceptStorm: Mock<...>; }' is missing the following properties from type 'Props': onRejectConsult, onRejectStorm, onRetryConsult, onRetryStorm\",\"dfbb56851ed4c848ba39c9ed4bcf39356b408f65d86895b3c333ab3bab7571c9\",77,5]",
       "count": 1,
       "diagnostic": {
@@ -35093,51 +35018,6 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-AUDIT6-history-event-card.test.tsx\",\"TS7017\",\"Element implicitly has an 'any' type because type 'typeof globalThis' has no index signature.\",\"1f00af7d80c4a6011d464872eb219f08179cce18a4270326a8a87e701f6344ee\",12,24]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-AUDIT6-history-event-card.test.tsx",
-        "code": "TS7017",
-        "message": "Element implicitly has an 'any' type because type 'typeof globalThis' has no index signature.",
-        "anchor": "1f00af7d80c4a6011d464872eb219f08179cce18a4270326a8a87e701f6344ee",
-        "line": 7,
-        "column": 12,
-        "start": 331,
-        "length": 24
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/regression/R-AUDIT6-history-keyword-card.test.tsx\",\"TS2345\",\"Argument of type 'Element' is not assignable to parameter of type 'HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement'.\\n  Type 'Element' is missing the following properties from type 'HTMLSelectElement': autocomplete, disabled, form, labels, and 154 more.\",\"c1fe82907a19e67b5cc2d042c5de8548986d58e8f8f57d73daf4d31eec9297ca\",23,8]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-AUDIT6-history-keyword-card.test.tsx",
-        "code": "TS2345",
-        "message": "Argument of type 'Element' is not assignable to parameter of type 'HTMLTextAreaElement | HTMLInputElement | HTMLSelectElement'.\n  Type 'Element' is missing the following properties from type 'HTMLSelectElement': autocomplete, disabled, form, labels, and 154 more.",
-        "anchor": "c1fe82907a19e67b5cc2d042c5de8548986d58e8f8f57d73daf4d31eec9297ca",
-        "line": 141,
-        "column": 23,
-        "start": 3982,
-        "length": 8
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/regression/R-AUDIT6-history-keyword-card.test.tsx\",\"TS2345\",\"Argument of type 'Element' is not assignable to parameter of type 'HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement'.\\n  Type 'Element' is missing the following properties from type 'HTMLSelectElement': autocomplete, disabled, form, labels, and 154 more.\",\"ded70df3af3740967808d4a1f44b6f4ad59e1d32059d9e5dbcfdfb6756a3fb93\",23,3]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-AUDIT6-history-keyword-card.test.tsx",
-        "code": "TS2345",
-        "message": "Argument of type 'Element' is not assignable to parameter of type 'HTMLTextAreaElement | HTMLInputElement | HTMLSelectElement'.\n  Type 'Element' is missing the following properties from type 'HTMLSelectElement': autocomplete, disabled, form, labels, and 154 more.",
-        "anchor": "ded70df3af3740967808d4a1f44b6f4ad59e1d32059d9e5dbcfdfb6756a3fb93",
-        "line": 142,
-        "column": 23,
-        "start": 4028,
-        "length": 3
-      }
-    },
-    {
       "identity": "[\"typescript\",\"tests/regression/R-AUDIT6-history-keyword-card.test.tsx\",\"TS2769\",\"No overload matches this call.\\n  The last overload gave the following error.\\n    Argument of type '{ keyword: HistoricalKeyword; chapters: Chapter[]; expanded: boolean; canEdit: boolean; consultActive: boolean; stormActive: boolean; consultPreparing: boolean; ... 9 more ...; onAcceptStorm: Mock<...>; }' is not assignable to parameter of type 'Attributes & Props'.\\n      Type '{ keyword: HistoricalKeyword; chapters: Chapter[]; expanded: boolean; canEdit: boolean; consultActive: boolean; stormActive: boolean; consultPreparing: boolean; ... 9 more ...; onAcceptStorm: Mock<...>; }' is missing the following properties from type 'Props': onRejectConsult, onRejectStorm, onRetryConsult, onRetryStorm\",\"9984088f0dfecd1af3e863a65680759f52efcf1c2e4299e4b5ab007efef83d4f\",71,5]",
       "count": 1,
       "diagnostic": {
@@ -35150,21 +35030,6 @@
         "column": 71,
         "start": 1956,
         "length": 5
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/regression/R-AUDIT6-history-keyword-card.test.tsx\",\"TS7017\",\"Element implicitly has an 'any' type because type 'typeof globalThis' has no index signature.\",\"1f00af7d80c4a6011d464872eb219f08179cce18a4270326a8a87e701f6344ee\",12,24]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-AUDIT6-history-keyword-card.test.tsx",
-        "code": "TS7017",
-        "message": "Element implicitly has an 'any' type because type 'typeof globalThis' has no index signature.",
-        "anchor": "1f00af7d80c4a6011d464872eb219f08179cce18a4270326a8a87e701f6344ee",
-        "line": 7,
-        "column": 12,
-        "start": 313,
-        "length": 24
       }
     },
     {
@@ -35209,96 +35074,6 @@
         "line": 8,
         "column": 12,
         "start": 451,
-        "length": 24
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/regression/R-AUDIT6-outline-batch-controller.test.tsx\",\"TS2345\",\"Argument of type '{ project: Project | { id: number; workspaceUid: string; workspacePurpose: string; name: string; activeWorldId: number; activeWorkId: number; createdAt: number; updatedAt: number; }; ... 9 more ...; onError: Mock<...> | ((message: string) => void); }' is not assignable to parameter of type 'Options'.\\n  Types of property 'project' are incompatible.\\n    Type 'Project | { id: number; workspaceUid: string; workspacePurpose: string; name: string; activeWorldId: number; activeWorkId: number; createdAt: number; updatedAt: number; }' is not assignable to type 'Project'.\\n      Type '{ id: number; workspaceUid: string; workspacePurpose: string; name: string; activeWorldId: number; activeWorkId: number; createdAt: number; updatedAt: number; }' is not assignable to type 'Project'.\\n        Types of property 'workspacePurpose' are incompatible.\\n          Type 'string' is not assignable to type 'WorkspacePurpose'.\",\"335efc11c49efc71038f4a7eb35d9a44cd43d0e4a5e2cbff891dc65643bd84df\",17,53]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-AUDIT6-outline-batch-controller.test.tsx",
-        "code": "TS2345",
-        "message": "Argument of type '{ project: Project | { id: number; workspaceUid: string; workspacePurpose: string; name: string; activeWorldId: number; activeWorkId: number; createdAt: number; updatedAt: number; }; ... 9 more ...; onError: Mock<...> | ((message: string) => void); }' is not assignable to parameter of type 'Options'.\n  Types of property 'project' are incompatible.\n    Type 'Project | { id: number; workspaceUid: string; workspacePurpose: string; name: string; activeWorldId: number; activeWorkId: number; createdAt: number; updatedAt: number; }' is not assignable to type 'Project'.\n      Type '{ id: number; workspaceUid: string; workspacePurpose: string; name: string; activeWorldId: number; activeWorkId: number; createdAt: number; updatedAt: number; }' is not assignable to type 'Project'.\n        Types of property 'workspacePurpose' are incompatible.\n          Type 'string' is not assignable to type 'WorkspacePurpose'.",
-        "anchor": "335efc11c49efc71038f4a7eb35d9a44cd43d0e4a5e2cbff891dc65643bd84df",
-        "line": 201,
-        "column": 17,
-        "start": 6901,
-        "length": 53
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/regression/R-AUDIT6-outline-batch-controller.test.tsx\",\"TS2345\",\"Argument of type '{ project: Project | { id: number; workspaceUid: string; workspacePurpose: string; name: string; activeWorldId: number; activeWorkId: number; createdAt: number; updatedAt: number; }; ... 9 more ...; onError: Mock<...> | ((message: string) => void); }' is not assignable to parameter of type 'Options'.\\n  Types of property 'project' are incompatible.\\n    Type 'Project | { id: number; workspaceUid: string; workspacePurpose: string; name: string; activeWorldId: number; activeWorkId: number; createdAt: number; updatedAt: number; }' is not assignable to type 'Project'.\\n      Type '{ id: number; workspaceUid: string; workspacePurpose: string; name: string; activeWorldId: number; activeWorkId: number; createdAt: number; updatedAt: number; }' is not assignable to type 'Project'.\\n        Types of property 'workspacePurpose' are incompatible.\\n          Type 'string' is not assignable to type 'WorkspacePurpose'.\",\"512ecabbd266744fd0101b49fc3551ce7882e5f0eb5a3b7816195f7725511f99\",17,9]",
-      "count": 2,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-AUDIT6-outline-batch-controller.test.tsx",
-        "code": "TS2345",
-        "message": "Argument of type '{ project: Project | { id: number; workspaceUid: string; workspacePurpose: string; name: string; activeWorldId: number; activeWorkId: number; createdAt: number; updatedAt: number; }; ... 9 more ...; onError: Mock<...> | ((message: string) => void); }' is not assignable to parameter of type 'Options'.\n  Types of property 'project' are incompatible.\n    Type 'Project | { id: number; workspaceUid: string; workspacePurpose: string; name: string; activeWorldId: number; activeWorkId: number; createdAt: number; updatedAt: number; }' is not assignable to type 'Project'.\n      Type '{ id: number; workspaceUid: string; workspacePurpose: string; name: string; activeWorldId: number; activeWorkId: number; createdAt: number; updatedAt: number; }' is not assignable to type 'Project'.\n        Types of property 'workspacePurpose' are incompatible.\n          Type 'string' is not assignable to type 'WorkspacePurpose'.",
-        "anchor": "512ecabbd266744fd0101b49fc3551ce7882e5f0eb5a3b7816195f7725511f99",
-        "line": 233,
-        "column": 17,
-        "start": 7896,
-        "length": 9
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/regression/R-AUDIT6-outline-batch-controller.test.tsx\",\"TS2345\",\"Argument of type '{ project: Project | { id: number; workspaceUid: string; workspacePurpose: string; name: string; activeWorldId: number; activeWorkId: number; createdAt: number; updatedAt: number; }; ... 9 more ...; onError: Mock<...> | ((message: string) => void); }' is not assignable to parameter of type 'Options'.\\n  Types of property 'project' are incompatible.\\n    Type 'Project | { id: number; workspaceUid: string; workspacePurpose: string; name: string; activeWorldId: number; activeWorkId: number; createdAt: number; updatedAt: number; }' is not assignable to type 'Project'.\\n      Type '{ id: number; workspaceUid: string; workspacePurpose: string; name: string; activeWorldId: number; activeWorkId: number; createdAt: number; updatedAt: number; }' is not assignable to type 'Project'.\\n        Types of property 'workspacePurpose' are incompatible.\\n          Type 'string' is not assignable to type 'WorkspacePurpose'.\",\"5fbab0767c310f3aa57c2386bf1d9c945d3c1f18eebbe2ea0acb461d1a94c449\",17,9]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-AUDIT6-outline-batch-controller.test.tsx",
-        "code": "TS2345",
-        "message": "Argument of type '{ project: Project | { id: number; workspaceUid: string; workspacePurpose: string; name: string; activeWorldId: number; activeWorkId: number; createdAt: number; updatedAt: number; }; ... 9 more ...; onError: Mock<...> | ((message: string) => void); }' is not assignable to parameter of type 'Options'.\n  Types of property 'project' are incompatible.\n    Type 'Project | { id: number; workspaceUid: string; workspacePurpose: string; name: string; activeWorldId: number; activeWorkId: number; createdAt: number; updatedAt: number; }' is not assignable to type 'Project'.\n      Type '{ id: number; workspaceUid: string; workspacePurpose: string; name: string; activeWorldId: number; activeWorkId: number; createdAt: number; updatedAt: number; }' is not assignable to type 'Project'.\n        Types of property 'workspacePurpose' are incompatible.\n          Type 'string' is not assignable to type 'WorkspacePurpose'.",
-        "anchor": "5fbab0767c310f3aa57c2386bf1d9c945d3c1f18eebbe2ea0acb461d1a94c449",
-        "line": 155,
-        "column": 17,
-        "start": 5018,
-        "length": 9
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/regression/R-AUDIT6-outline-batch-controller.test.tsx\",\"TS2345\",\"Argument of type '{ project: Project | { id: number; workspaceUid: string; workspacePurpose: string; name: string; activeWorldId: number; activeWorkId: number; createdAt: number; updatedAt: number; }; ... 9 more ...; onError: Mock<...> | ((message: string) => void); }' is not assignable to parameter of type 'Options'.\\n  Types of property 'project' are incompatible.\\n    Type 'Project | { id: number; workspaceUid: string; workspacePurpose: string; name: string; activeWorldId: number; activeWorkId: number; createdAt: number; updatedAt: number; }' is not assignable to type 'Project'.\\n      Type '{ id: number; workspaceUid: string; workspacePurpose: string; name: string; activeWorldId: number; activeWorkId: number; createdAt: number; updatedAt: number; }' is not assignable to type 'Project'.\\n        Types of property 'workspacePurpose' are incompatible.\\n          Type 'string' is not assignable to type 'WorkspacePurpose'.\",\"94e32da54e373b52e44a886346c9f9bc7e0a664ddadf49ccf2324749934ccd5c\",17,42]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-AUDIT6-outline-batch-controller.test.tsx",
-        "code": "TS2345",
-        "message": "Argument of type '{ project: Project | { id: number; workspaceUid: string; workspacePurpose: string; name: string; activeWorldId: number; activeWorkId: number; createdAt: number; updatedAt: number; }; ... 9 more ...; onError: Mock<...> | ((message: string) => void); }' is not assignable to parameter of type 'Options'.\n  Types of property 'project' are incompatible.\n    Type 'Project | { id: number; workspaceUid: string; workspacePurpose: string; name: string; activeWorldId: number; activeWorkId: number; createdAt: number; updatedAt: number; }' is not assignable to type 'Project'.\n      Type '{ id: number; workspaceUid: string; workspacePurpose: string; name: string; activeWorldId: number; activeWorkId: number; createdAt: number; updatedAt: number; }' is not assignable to type 'Project'.\n        Types of property 'workspacePurpose' are incompatible.\n          Type 'string' is not assignable to type 'WorkspacePurpose'.",
-        "anchor": "94e32da54e373b52e44a886346c9f9bc7e0a664ddadf49ccf2324749934ccd5c",
-        "line": 288,
-        "column": 17,
-        "start": 9646,
-        "length": 42
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/regression/R-AUDIT6-outline-batch-controller.test.tsx\",\"TS2345\",\"Argument of type '{ project: Project | { id: number; workspaceUid: string; workspacePurpose: string; name: string; activeWorldId: number; activeWorkId: number; createdAt: number; updatedAt: number; }; ... 9 more ...; onError: Mock<...> | ((message: string) => void); }' is not assignable to parameter of type 'Options'.\\n  Types of property 'project' are incompatible.\\n    Type 'Project | { id: number; workspaceUid: string; workspacePurpose: string; name: string; activeWorldId: number; activeWorkId: number; createdAt: number; updatedAt: number; }' is not assignable to type 'Project'.\\n      Type '{ id: number; workspaceUid: string; workspacePurpose: string; name: string; activeWorldId: number; activeWorkId: number; createdAt: number; updatedAt: number; }' is not assignable to type 'Project'.\\n        Types of property 'workspacePurpose' are incompatible.\\n          Type 'string' is not assignable to type 'WorkspacePurpose'.\",\"9649a83a76a0bd847c3ed0fff30c0a01abcf63a32d3d23fa92079eeae457b7b5\",17,37]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-AUDIT6-outline-batch-controller.test.tsx",
-        "code": "TS2345",
-        "message": "Argument of type '{ project: Project | { id: number; workspaceUid: string; workspacePurpose: string; name: string; activeWorldId: number; activeWorkId: number; createdAt: number; updatedAt: number; }; ... 9 more ...; onError: Mock<...> | ((message: string) => void); }' is not assignable to parameter of type 'Options'.\n  Types of property 'project' are incompatible.\n    Type 'Project | { id: number; workspaceUid: string; workspacePurpose: string; name: string; activeWorldId: number; activeWorkId: number; createdAt: number; updatedAt: number; }' is not assignable to type 'Project'.\n      Type '{ id: number; workspaceUid: string; workspacePurpose: string; name: string; activeWorldId: number; activeWorkId: number; createdAt: number; updatedAt: number; }' is not assignable to type 'Project'.\n        Types of property 'workspacePurpose' are incompatible.\n          Type 'string' is not assignable to type 'WorkspacePurpose'.",
-        "anchor": "9649a83a76a0bd847c3ed0fff30c0a01abcf63a32d3d23fa92079eeae457b7b5",
-        "line": 169,
-        "column": 17,
-        "start": 5630,
-        "length": 37
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/regression/R-AUDIT6-outline-batch-controller.test.tsx\",\"TS7017\",\"Element implicitly has an 'any' type because type 'typeof globalThis' has no index signature.\",\"1f00af7d80c4a6011d464872eb219f08179cce18a4270326a8a87e701f6344ee\",12,24]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-AUDIT6-outline-batch-controller.test.tsx",
-        "code": "TS7017",
-        "message": "Element implicitly has an 'any' type because type 'typeof globalThis' has no index signature.",
-        "anchor": "1f00af7d80c4a6011d464872eb219f08179cce18a4270326a8a87e701f6344ee",
-        "line": 27,
-        "column": 12,
-        "start": 973,
         "length": 24
       }
     },
@@ -46163,21 +45938,6 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-CREL14-community-feedback.test.ts\",\"TS2550\",\"Property 'at' does not exist on type 'CreativeReliabilityFeedbackRecordV1[]'. Do you need to change your target library? Try changing the 'lib' compiler option to 'es2022' or later.\",\"e3ded4948a31821eda4e3f3d7377241765ba23fc2df7943a9da0f5788d2095bc\",20,2]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-CREL14-community-feedback.test.ts",
-        "code": "TS2550",
-        "message": "Property 'at' does not exist on type 'CreativeReliabilityFeedbackRecordV1[]'. Do you need to change your target library? Try changing the 'lib' compiler option to 'es2022' or later.",
-        "anchor": "e3ded4948a31821eda4e3f3d7377241765ba23fc2df7943a9da0f5788d2095bc",
-        "line": 91,
-        "column": 20,
-        "start": 3035,
-        "length": 2
-      }
-    },
-    {
       "identity": "[\"typescript\",\"tests/regression/R-CTXG2-resource-identity-exact-artifact.test.ts\",\"TS2345\",\"Argument of type '{ name: string; genres: string[]; description: string; targetWordCount: number; }' is not assignable to parameter of type 'CreateWorkspaceInput'.\\n  Property 'status' is missing in type '{ name: string; genres: string[]; description: string; targetWordCount: number; }' but required in type 'CreateWorkspaceInput'.\",\"f33d393b52fdc63d9f2f42c56a2dc5cc842ed25f1c3a341f4ee36ec7272d1b98\",41,93]",
       "count": 1,
       "diagnostic": {
@@ -48428,126 +48188,6 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-HARNESS32-worldview-panels-ui.test.tsx\",\"TS2345\",\"Argument of type '({ project, resizableInputs, confirmedLocalSaves }: Props) => Element' is not assignable to parameter of type 'string | FunctionComponent<{}> | ComponentClass<{}, any>'.\\n  Type '({ project, resizableInputs, confirmedLocalSaves }: Props) => Element' is not assignable to type 'FunctionComponent<{}>'.\\n    Types of parameters '__0' and 'props' are incompatible.\\n      Property 'project' is missing in type '{}' but required in type 'Props'.\",\"863f5fbf53551e03c7b5d76a6b85be6e12bcd751d972a9e787bdb4fc1cb4aec8\",39,21]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-HARNESS32-worldview-panels-ui.test.tsx",
-        "code": "TS2345",
-        "message": "Argument of type '({ project, resizableInputs, confirmedLocalSaves }: Props) => Element' is not assignable to parameter of type 'string | FunctionComponent<{}> | ComponentClass<{}, any>'.\n  Type '({ project, resizableInputs, confirmedLocalSaves }: Props) => Element' is not assignable to type 'FunctionComponent<{}>'.\n    Types of parameters '__0' and 'props' are incompatible.\n      Property 'project' is missing in type '{}' but required in type 'Props'.",
-        "anchor": "863f5fbf53551e03c7b5d76a6b85be6e12bcd751d972a9e787bdb4fc1cb4aec8",
-        "line": 224,
-        "column": 39,
-        "start": 8284,
-        "length": 21
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/regression/R-HARNESS32-worldview-panels-ui.test.tsx\",\"TS2345\",\"Argument of type '({ project, resizableInputs, confirmedLocalSaves }: Props) => Element' is not assignable to parameter of type 'string | FunctionComponent<{}> | ComponentClass<{}, any>'.\\n  Type '({ project, resizableInputs, confirmedLocalSaves }: Props) => Element' is not assignable to type 'FunctionComponent<{}>'.\\n    Types of parameters '__0' and 'props' are incompatible.\\n      Property 'project' is missing in type '{}' but required in type 'Props'.\",\"b1daf7b2dbe7f486f1366b6a100462b1e373f47f05f7bf8e38fb0ce8ab126ed3\",36,21]",
-      "count": 2,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-HARNESS32-worldview-panels-ui.test.tsx",
-        "code": "TS2345",
-        "message": "Argument of type '({ project, resizableInputs, confirmedLocalSaves }: Props) => Element' is not assignable to parameter of type 'string | FunctionComponent<{}> | ComponentClass<{}, any>'.\n  Type '({ project, resizableInputs, confirmedLocalSaves }: Props) => Element' is not assignable to type 'FunctionComponent<{}>'.\n    Types of parameters '__0' and 'props' are incompatible.\n      Property 'project' is missing in type '{}' but required in type 'Props'.",
-        "anchor": "b1daf7b2dbe7f486f1366b6a100462b1e373f47f05f7bf8e38fb0ce8ab126ed3",
-        "line": 280,
-        "column": 36,
-        "start": 11343,
-        "length": 21
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/regression/R-HARNESS32-worldview-panels-ui.test.tsx\",\"TS2345\",\"Argument of type '({ project, initialStoryCoreId, resizableInputs }: Props) => Element' is not assignable to parameter of type 'string | FunctionComponent<{}> | ComponentClass<{}, any>'.\\n  Type '({ project, initialStoryCoreId, resizableInputs }: Props) => Element' is not assignable to type 'FunctionComponent<{}>'.\\n    Types of parameters '__0' and 'props' are incompatible.\\n      Property 'project' is missing in type '{}' but required in type 'Props'.\",\"d3a669c1e37c960598d2af55a0bd0bafdaa2b0c1127194ade5d3e0e9aad261c8\",23,14]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-HARNESS32-worldview-panels-ui.test.tsx",
-        "code": "TS2345",
-        "message": "Argument of type '({ project, initialStoryCoreId, resizableInputs }: Props) => Element' is not assignable to parameter of type 'string | FunctionComponent<{}> | ComponentClass<{}, any>'.\n  Type '({ project, initialStoryCoreId, resizableInputs }: Props) => Element' is not assignable to type 'FunctionComponent<{}>'.\n    Types of parameters '__0' and 'props' are incompatible.\n      Property 'project' is missing in type '{}' but required in type 'Props'.",
-        "anchor": "d3a669c1e37c960598d2af55a0bd0bafdaa2b0c1127194ade5d3e0e9aad261c8",
-        "line": 338,
-        "column": 23,
-        "start": 13933,
-        "length": 14
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/regression/R-HARNESS32-worldview-panels-ui.test.tsx\",\"TS2345\",\"Argument of type '({ project, initialWorldviewId, initialField, onFieldChange, initialPowerTarget, resizableInputs }: Props) => Element' is not assignable to parameter of type 'string | FunctionComponent<{}> | ComponentClass<{}, any>'.\\n  Type '({ project, initialWorldviewId, initialField, onFieldChange, initialPowerTarget, resizableInputs }: Props) => Element' is not assignable to type 'FunctionComponent<{}>'.\\n    Types of parameters '__0' and 'props' are incompatible.\\n      Property 'project' is missing in type '{}' but required in type 'Props'.\",\"0166b225ba031c9b324a7a168272d9bd004aeccc2da3d56159213e502e4c36bb\",38,20]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-HARNESS32-worldview-panels-ui.test.tsx",
-        "code": "TS2345",
-        "message": "Argument of type '({ project, initialWorldviewId, initialField, onFieldChange, initialPowerTarget, resizableInputs }: Props) => Element' is not assignable to parameter of type 'string | FunctionComponent<{}> | ComponentClass<{}, any>'.\n  Type '({ project, initialWorldviewId, initialField, onFieldChange, initialPowerTarget, resizableInputs }: Props) => Element' is not assignable to type 'FunctionComponent<{}>'.\n    Types of parameters '__0' and 'props' are incompatible.\n      Property 'project' is missing in type '{}' but required in type 'Props'.",
-        "anchor": "0166b225ba031c9b324a7a168272d9bd004aeccc2da3d56159213e502e4c36bb",
-        "line": 206,
-        "column": 38,
-        "start": 7347,
-        "length": 20
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/regression/R-HARNESS32-worldview-panels-ui.test.tsx\",\"TS2345\",\"Argument of type '({ project, initialWorldviewId, initialField, onFieldChange, initialPowerTarget, resizableInputs }: Props) => Element' is not assignable to parameter of type 'string | FunctionComponent<{}> | ComponentClass<{}, any>'.\\n  Type '({ project, initialWorldviewId, initialField, onFieldChange, initialPowerTarget, resizableInputs }: Props) => Element' is not assignable to type 'FunctionComponent<{}>'.\\n    Types of parameters '__0' and 'props' are incompatible.\\n      Property 'project' is missing in type '{}' but required in type 'Props'.\",\"5626e845fca9b3dee8977106363afa6b62096c03c02a6d27dafa02a70f24eb13\",34,20]",
-      "count": 2,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-HARNESS32-worldview-panels-ui.test.tsx",
-        "code": "TS2345",
-        "message": "Argument of type '({ project, initialWorldviewId, initialField, onFieldChange, initialPowerTarget, resizableInputs }: Props) => Element' is not assignable to parameter of type 'string | FunctionComponent<{}> | ComponentClass<{}, any>'.\n  Type '({ project, initialWorldviewId, initialField, onFieldChange, initialPowerTarget, resizableInputs }: Props) => Element' is not assignable to type 'FunctionComponent<{}>'.\n    Types of parameters '__0' and 'props' are incompatible.\n      Property 'project' is missing in type '{}' but required in type 'Props'.",
-        "anchor": "5626e845fca9b3dee8977106363afa6b62096c03c02a6d27dafa02a70f24eb13",
-        "line": 152,
-        "column": 34,
-        "start": 4984,
-        "length": 20
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/regression/R-HARNESS32-worldview-panels-ui.test.tsx\",\"TS2345\",\"Argument of type '({ project, initialWorldviewId, initialField, onFieldChange, initialPowerTarget, resizableInputs }: Props) => Element' is not assignable to parameter of type 'string | FunctionComponent<{}> | ComponentClass<{}, any>'.\\n  Type '({ project, initialWorldviewId, initialField, onFieldChange, initialPowerTarget, resizableInputs }: Props) => Element' is not assignable to type 'FunctionComponent<{}>'.\\n    Types of parameters '__0' and 'props' are incompatible.\\n      Property 'project' is missing in type '{}' but required in type 'Props'.\",\"8d34dab07ad08e0cbb94d6901a27e0180ad967940b96cc8d8da50d6bff3eaca0\",38,20]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-HARNESS32-worldview-panels-ui.test.tsx",
-        "code": "TS2345",
-        "message": "Argument of type '({ project, initialWorldviewId, initialField, onFieldChange, initialPowerTarget, resizableInputs }: Props) => Element' is not assignable to parameter of type 'string | FunctionComponent<{}> | ComponentClass<{}, any>'.\n  Type '({ project, initialWorldviewId, initialField, onFieldChange, initialPowerTarget, resizableInputs }: Props) => Element' is not assignable to type 'FunctionComponent<{}>'.\n    Types of parameters '__0' and 'props' are incompatible.\n      Property 'project' is missing in type '{}' but required in type 'Props'.",
-        "anchor": "8d34dab07ad08e0cbb94d6901a27e0180ad967940b96cc8d8da50d6bff3eaca0",
-        "line": 220,
-        "column": 38,
-        "start": 8064,
-        "length": 20
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/regression/R-HARNESS32-worldview-panels-ui.test.tsx\",\"TS2345\",\"Argument of type '({ project, initialWorldviewId, initialField, onFieldChange, initialPowerTarget, resizableInputs }: Props) => Element' is not assignable to parameter of type 'string | FunctionComponent<{}> | ComponentClass<{}, any>'.\\n  Type '({ project, initialWorldviewId, initialField, onFieldChange, initialPowerTarget, resizableInputs }: Props) => Element' is not assignable to type 'FunctionComponent<{}>'.\\n    Types of parameters '__0' and 'props' are incompatible.\\n      Property 'project' is missing in type '{}' but required in type 'Props'.\",\"b8efcda32ed9a7f9da58f3153e3a97a355afc8da3b3202ae554a89d0cec6e3df\",36,20]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-HARNESS32-worldview-panels-ui.test.tsx",
-        "code": "TS2345",
-        "message": "Argument of type '({ project, initialWorldviewId, initialField, onFieldChange, initialPowerTarget, resizableInputs }: Props) => Element' is not assignable to parameter of type 'string | FunctionComponent<{}> | ComponentClass<{}, any>'.\n  Type '({ project, initialWorldviewId, initialField, onFieldChange, initialPowerTarget, resizableInputs }: Props) => Element' is not assignable to type 'FunctionComponent<{}>'.\n    Types of parameters '__0' and 'props' are incompatible.\n      Property 'project' is missing in type '{}' but required in type 'Props'.",
-        "anchor": "b8efcda32ed9a7f9da58f3153e3a97a355afc8da3b3202ae554a89d0cec6e3df",
-        "line": 252,
-        "column": 36,
-        "start": 9755,
-        "length": 20
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/regression/R-HARNESS32-worldview-panels-ui.test.tsx\",\"TS2345\",\"Argument of type '({ project, onOpenHistory, resizableInputs }: Props) => Element' is not assignable to parameter of type 'string | FunctionComponent<{}> | ComponentClass<{}, any>'.\\n  Type '({ project, onOpenHistory, resizableInputs }: Props) => Element' is not assignable to type 'FunctionComponent<{}>'.\\n    Types of parameters '__0' and 'props' are incompatible.\\n      Type '{}' is missing the following properties from type 'Props': project, onOpenHistory\",\"632051fed4bb44fb8c879ef7329cc7e73cbefbb7d801be5f5c240b8d4765e159\",40,22]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-HARNESS32-worldview-panels-ui.test.tsx",
-        "code": "TS2345",
-        "message": "Argument of type '({ project, onOpenHistory, resizableInputs }: Props) => Element' is not assignable to parameter of type 'string | FunctionComponent<{}> | ComponentClass<{}, any>'.\n  Type '({ project, onOpenHistory, resizableInputs }: Props) => Element' is not assignable to type 'FunctionComponent<{}>'.\n    Types of parameters '__0' and 'props' are incompatible.\n      Type '{}' is missing the following properties from type 'Props': project, onOpenHistory",
-        "anchor": "632051fed4bb44fb8c879ef7329cc7e73cbefbb7d801be5f5c240b8d4765e159",
-        "line": 228,
-        "column": 40,
-        "start": 8510,
-        "length": 22
-      }
-    },
-    {
       "identity": "[\"typescript\",\"tests/regression/R-HARNESS32-worldview-panels-ui.test.tsx\",\"TS2550\",\"Property 'at' does not exist on type '[][]'. Do you need to change your target library? Try changing the 'lib' compiler option to 'es2022' or later.\",\"01fa05dea851603e485d9c38577d47a69421c4c18dad1e940a8e0fd3006b2b1a\",59,2]",
       "count": 1,
       "diagnostic": {
@@ -48605,21 +48245,6 @@
         "column": 33,
         "start": 4991,
         "length": 2
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/regression/R-HARNESS32-worldview-panels-ui.test.tsx\",\"TS2769\",\"No overload matches this call.\\n  The last overload gave the following error.\\n    Object literal may only specify known properties, and 'project' does not exist in type 'Attributes'.\",\"03b7d325b9b2deb465d883346132e86a846b0058c10aa7256be25253b0ef6883\",64,7]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-HARNESS32-worldview-panels-ui.test.tsx",
-        "code": "TS2769",
-        "message": "No overload matches this call.\n  The last overload gave the following error.\n    Object literal may only specify known properties, and 'project' does not exist in type 'Attributes'.",
-        "anchor": "03b7d325b9b2deb465d883346132e86a846b0058c10aa7256be25253b0ef6883",
-        "line": 138,
-        "column": 64,
-        "start": 4349,
-        "length": 7
       }
     },
     {
@@ -49328,21 +48953,6 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-HARNESS7-prose-generation-durable.test.ts\",\"TS2345\",\"Argument of type '{ lengthObservation?: ProseLengthObservationV1 | undefined; version: 1; type: \\\"prose-generation-candidate\\\"; projectId: number; chapterId: number; chapterTitle: string; ... 12 more ...; createdAt: number; }' is not assignable to parameter of type 'Omit<ProseGenerationCandidateV1, \\\"durable\\\">'.\\n  Property 'informationBoundaryHash' is missing in type '{ lengthObservation?: ProseLengthObservationV1 | undefined; version: 1; type: \\\"prose-generation-candidate\\\"; projectId: number; chapterId: number; chapterTitle: string; ... 12 more ...; createdAt: number; }' but required in type 'Omit<ProseGenerationCandidateV1, \\\"durable\\\">'.\",\"afacf69aa29cc4e1a188890b5fce7d2ecab9affac95903971e56357d68ce67d1\",61,13]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-HARNESS7-prose-generation-durable.test.ts",
-        "code": "TS2345",
-        "message": "Argument of type '{ lengthObservation?: ProseLengthObservationV1 | undefined; version: 1; type: \"prose-generation-candidate\"; projectId: number; chapterId: number; chapterTitle: string; ... 12 more ...; createdAt: number; }' is not assignable to parameter of type 'Omit<ProseGenerationCandidateV1, \"durable\">'.\n  Property 'informationBoundaryHash' is missing in type '{ lengthObservation?: ProseLengthObservationV1 | undefined; version: 1; type: \"prose-generation-candidate\"; projectId: number; chapterId: number; chapterTitle: string; ... 12 more ...; createdAt: number; }' but required in type 'Omit<ProseGenerationCandidateV1, \"durable\">'.",
-        "anchor": "afacf69aa29cc4e1a188890b5fce7d2ecab9affac95903971e56357d68ce67d1",
-        "line": 465,
-        "column": 61,
-        "start": 22320,
-        "length": 13
-      }
-    },
-    {
       "identity": "[\"typescript\",\"tests/regression/R-HARNESS7-prose-generation-durable.test.ts\",\"TS2345\",\"Argument of type '{ version: 1; type: string; projectId: number; chapterId: number; chapterTitle: string; worldGroupId: number; operation: ProseGenerationOperationV1; sourceTextHash: string; ... 8 more ...; createdAt: number; }' is not assignable to parameter of type 'Omit<ProseGenerationCandidateV1, \\\"durable\\\">'.\\n  Types of property 'type' are incompatible.\\n    Type 'string' is not assignable to type '\\\"prose-generation-candidate\\\"'.\",\"d51071683fab4bc16516dea27bd987882728ef4a05fab1ecde1d175f685cfc4b\",62,13]",
       "count": 1,
       "diagnostic": {
@@ -49355,21 +48965,6 @@
         "column": 62,
         "start": 6482,
         "length": 13
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/regression/R-HARNESS7-prose-generation-durable.test.ts\",\"TS2741\",\"Property 'informationBoundaryHash' is missing in type '{ durable: { candidateHash: string; runId: number; stepId: typeof PROSE_GENERATION_STEP_ID_V1; attempt: number; contextManifestHash: string; }; lengthObservation?: ProseLengthObservationV1; ... 17 more ...; createdAt: number; }' but required in type 'ProseGenerationCandidateV1'.\",\"2cfbc30083707ccaab440d04c96a066107822eebe4069fe019644ecd8ccbc4a2\",11,24]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-HARNESS7-prose-generation-durable.test.ts",
-        "code": "TS2741",
-        "message": "Property 'informationBoundaryHash' is missing in type '{ durable: { candidateHash: string; runId: number; stepId: typeof PROSE_GENERATION_STEP_ID_V1; attempt: number; contextManifestHash: string; }; lengthObservation?: ProseLengthObservationV1; ... 17 more ...; createdAt: number; }' but required in type 'ProseGenerationCandidateV1'.",
-        "anchor": "2cfbc30083707ccaab440d04c96a066107822eebe4069fe019644ecd8ccbc4a2",
-        "line": 461,
-        "column": 11,
-        "start": 22124,
-        "length": 24
       }
     },
     {
@@ -51065,36 +50660,6 @@
         "column": 8,
         "start": 429,
         "length": 53
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/regression/R-NW-1A-ir-codec.test.ts\",\"TS2322\",\"Type '\\\"merge\\\"' is not assignable to type '\\\"add\\\" | \\\"add-many\\\" | \\\"append\\\" | \\\"merge-diffs\\\" | \\\"replace\\\"'.\",\"6b02955856f292be42c33f55408791f6acdde6bd7122bfdda5629ce9eb2300be\",112,4]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-NW-1A-ir-codec.test.ts",
-        "code": "TS2322",
-        "message": "Type '\"merge\"' is not assignable to type '\"replace\" | \"append\" | \"add\" | \"add-many\" | \"merge-diffs\"'.",
-        "anchor": "6b02955856f292be42c33f55408791f6acdde6bd7122bfdda5629ce9eb2300be",
-        "line": 422,
-        "column": 112,
-        "start": 33969,
-        "length": 4
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/regression/R-NW-1A-ir-codec.test.ts\",\"TS2322\",\"Type '\\\"merge\\\"' is not assignable to type '\\\"add\\\" | \\\"add-many\\\" | \\\"append\\\" | \\\"merge-diffs\\\" | \\\"replace\\\"'.\",\"f1d8f161bc848143c814e809f1989ac4aafa9625b4eb08cc3c14231f3665c6a1\",114,4]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-NW-1A-ir-codec.test.ts",
-        "code": "TS2322",
-        "message": "Type '\"merge\"' is not assignable to type '\"replace\" | \"append\" | \"add\" | \"add-many\" | \"merge-diffs\"'.",
-        "anchor": "f1d8f161bc848143c814e809f1989ac4aafa9625b4eb08cc3c14231f3665c6a1",
-        "line": 430,
-        "column": 114,
-        "start": 34586,
-        "length": 4
       }
     },
     {
@@ -59228,21 +58793,6 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN1-intent-harness.test.ts\",\"TS2339\",\"Property 'coordination' does not exist on type '{}'.\",\"6aed11ca5b9fdd06949b1b23931c3a1c61bb0b1a31fa012c202cec1a50b4bd57\",34,12]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-TTRPGOPEN1-intent-harness.test.ts",
-        "code": "TS2339",
-        "message": "Property 'coordination' does not exist on type '{}'.",
-        "anchor": "6aed11ca5b9fdd06949b1b23931c3a1c61bb0b1a31fa012c202cec1a50b4bd57",
-        "line": 47,
-        "column": 34,
-        "start": 3601,
-        "length": 12
-      }
-    },
-    {
       "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN1-intent-harness.test.ts\",\"TS2339\",\"Property 'coordination' does not exist on type '{}'.\",\"8e9ccfb738ea764c4bcfd722eb33d68a4104467ed6ce040c42a5749836fa2c07\",79,12]",
       "count": 1,
       "diagnostic": {
@@ -59330,66 +58880,6 @@
         "column": 27,
         "start": 1404,
         "length": 13
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN1-intent-harness.test.ts\",\"TS2339\",\"Property 'worldTime' does not exist on type '{}'.\",\"bdc65bf9bc28b1aff75789f9f2330ac5f6d2e34487913b1d46b59e6fc9be9f04\",34,9]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-TTRPGOPEN1-intent-harness.test.ts",
-        "code": "TS2339",
-        "message": "Property 'worldTime' does not exist on type '{}'.",
-        "anchor": "bdc65bf9bc28b1aff75789f9f2330ac5f6d2e34487913b1d46b59e6fc9be9f04",
-        "line": 46,
-        "column": 34,
-        "start": 3515,
-        "length": 9
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN1-intent-harness.test.ts\",\"TS2339\",\"Property 'worldTime' does not exist on type '{}'.\",\"bdc65bf9bc28b1aff75789f9f2330ac5f6d2e34487913b1d46b59e6fc9be9f04\",76,9]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-TTRPGOPEN1-intent-harness.test.ts",
-        "code": "TS2339",
-        "message": "Property 'worldTime' does not exist on type '{}'.",
-        "anchor": "bdc65bf9bc28b1aff75789f9f2330ac5f6d2e34487913b1d46b59e6fc9be9f04",
-        "line": 46,
-        "column": 76,
-        "start": 3557,
-        "length": 9
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN1-intent-harness.test.ts\",\"TS2339\",\"Property 'worldTime' does not exist on type '{}'.\",\"fdbc94bc14b1e74bec9830f4ca1836fc9b520920bde6e075ff0c97d8e3da686b\",125,9]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-TTRPGOPEN1-intent-harness.test.ts",
-        "code": "TS2339",
-        "message": "Property 'worldTime' does not exist on type '{}'.",
-        "anchor": "fdbc94bc14b1e74bec9830f4ca1836fc9b520920bde6e075ff0c97d8e3da686b",
-        "line": 67,
-        "column": 125,
-        "start": 5501,
-        "length": 9
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN1-intent-harness.test.ts\",\"TS2339\",\"Property 'worldTime' does not exist on type '{}'.\",\"fdbc94bc14b1e74bec9830f4ca1836fc9b520920bde6e075ff0c97d8e3da686b\",83,9]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-TTRPGOPEN1-intent-harness.test.ts",
-        "code": "TS2339",
-        "message": "Property 'worldTime' does not exist on type '{}'.",
-        "anchor": "fdbc94bc14b1e74bec9830f4ca1836fc9b520920bde6e075ff0c97d8e3da686b",
-        "line": 67,
-        "column": 83,
-        "start": 5459,
-        "length": 9
       }
     },
     {

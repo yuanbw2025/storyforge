@@ -1,5 +1,9 @@
 # AI generation, candidate confirmation, and recovery
 
+## November 25: complete transport and bounded recovery
+
+Desktop/Android bridges advertising the new capability can assemble large bodies internally while sending one complete model POST. Older bridges use their existing path; segments do not authorize multiple model requests. Cancellation, incomplete segments or hash mismatch prevent dispatch. Real network/device/service limits can still fail. For unknown results inspect tasks/original responses before clicking again. This describes merged implementation; real-device/provider large-request performance remains a separate acceptance task. Based on #618.
+
 ## A normal generation cycle
 
 1. Select the correct work, chapter, or scene and define this task.

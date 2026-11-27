@@ -51,6 +51,7 @@ export default function TextOpenWorldLauncher(props: {
   const store = useTextOpenWorldPlayerStore()
   const dialog = useDialog()
   const [catalogReleaseId, setCatalogReleaseId] = useState<number | null>(null)
+  const [search, setSearch] = useState('')
   const detailBackRef = useRef<HTMLButtonElement>(null)
   const catalogRef = useRef<HTMLElement>(null)
   const catalogReturnIdRef = useRef<number | null>(null)
@@ -69,6 +70,7 @@ export default function TextOpenWorldLauncher(props: {
   const releaseById = useMemo(() => new Map(store.releases.flatMap(item => (
     item.release.id == null ? [] : [[item.release.id, item] as const]
   ))), [store.releases])
+  const visibleCatalog = catalog.filter(item => (summaries.get(item.release.id ?? -1)?.title ?? item.release.label).includes(search))
   const selectedRelease = store.releases.find(item => item.release.id === catalogReleaseId) ?? null
   const selectedHistoricalNovel = selectedRelease?.manifest?.textOpenWorldVNext?.sourceManifest.kind === 'novel-source-pin'
   const selectedSummary = selectedRelease?.release.id == null
@@ -208,9 +210,13 @@ export default function TextOpenWorldLauncher(props: {
               </div>}
           </div>
         </section> : <>
-          <div className="textgame-catalog-heading"><span>当前可玩版本</span><small>{catalog.filter(item => item.manifest).length} 部作品</small></div>
+          <div className="open-world-library-tools">
+            <input aria-label="搜索文字开放世界" placeholder="搜索作品名称" value={search} onChange={event => setSearch(event.target.value)} />
+            {search && <button type="button" onClick={() => setSearch('')}>清除搜索</button>}
+          </div>
+          <div className="textgame-catalog-heading"><span>当前可玩版本</span><small>{visibleCatalog.filter(item => item.manifest).length} 部作品</small></div>
           <section ref={catalogRef} className="textgame-catalog-list" aria-label="文字开放世界游戏列表">
-            {catalog.map(item => {
+            {visibleCatalog.map(item => {
               const summary = item.release.id == null ? null : summaries.get(item.release.id) ?? null
               return <article key={item.release.id ?? item.release.contentHash}>
                 <button type="button" aria-label={`查看游戏：${summary?.title ?? item.release.label}`}
@@ -228,6 +234,7 @@ export default function TextOpenWorldLauncher(props: {
                 </button>
               </article>
             })}
+            {!!catalog.length && !visibleCatalog.length && <p role="status">没有匹配的作品，请更换名称或清除搜索。</p>}
             {!catalog.length && <div className="avg-title-empty" data-testid="text-open-world-library-empty">
               <Globe2 /><span>还没有正式发布的文字开放世界</span>
               <small>请先在“制作”中完成构建与发布；制作预览不会混入正式游戏库。</small>

@@ -1,14 +1,20 @@
 import { act } from 'react'
 import { createRoot } from 'react-dom/client'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import WorldviewFieldCandidateReview from '../../src/components/worldview/WorldviewFieldCandidateReview'
-import { compareWorldviewTextBlocksV1 } from '../../src/lib/agent/worldview-text-comparison'
+import WorldviewFieldCandidateReview, { worldviewReviewSessionKeyV1, type WorldviewReviewViewV1 } from '../../src/components/worldview/WorldviewFieldCandidateReview'
+import { compareWorldviewTextBlocksV1 } from '../helpers/worldview-text-comparison-v1-legacy'
 import { parseWorldviewFieldCandidateDraft } from '../../src/lib/agent/worldview-field-copilot'
 
+let nextCandidateId = 17000
+function syntheticView(candidate: any): WorldviewReviewViewV1 {
+  const identity = { projectId: 1, worldId: 2, workId: 3, worldGroupId: null, field: 'races', eventId: candidate.event.id, conversationId: 4, taskId: candidate.payload.taskId, runId: 5, runStepId: 'worldview-test', runGeneration: 1, skillId: 'world-origin.worldview-field' }
+  return { ...identity, version: 'worldview-review-view-v1', status: 'verified', generation: 1, sessionKey: worldviewReviewSessionKeyV1(identity) }
+}
 function pending(operation: 'create' | 'expand' | 'rewrite' | 'polish' = 'expand') {
+  const id = ++nextCandidateId
   return {
     event: {
-      id: 17,
+      id, projectId: 1, workId: 3, conversationId: 4, durableRunId: 5, kind: 'candidate',
       content: JSON.stringify({
         field: 'races',
         value: '## 身份\n潮民用潮痕辨认亲族。\n\n## 组织\n议席按航季轮换，并新增盐路仲裁席。',
@@ -16,6 +22,7 @@ function pending(operation: 'create' | 'expand' | 'rewrite' | 'polish' = 'expand
       }),
     },
     payload: {
+      taskId: `synthetic-${id}`, skillId: 'world-origin.worldview-field', worldviewField: 'races', workspaceScope: { projectId: 1, worldId: 2, workId: 3 }, runId: 5, runStepId: 'worldview-test', runGeneration: 1,
       label: '种族与民族',
       worldviewFieldOperation: operation,
       baseSnapshot: {
@@ -35,9 +42,15 @@ async function renderReview(operation: 'create' | 'expand' | 'rewrite' | 'polish
   document.body.appendChild(host)
   const root = createRoot(host)
   mounted.push({ host, root })
+  const candidate = pending(operation)
+  // Synthetic direct-parent proof only; production Controls is tested separately.
   await act(async () => {
-    root.render(<WorldviewFieldCandidateReview candidate={pending(operation)} busy={false} onUpdate={onUpdate} />)
+    root.render(<WorldviewFieldCandidateReview candidate={candidate} viewBinding={syntheticView(candidate)} busy={false} onUpdate={onUpdate} />)
+    await new Promise(resolve => setTimeout(resolve, 10))
   })
+  for (let attempt = 0; attempt < 20 && (operation === 'expand' || operation === 'polish') && !host.querySelector('[aria-label="原文与候选精确对照"]'); attempt++) {
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 2)) })
+  }
   return { host, onUpdate }
 }
 
@@ -73,9 +86,12 @@ describe('RACE-3 · worldview candidate dual-version review', () => {
     const onUpdate = vi.fn()
     const { host } = await renderReview('polish', onUpdate)
 
+    expect(host.querySelector('[aria-label="原文与候选精确对照"]')).not.toBeNull()
+    expect(host.textContent).toContain('原文（只读）')
+    await act(async () => [...host.querySelectorAll('button')].find(button => button.textContent === '编辑候选')!.click())
     const editor = host.querySelector<HTMLTextAreaElement>('textarea[aria-label="种族与民族候选内容"]')!
     expect(editor.value).not.toContain('"field"')
-    expect(host.querySelector('textarea[aria-label="种族与民族原文"]')).not.toBeNull()
+    expect(host.querySelector('textarea[aria-label="种族与民族原文"]')).toBeNull()
     expect(host.textContent).toContain('不是事实校验')
     expect(host.textContent).toContain('不会随正文自动写入 Canon')
 

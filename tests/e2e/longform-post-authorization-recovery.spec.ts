@@ -1,3 +1,4 @@
+import { installBrowserServiceCapacityFixtureV1 } from './helpers/browser-ai-config'
 import { expect, test, type Page } from '@playwright/test'
 import { createLongform } from './helpers/product-entry'
 
@@ -10,6 +11,7 @@ async function prepare(page: Page, automatic: boolean) {
       maxTokens: 4000, contextWindow: 64000, temperature: 0,
     }))
   })
+  await installBrowserServiceCapacityFixtureV1(page, { provider: 'ollama', baseUrl: 'https://post-preparation.invalid/v1', model: 'post-recovery-test' }, 64000)
   await createLongform(page, '章后授权准备恢复')
   await page.getByRole('button', { name: '大纲与章纲', exact: true }).click()
   await page.getByRole('button', { name: '添加卷', exact: true }).click()
@@ -66,7 +68,7 @@ async function authorizationState(page: Page) {
 for (const automatic of [false, true]) {
   test(`${automatic ? '预授权确认' : '建议候选'}准备中断后刷新恢复原 Run，不调用模型并保留显式启动入口`, async ({ page }) => {
     let calls = 0
-    await page.route('https://post-preparation.invalid/**', route => {
+    await page.route('https://post-preparation.invalid/v1/chat/completions', route => {
       calls++
       return route.fulfill({ contentType: 'text/event-stream', body: [
         `data: ${JSON.stringify({ choices: [{ delta: { content: generated }, finish_reason: 'stop' }] })}`,

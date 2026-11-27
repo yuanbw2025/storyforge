@@ -516,6 +516,7 @@ export default function AiTownPage() {
         ),
       );
     });
+  const visibleRows = rows.filter((r) => r.work.title.includes(search));
   const step = TOWN_SETUP_PAGES.findIndex((p) => p[0] === page[0]);
   const needsSource = (
     <section className="lf-paper">
@@ -627,12 +628,10 @@ export default function AiTownPage() {
       </aside>
       <section className="lf-main">
         <header className="lf-heading">
-          <small>
-            AI 小镇 › {TOWN_PRIMARY.find((p) => p[0] === primary)?.[1]} ›{" "}
-            {page[1]}
-            {row ? ` · ${row.work.title}` : ""}
-          </small>
-          <h2>{TOWN_PRIMARY.find((p) => p[0] === primary)?.[1]}</h2>
+          <div className="town-heading-line">
+            <h2>{page[1]}</h2>
+            {row && <span className="town-current-title">{row.work.title}</span>}
+          </div>
             {!["library", "player", "community"].includes(primary) && (
               <nav className="avg-phases" aria-label="制作阶段">
                 {[
@@ -746,7 +745,7 @@ export default function AiTownPage() {
               <Suspense fallback={<p>打开功能…</p>}>
                 {page[0] === "library" ? (
                   <>
-                    <section className="lf-paper">
+                    <section className="town-library-tools" aria-label="小镇作品库工具">
                       <div className="avg-actions">
                         <button disabled={!canAuthor}
                           className="lf-action lf-action-primary"
@@ -771,13 +770,16 @@ export default function AiTownPage() {
                           onChange={(e) => setSearch(e.target.value)}
                         />
                       </div>
-                      <p>先规划，再制作。作品版本与每一场生活分别保存。</p>
+                      <p className="town-library-hint">{rows.length} 个小镇 · 作品版本与生活存档分别保存。</p>
+                      {!rows.length ? (
+                        <p className="town-library-empty" role="status">还没有自己的小镇，可新建制作方案，或体验下方社区作品。</p>
+                      ) : !visibleRows.length ? (
+                        <p className="town-library-empty" role="status">没有匹配的小镇。<button className="lf-action" onClick={() => setSearch("")}>清除搜索</button></p>
+                      ) : null}
                     </section>
-                    <div className="lf-library-grid">
-                      {rows
-                        .filter((r) => r.work.title.includes(search))
-                        .map((r) => (
-                          <article className="lf-paper" key={r.work.id}>
+                    <div className="lf-library-grid town-library-grid">
+                      {visibleRows.map((r) => (
+                          <article className="lf-paper town-library-card" key={r.work.id}>
                             <small>
                               {r.draft ? "制作方案" : "已有AI 小镇作品"}
                             </small>
@@ -801,15 +803,9 @@ export default function AiTownPage() {
                           </article>
                         ))}
                     </div>
-                    {!rows.length && (
-                      <section className="lf-paper">
-                        <h3>你的第一场生活</h3>
-                        <p>
-                          还没有自己的小镇，可以先进入制作台填写，或者游玩社区作品。
-                        </p>
-                      </section>
-                    )}
-                    <Community productType="ai-town" onImported={release => navigate(`/town/play?project=${release.projectId}&work=${release.workId}`)} />
+                    <div className="town-community">
+                      <Community productType="ai-town" onImported={release => navigate(`/town/play?project=${release.projectId}&work=${release.workId}`)} />
+                    </div>
                   </>
                 ) : step >= 0 ? (
                   <>
@@ -820,7 +816,7 @@ export default function AiTownPage() {
                       </p>
                       <fieldset
                         disabled={(busy || !formReady || Boolean(row && !row.draft)) || !canAuthor}
-                        className="avg-form"
+                        className="avg-form town-plan-form"
                       >
                         <label>
                           小镇名称
@@ -1181,7 +1177,9 @@ export default function AiTownPage() {
                         我的发布与版本
                       </button>
                     </section>
-                    <Community productType="ai-town" onImported={release => navigate(`/town/play?project=${release.projectId}&work=${release.workId}`)} />
+                    <div className="town-community">
+                      <Community productType="ai-town" onImported={release => navigate(`/town/play?project=${release.projectId}&work=${release.workId}`)} />
+                    </div>
                   </>
                 ) : (
                   <Inspector

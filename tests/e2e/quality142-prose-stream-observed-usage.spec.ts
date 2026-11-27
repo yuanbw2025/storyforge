@@ -47,7 +47,7 @@ async function receipt(page: Page, item: Seed) {
     if (!event || event.type !== 'evidence.artifact.recorded') return null
     const raw = JSON.parse(await readAgentRunArtifactExactV1({ projectId: input.scope.projectId,
       artifactKind: 'raw-response', contentHash: event.payload.contentHash }))
-    return { runId: row.id, step: run.projection.steps['prose-generation']?.status, attempt: event.payload.attempt,
+    return { runId: row.id, step: run.projection.steps['prose-generation']?.status, state: run.projection.state, attempt: event.payload.attempt,
       hash: event.payload.contentHash, raw, chapter: (await db.chapters.get(input.chapterId))?.content,
       settled: run.events.filter(value => value.type === 'budget.settled' && value.payload.stepId === 'prose-generation') }
   }, item)
@@ -62,11 +62,11 @@ for (const terminal of ['complete', 'interrupted'] as const) {
     let calls = 0
     const forbidden: string[] = []
     const output = '店主把工具逐件收进铁盒，检查门窗，最后熄灭了门边的灯。'
-    registerBrowserFixtureAIConfigV1(context, { provider: 'agnes', model: 'agnes-2.5-flash', baseUrl: `${base.origin}/quality142-provider/v1`,
+    registerBrowserFixtureAIConfigV1(context, { provider: 'agnes', model: 'agnes-2.5-flash', baseUrl: 'https://apihub.agnes-ai.com/v1',
       apiKey: 'quality142-synthetic-only', temperature: 0, maxTokens: 1000 })
     await context.route('**/*', async route => {
       const request = route.request(); const url = new URL(request.url())
-      if (url.origin === base.origin && url.pathname.startsWith('/quality142-provider/') && request.method() === 'POST') {
+      if (url.origin === 'https://apihub.agnes-ai.com' && url.pathname === '/v1/chat/completions' && request.method() === 'POST') {
         calls++
         const body = request.postDataJSON() as { stream?: boolean }
         if (!body.stream || calls > 1) throw new Error('142 unexpected additional model dispatch')
@@ -86,15 +86,15 @@ for (const terminal of ['complete', 'interrupted'] as const) {
       await gotoWithBrowserFixtureAIConfigV1(page, `./${item.target.replace(/^\//, '')}`)
       await page.getByRole('button', { name: '✨ 生成正文', exact: true }).click()
       await page.getByRole('dialog', { name: '正文生成提示' }).getByRole('button', { name: '开始生成', exact: true }).click()
-      await expect.poll(async () => (await receipt(page, item))?.step).toBe(terminal === 'complete' ? 'awaiting_confirmation' : 'failed')
+      await expect.poll(async () => (await receipt(page, item))?.state).toBe(terminal === 'complete' ? 'awaiting_confirmation' : 'paused')
       const before = (await receipt(page, item))!
       expect(before.attempt).toBe(1)
-      expect(before.raw.observedUsage).toEqual({ inputTokens: 31, outputTokens: 7, totalTokens: 38 })
+      expect(before.raw.response.usage).toEqual({ inputTokens: 31, outputTokens: 7, totalTokens: 38 })
       expect(before.chapter).toBe('<p></p>')
       expect(calls).toBe(1)
       await reloadWithBrowserFixtureAIConfigV1(page, { waitUntil: 'domcontentloaded' })
       await expect.poll(async () => (await receipt(page, item))?.hash).toBe(before.hash)
-      expect((await receipt(page, item))?.raw.observedUsage).toEqual(before.raw.observedUsage)
+      expect((await receipt(page, item))?.raw.response.usage).toEqual(before.raw.response.usage)
       // Verify recovered author-visible metering as well as the exact receipt.
       await expect(page.getByTitle('输入 31 + 输出 7', { exact: true })).toBeVisible()
       expect(calls).toBe(1); expect(forbidden).toEqual([])

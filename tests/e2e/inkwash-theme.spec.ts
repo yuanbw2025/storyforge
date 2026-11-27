@@ -29,6 +29,7 @@ test('switching skins preserves saved prose and portal dialogs use the selected 
   await page.getByRole('button', { name: '添加卷', exact: true }).click()
   await page.getByRole('button', { name: '添加章节', exact: true }).click()
   await page.getByTitle('编辑章节', { exact: true }).click()
+  await page.getByRole('group', { name: '编辑模式', exact: true }).getByRole('button', { name: '富文本', exact: true }).click()
   const editor = page.locator('.tiptap-editor')
   const prose = '雨过远山，渡口的小船仍泊在苇花深处。'
   await editor.fill(prose)
@@ -44,6 +45,7 @@ test('switching skins preserves saved prose and portal dialogs use the selected 
   await page.reload()
   await expect(editor).toContainText(prose)
   await page.goto('./long')
+  await page.getByLabel('更多操作：水墨主题验证', { exact: true }).click()
   await page.getByRole('button', { name: '重命名', exact: true }).click()
   await expect(page.getByRole('dialog')).toHaveCSS('background-color', 'rgba(250, 247, 237, 0.96)')
   await page.getByRole('dialog').getByRole('textbox').fill('远山来信')

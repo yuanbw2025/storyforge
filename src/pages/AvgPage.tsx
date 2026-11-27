@@ -36,6 +36,7 @@ import { PRODUCT_NAVIGATION } from "../components/navigation/product-navigation"
 import { AVG_PAGES, AVG_PRIMARY_NAV, AVG_WORKBENCH_GROUPS, AVG_PLAYER_PAGES, avgPrimaryForPage } from "../components/avg/navigation";
 import "../components/longform/longform.css";
 import "../components/avg/avg.css";
+import "../components/avg/author-layout.css";
 const Studio = lazy(
   () => import("../components/product/ProductProductionStudio"),
 );
@@ -59,7 +60,6 @@ export default function AvgPage() {
   const { pageId = "library" } = useParams();
   const page = AVG_PAGES.find((p) => p[0] === pageId) ?? AVG_PAGES[0];
   const primaryId = avgPrimaryForPage(page[0]);
-  const primary = AVG_PRIMARY_NAV.find(item => item[0] === primaryId)!;
   const hasContentNav = primaryId === 'workbench' || primaryId === 'player';
   const [contentMenu, setContentMenu] = useState(false);
   const contentNavRef = useRef<HTMLElement>(null);
@@ -286,6 +286,7 @@ export default function AvgPage() {
       handoffError = String(e);
     }
   }
+  const visibleRows = rows.filter((r) => r.work.title.includes(search));
   const enable = () =>
     void run(async () => {
       if (!row) return;
@@ -299,8 +300,9 @@ export default function AvgPage() {
     });
   return (
     <div
-      className={`longform-app avg-app ${menu ? "lf-navigation-open" : ""} ${contentMenu ? "lf-step-menu-open" : ""}`}
+      className={`longform-app avg-app avg-author-app ${menu ? "lf-navigation-open" : ""} ${contentMenu ? "lf-step-menu-open" : ""}`}
       data-testid="avg-page"
+      data-avg-page={page[0]}
       onClickCapture={event=>{
         if(!nativeFlushRef.current||event.ctrlKey||event.metaKey||event.shiftKey||event.altKey)return;
         const anchor=event.target instanceof Element?event.target.closest('a'):null;
@@ -347,11 +349,10 @@ export default function AvgPage() {
       </aside>
       <section className="lf-main">
         <header className="lf-heading">
-          <small>
-            AVG › {primary[1]}{hasContentNav ? ` › ${page[1]}` : ''}
-            {row ? ` · ${row.work.title}` : ""}
-          </small>
-          <h2>{primary[1]}</h2>
+          <div className="avg-heading-line">
+            <h2>{page[1]}</h2>
+            {row && page[0] !== 'library' && <span className="avg-current-title">{row.work.title}</span>}
+          </div>
             {primaryId !== 'library' && primaryId !== 'player' && <nav className="avg-phases" aria-label="制作阶段">
               {[
                 ["source", "S1 · 世界封存"],
@@ -380,7 +381,6 @@ export default function AvgPage() {
           <main ref={contentRef} className="lf-content">
       {!canAuthor && <p role="status" className="lf-paper">当前产品尚未开放创作；已保存作品、原始内容和发行版本仍可查看。</p>}
 
-            {primaryId === "workbench" && ["confirm", "production", "review"].includes(page[0]) && <h3 className="avg-page-heading">{page[1]}</h3>}
             {error && (
               <p className="avg-alert" role="alert">
                 {error}
@@ -393,7 +393,7 @@ export default function AvgPage() {
               <Suspense fallback={<p role="status">打开功能…</p>}>
                 {page[0] === "library" ? (
                   <>
-                    <section className="lf-paper">
+                    <section className="avg-library-tools" aria-label="AVG作品库工具">
                       <div className="avg-actions">
                         <button disabled={!canAuthor}
                           className="lf-action lf-action-primary"
@@ -413,15 +413,16 @@ export default function AvgPage() {
                           onChange={(e) => setSearch(e.target.value)}
                         />
                       </div>
-                      <p>
-                        可以先填写方案，再引用世界版本。制作与游玩进度分别保存。
-                      </p>
+                      <p className="avg-library-hint">{rows.length} 部 AVG · 制作方案与游玩进度分别保存。</p>
+                      {!rows.length ? (
+                        <p className="avg-library-empty" role="status">这里尚无作品。可先新建制作方案，或体验下方内置 AVG。</p>
+                      ) : !visibleRows.length ? (
+                        <p className="avg-library-empty" role="status">没有匹配的 AVG。<button className="lf-action" onClick={() => setSearch("")}>清除搜索</button></p>
+                      ) : null}
                     </section>
-                    <div className="lf-library-grid">
-                      {rows
-                        .filter((r) => r.work.title.includes(search))
-                        .map((r) => (
-                          <article className="lf-paper" key={r.work.id}>
+                    <div className="lf-library-grid avg-library-grid">
+                      {visibleRows.map((r) => (
+                          <article className="lf-paper avg-library-card" key={r.work.id}>
                             <small>
                               {r.draft ? "AVG 制作方案" : "已有 AVG 生产记录"}
                             </small>
@@ -448,13 +449,7 @@ export default function AvgPage() {
                           </article>
                         ))}
                     </div>
-                    {!rows.length && (
-                      <section className="lf-paper">
-                        <h3>你的第一部 AVG</h3>
-                        <p>这里尚无作品。可以新建，或先查看制作台各个页面。</p>
-                      </section>
-                    )}
-                    <ExampleLibrary kind="avg"/>
+                    <div className="avg-examples"><ExampleLibrary kind="avg"/></div>
                   </>
                 ) : page[0] === "vision" || page[0] === "routes" ? (
                   <section className="lf-paper">

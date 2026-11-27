@@ -212,7 +212,7 @@ test('complete reference input and response beyond the former 2 MiB boundary rem
   const answer = '完整回答，身份因果与反证。'.repeat(80000)
   assert.ok(Buffer.byteLength(source, 'utf8') > 2 * 1024 * 1024)
   assert.ok(Buffer.byteLength(answer, 'utf8') > 2 * 1024 * 1024)
-  const f = await fixture(t, async (body, update) => {
+  const f = await fixture(t, async (/** @type {ReturnType<typeof input>} */ body, /** @type {(patch:{dispatched?:boolean,text?:string})=>void} */ update) => {
     assert.equal(body.messages[0].content, source)
     update({ dispatched: true, text: answer })
   })
@@ -226,7 +226,7 @@ test('complete reference input and response beyond the former 2 MiB boundary rem
 
 test('reference policy preserves more than the former pinned receipt count without changing ordinary policy', async t => {
   let calls = 0
-  const f = await fixture(t, async (_input, update) => { calls++; update({ dispatched: true, text: '完整原答' }) })
+  const f = await fixture(t, async (/** @type {ReturnType<typeof input>} */ _input, /** @type {(patch:{dispatched?:boolean,text?:string})=>void} */ update) => { calls++; update({ dispatched: true, text: '完整原答' }) })
   const ids = []
   for (let i = 0; i < 35; i++) {
     const body = { ...input(), capacityPolicy: 'reference-service', receiptRetention: 'until-owner-ack-v1' }

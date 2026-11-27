@@ -119,6 +119,7 @@ const productFullSources = [
   ['worldviewFieldBaselineV2', 'worldview-field-baseline-full-v2'],
   ['worldviewFieldContextV2', 'worldview-field-constraints-full-v2'],
 ]
+/** @param {string} key @param {string} version */
 const productSource = (key, version, selection = 'true') => `export const CONTEXT_SOURCES = [{
   key: '${key}', label: 'Full product', scope: 'chapter', layer: 'L0', budgetTokens: null,
   explicitSelectionOnly: ${selection}, fullCapture: {version:'registered-host-full-v2',sourceVersion:'${version}'},
@@ -136,7 +137,8 @@ for (const selection of ['false', "'true'", '(() => true)()', 'undefined']) {
     assert.throws(() => readStaticContextSources(file), /explicitSelectionOnly/)
   })
 }
-for (const [name, alter] of [
+/** @type {Array<[string, (value:string)=>string]>} */
+const invalidProductRecipes = [
   ['missing explicit flag', value => value.replace('explicitSelectionOnly: true, ', '')],
   ['duplicate explicit flag', value => value.replace('explicitSelectionOnly: true, ', 'explicitSelectionOnly: true, explicitSelectionOnly: false, ')],
   ['getter explicit flag', value => value.replace('explicitSelectionOnly: true, ', 'get explicitSelectionOnly() {return true}, ')],
@@ -147,7 +149,8 @@ for (const [name, alter] of [
   ['duplicate capture version', value => value.replace("version:'registered-host-full-v2'", "version:'registered-host-full-v2', version:'other'")],
   ['unknown null source', value => value.replace('worldviewFieldBaselineV2', 'unknown-product')],
   ['shared manual source cannot be relabelled', value => value.replace('worldviewFieldBaselineV2', 'manualText')],
-]) {
+]
+for (const [name, alter] of invalidProductRecipes) {
   test(`reject product full recipe ${name}`, t => {
     const file = fixture(t, { 'source.ts': alter(productSource('worldviewFieldBaselineV2', 'worldview-field-baseline-full-v2')) })
     assert.throws(() => readStaticContextSources(file))

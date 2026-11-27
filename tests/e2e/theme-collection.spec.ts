@@ -25,6 +25,9 @@ test('all fourteen themes persist, preserve prose and keep editor and dialog act
   await page.getByRole('button', { name: '添加卷', exact: true }).click()
   await page.getByRole('button', { name: '添加章节', exact: true }).click()
   await page.getByTitle('编辑章节', { exact: true }).click()
+  // New empty chapters start in Markdown live preview. This case measures the
+  // rich-text palette and its HTML preservation, so choose that mode explicitly.
+  await page.getByRole('group', { name: '编辑模式', exact: true }).getByRole('button', { name: '富文本', exact: true }).click()
   const editor = page.locator('.tiptap-editor')
   await editor.fill('山水与星光轮转，作者的文字始终留在原处。')
   await page.getByRole('button', { name: '保存', exact: true }).click()

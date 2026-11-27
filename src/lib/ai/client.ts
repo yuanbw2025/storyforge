@@ -409,7 +409,13 @@ export async function* streamChat(
   result?: StreamResult,
   meta?: AICallMeta,
   frozenResolution?: AIRequestConfigResolution,
+  options?: ChatRequestOptions,
 ): AsyncGenerator<string> {
+  if (options?.preparedRequestV2) {
+    yield* streamPreparedRequestV2(messages, config, meta, signal, result, options, frozenResolution)
+    return
+  }
+  if (options && Object.keys(options).length) throw new Error('旧流式入口不能混入新的请求选项。')
   assertGenerationAvailable()
   const resolved = frozenResolution ?? resolveRequestConfig(config, meta)
   warnRouteFallback(resolved, meta)
@@ -785,6 +791,7 @@ interface AssessmentStateV2 {
   now: number
 }
 interface PreparedStateV2 {
+  stream: boolean
   lengthPlan: import('../types/agent-run').TaskLengthPlanV1 | null
   assessment: AssessmentStateV2
   messages: ChatMessage[]
@@ -846,7 +853,7 @@ export function createAIRequestAssessorV2(context: FrozenRequestAssessmentContex
   const state = assessmentsV2.get(context)
   if (!state) throw new Error('完整请求评估身份无效。')
   return { assess(messages: readonly ChatMessage[], rawOptions: ChatRequestOptions,
-    constraints: ExplicitAuthorConsumptionConstraintsV2 | null = null): RequestAssessmentV2 {
+    constraints: ExplicitAuthorConsumptionConstraintsV2 | null = null, stream = false): RequestAssessmentV2 {
     const options = plainOptionsV2(rawOptions)
     const fact = state.capacity.outputTokens
     const knownOutput = fact && fact.basis !== 'declared-model' && fact.expiresAt > state.now ? fact.tokens : null
@@ -859,7 +866,7 @@ export function createAIRequestAssessorV2(context: FrozenRequestAssessmentContex
     if (state.native && options.tools?.length) throw new Error('本机 Codex 不支持原生 tool_calls。')
     let wire = state.native
       ? serializeNativeCodexAssessmentV2(state.native, messages, options.jsonSchema?.schema, options.responseFormat)
-      : buildRequest(state.resolution.config, messages, false, options, { tokens: output }).body
+      : buildRequest(state.resolution.config, messages, stream, options, { tokens: output }).body
     let measured = state.meter(wire, messages, options)
     const shared = state.capacity.contextTokens
     if (!state.native && output !== null && measured.reliability === 'exact' && shared
@@ -868,7 +875,7 @@ export function createAIRequestAssessorV2(context: FrozenRequestAssessmentContex
       while (remaining > 0 && output > remaining) {
         output = remaining
         outputBasis = 'evidenced-shared-window'
-        wire = buildRequest(state.resolution.config, messages, false, options, { tokens: output }).body
+        wire = buildRequest(state.resolution.config, messages, stream, options, { tokens: output }).body
         measured = state.meter(wire, messages, options)
         remaining = shared.tokens - measured.tokens
       }
@@ -884,7 +891,7 @@ export async function prepareAIRequestV2(input: {
   resolution: AIRequestConfigResolution
   assessmentContext: FrozenRequestAssessmentContextV2
   messages: readonly ChatMessage[]
-  stream: false
+  stream: boolean
   options: ChatRequestOptions
   contextMaterial: ContextMaterialAllocationV2
   lengthPlan: import('../types/agent-run').TaskLengthPlanV1 | null
@@ -892,9 +899,11 @@ export async function prepareAIRequestV2(input: {
 }): Promise<{ handle: PreparedAIRequestV2Handle; evidence: AIRequestEvidenceV2 }> {
   const state = assessmentsV2.get(input.assessmentContext)
   if (!state || requestGuardV2(state.resolution) !== requestGuardV2(input.resolution)
-    || input.stream !== false) throw new Error('准备请求的路由或产品模式不匹配。')
+    || typeof input.stream !== 'boolean') throw new Error('准备请求的路由或产品模式不匹配。')
   const lengthPlan = input.lengthPlan === null ? null
     : (await import('./author-length-intent')).parseTaskLengthPlanV1(input.lengthPlan)
+  if (input.stream && (!lengthPlan || lengthPlan.taskKind !== 'chapter'
+    || !['create', 'continue'].includes(lengthPlan.operation))) throw new Error('新流式请求必须绑定正文篇幅计划。')
   const options = plainOptionsV2(input.options), messages = structuredClone([...input.messages])
   const material = structuredClone(input.contextMaterial)
   const { allocationHash, ...materialBody } = material
@@ -908,7 +917,7 @@ export async function prepareAIRequestV2(input: {
     || material.selectedSourceHashes.some(hash => !material.capturedSourceHashes.includes(hash))
     || !Number.isSafeInteger(material.inputTokenForecast) || material.inputTokenForecast < 0
     || !/^[a-f0-9]{64}$/.test(allocationHash) || await hashCanonicalValue(materialBody) !== allocationHash) throw new Error('完整来源分配身份无效。')
-  const assessed = createAIRequestAssessorV2(input.assessmentContext).assess(messages, options, input.explicitConstraints)
+  const assessed = createAIRequestAssessorV2(input.assessmentContext).assess(messages, options, input.explicitConstraints, input.stream)
   if (assessed.decision === 'proved-overflow') throw new Error('已证完整请求超过服务容量，请先规划未完成范围。')
   const native = state.native ? await prepareNativeCodexRequestV2(state.native, messages, options.jsonSchema?.schema, options.responseFormat) : undefined
   if (native && native.wire !== assessed.wire) throw new Error('本机冻结请求字节发生变化。')
@@ -925,7 +934,7 @@ export async function prepareAIRequestV2(input: {
     forecastBasis: 'source-token-estimate-v1', sentParameters: assessed.sentParameters,
   }
   const handle = requestOpaqueV2<PreparedAIRequestV2Handle>()
-  preparedRequestsV2.set(handle, { lengthPlan, assessment: state, messages, options, wire: assessed.wire,
+  preparedRequestsV2.set(handle, { stream: input.stream, lengthPlan, assessment: state, messages, options, wire: assessed.wire,
     output: assessed.wireOutputTokens, ...(native ? { native: native.handle, nativeBinding: native.binding } : {}), evidence: structuredClone(evidence), attempted: false })
   return { handle, evidence }
 }
@@ -934,7 +943,7 @@ export function bindPreparedRequestObserversV2(
 ): BoundPreparedAIRequestV2 {
   const state = preparedRequestsV2.get(handle)
   if (!state || state.observer || state.attempted || typeof observer.beforeDispatch !== 'function'
-    || typeof observer.onPublicResponse !== 'function' || state.native && typeof observer.onPublicDelta !== 'function') throw new Error('准备请求必须且只能绑定一次持久化观察器。')
+    || typeof observer.onPublicResponse !== 'function' || (state.native || state.stream) && typeof observer.onPublicDelta !== 'function') throw new Error('准备请求必须且只能绑定一次持久化观察器。')
   state.observer = Object.freeze({ ...observer })
   state.guard = async () => { await state.observer!.beforeDispatch(); state.currentCheck?.() }
   const bound = requestOpaqueV2<BoundPreparedAIRequestV2>()
@@ -948,17 +957,58 @@ export function preparedRequestDispatchGuardV2(bound: BoundPreparedAIRequestV2):
   if (!state?.guard) throw new Error('冻结请求尚未绑定。')
   return state.guard
 }
+/** The existing prepared dispatcher remains the sole POST owner. Streaming only
+ * publishes deltas after the product observer has persisted them. Returning or
+ * cancelling the iterator stops that same attempt; it never creates a retry. */
+async function* streamPreparedRequestV2(
+  messages: ChatMessage[], config: AIConfig, meta: AICallMeta | undefined, signal: AbortSignal | undefined,
+  result: StreamResult | undefined, options: ChatRequestOptions, frozenResolution: AIRequestConfigResolution | undefined,
+): AsyncGenerator<string> {
+  const controller = new AbortController()
+  const abort = () => controller.abort(signal?.reason)
+  if (signal?.aborted) abort()
+  else signal?.addEventListener('abort', abort, { once: true })
+  const receipt: ChatResult & StreamResult = result ?? {}
+  delete receipt.completion; delete receipt.finishReason; delete receipt.usage
+  const deltas: string[] = []
+  let done = false, failure: unknown, wake: (() => void) | undefined
+  const notify = () => { const resume = wake; wake = undefined; resume?.() }
+  const request = dispatchPreparedRequestV2(messages, config, meta, controller.signal, receipt, options, frozenResolution, true,
+    delta => { if (!controller.signal.aborted) { deltas.push(delta); notify() } })
+    .then(() => { receipt.completion = controller.signal.aborted ? 'cancelled' : 'complete' }, error => {
+      failure = error
+      receipt.completion = controller.signal.aborted ? 'cancelled'
+        : error instanceof PreparedRequestStoppedV2 && error.visibleObservation.completion !== 'failed' ? 'unknown' : 'failed'
+    }).finally(() => { done = true; notify() })
+  try {
+    while (!done || deltas.length) {
+      if (deltas.length) { yield deltas.shift()!; continue }
+      await new Promise<void>(resolve => { wake = resolve })
+    }
+    await request
+    if (failure !== undefined) throw failure
+  } finally {
+    controller.abort()
+    signal?.removeEventListener('abort', abort)
+    await request
+  }
+}
+
 async function dispatchPreparedRequestV2(
   messages: ChatMessage[], config: AIConfig, meta: AICallMeta | undefined, signal: AbortSignal | undefined,
   result: ChatResult | undefined, options: ChatRequestOptions, frozenResolution: AIRequestConfigResolution | undefined,
+  streaming = false, publishDelta?: (delta: string) => void,
 ): Promise<string> {
   const bound = options.preparedRequestV2!, state = boundRequestsV2.get(bound)
   const { preparedRequestV2: _handle, ...actualOptions } = options
   const resolved = frozenResolution ?? resolveRequestConfig(config, meta)
-  if (!state || state.attempted || !state.guard || !state.observer || options.capacityPolicy || (meta?.category === 'codex.extract' ? state.lengthPlan !== null
+  if (!state || state.attempted || state.stream !== streaming || !state.guard || !state.observer || options.capacityPolicy || (meta?.category === 'codex.extract' ? state.lengthPlan !== null
       : meta?.category === 'agent.world-origin.worldview-field.v2'
         ? state.lengthPlan === null || !['setting-field','setting-set','short-field'].includes(state.lengthPlan.taskKind)
-        : true)
+        : meta?.category === 'chapter.content' || meta?.category === 'chapter.continue'
+          ? state.lengthPlan?.taskKind !== 'chapter' || state.lengthPlan.operation !== (meta.category === 'chapter.continue' ? 'continue' : 'create')
+            || state.lengthPlan.basis !== (meta.category === 'chapter.continue' ? 'additional-text' : 'final-text')
+          : true)
     || requestGuardV2(resolved) !== requestGuardV2(state.assessment.resolution)
     || canonicalStringify(messages) !== canonicalStringify(state.messages)
     || canonicalStringify(actualOptions) !== canonicalStringify(state.options)
@@ -982,7 +1032,7 @@ async function dispatchPreparedRequestV2(
   const startedAt = Date.now()
   const routedConfig = state.assessment.resolution.config
   const accountingMeta = { projectId: meta?.projectId ?? null, category: meta?.category ?? '' }
-  const log = state.native ? null : createLog({ type: 'chat', provider: routedConfig.provider, model: routedConfig.model,
+  const log = state.native ? null : createLog({ type: streaming ? 'stream' : 'chat', provider: routedConfig.provider, model: routedConfig.model,
     url: buildOpenAIEndpoint(routedConfig.baseUrl, 'chat/completions'), status: 'pending' },
     { sensitiveValues: [routedConfig.apiKey], baseUrl: routedConfig.baseUrl })
   try {
@@ -991,6 +1041,7 @@ async function dispatchPreparedRequestV2(
         state.options.jsonSchema?.schema, state.options.responseFormat, undefined, state.native)) {
         response.text += delta
         await state.observer.onPublicDelta?.(delta)
+        publishDelta?.(delta)
       }
       response.finishReason = receipt.finishReason === 'stop' ? 'stop' : 'unknown'
       for (const key of ['inputTokens','outputTokens','totalTokens'] as const) {
@@ -1000,7 +1051,7 @@ async function dispatchPreparedRequestV2(
       response.responseStatus = receipt.requestLifecycle?.responseStatus ?? null
       response.completion = receipt.finishReason === 'stop' ? 'complete' : 'unknown'
     } else {
-      const req = buildRequest(state.assessment.resolution.config, state.messages, false, state.options, { tokens: state.output })
+      const req = buildRequest(state.assessment.resolution.config, state.messages, state.stream, state.options, { tokens: state.output })
       if (req.body !== state.wire) throw new Error('派发字节与冻结字节不一致。')
       await assertModelDispatchGuardV1(receipt, signal)
       signal?.throwIfAborted()
@@ -1009,6 +1060,7 @@ async function dispatchPreparedRequestV2(
       receipt.requestLifecycle = { phase: 'response-observed', responseStatus: http.status }
       response.responseStatus = http.status
       let sawPublicText = false, protocolInvalid = false
+      let streamBatch: string[] = []
       const project = async (body: unknown, streaming: boolean) => {
         const root = body && typeof body === 'object' && !Array.isArray(body) ? body as Record<string, unknown> : {}
         const choices = Array.isArray(root.choices) ? root.choices : []
@@ -1028,7 +1080,18 @@ async function dispatchPreparedRequestV2(
           const value = usage[wireKey]
           if (typeof value === 'number' && Number.isSafeInteger(value) && value >= 0) response.usage[key] = value
         }
-        if (publicDelta) await state.observer!.onPublicDelta?.(publicDelta)
+        if (publicDelta) {
+          if (state.stream) streamBatch.push(publicDelta)
+          else {
+            await state.observer!.onPublicDelta?.(publicDelta)
+            publishDelta?.(publicDelta)
+          }
+        } else if (!streaming && publishDelta && typeof message.content === 'string' && message.content) {
+          // A compatible service may answer a streamed request with plain JSON.
+          // Persist its public text before displaying it, still under one POST.
+          await state.observer!.onPublicDelta?.(message.content)
+          publishDelta(message.content)
+        }
       }
       if (http.headers.get('content-type')?.includes('text/event-stream') && http.body) {
         // SSE can arrive from a compatible endpoint even for a non-streaming
@@ -1055,6 +1118,14 @@ async function dispatchPreparedRequestV2(
             await line(value)
           }
           if (eof) { if (pending) await line(pending.replace(/\r$/, '')); pending = ''; await event() }
+          if (streamBatch.length) {
+            // One physical read may contain many token events. Persist/display
+            // their exact public concatenation once, not one ledger replay per
+            // token. This changes no content, limit, wire bytes or terminal.
+            const delta = streamBatch.join(''); streamBatch = []
+            await state.observer!.onPublicDelta?.(delta)
+            publishDelta?.(delta)
+          }
         }
         try {
           while (true) {
@@ -1063,7 +1134,10 @@ async function dispatchPreparedRequestV2(
             await consume(decoder.decode(part.value, { stream: true }), false)
           }
           response.wireDigest = await sha256Text(wirePieces.join(''))
-        } finally { reader.releaseLock() }
+        } finally {
+          try { await reader.cancel() } catch { /* Keep the original transport/save failure. */ }
+          reader.releaseLock()
+        }
       } else {
         const wire = await http.text()
         response.wireDigest = await sha256Text(wire)
@@ -1074,6 +1148,7 @@ async function dispatchPreparedRequestV2(
       response.completion = !http.ok ? 'failed' : protocolInvalid ? 'unknown' : response.finishReason === 'length' ? 'incomplete'
         : response.finishReason === 'stop' && sawPublicText ? 'complete' : 'unknown'
     }
+    if (streaming && signal?.aborted) response.completion = 'unknown'
     // Only these protocol-visible fields cross into product evidence. No raw
     // HTTP object, endpoint, headers or provider reasoning is exposed.
     publicObserverInvoked = true
@@ -1103,6 +1178,13 @@ async function dispatchPreparedRequestV2(
     if (log) updateLog(log.id, { status: 'error', duration: Date.now() - startedAt, errorMessage: '冻结请求已停止；请保留原运行与已保存证据。' })
     throw new PreparedRequestStoppedV2(structuredClone(response), stoppedBy)
   } finally {
+    if (streaming) {
+      if (response.finishReason !== null) receipt.finishReason = response.finishReason
+      const { inputTokens, outputTokens, totalTokens } = response.usage
+      if (inputTokens !== undefined && outputTokens !== undefined && totalTokens !== undefined) {
+        receipt.usage = { inputTokens, outputTokens, totalTokens }
+      }
+    }
     // Exactly one HTTP attempt owns accounting, including observer/save errors.
     // Native already accounts in loggedCodex; readonly raw recovery never calls
     // this branch. Existing storage needs both measured dimensions, so partial

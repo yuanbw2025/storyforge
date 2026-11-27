@@ -1,0 +1,68 @@
+/* BUG030: product-only layout, activated by the exact role-5-approved root class. */
+.open-world-product-page .lf-heading{padding:12px 20px 0;display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px}
+.open-world-product-page .lf-heading>small{display:none} /* repeats the visible page title */
+.open-world-product-page .lf-heading h2{margin:0}
+.open-world-product-page .product-frame-content{padding:12px 20px;min-width:0}
+.open-world-product-page .product-frame-content:is(:has([data-testid="text-open-world-player"]),:has([data-testid="text-open-world-shell"])){display:flex;flex-direction:column}
+.open-world-product-page .product-frame-content>.lf-paper{flex-shrink:0}
+.open-world-product-page .product-frame-content:has([data-testid="text-open-world-player"])>.lf-paper:has(.builtin-game-shelf),.open-world-product-page .product-frame-content:has([data-testid="text-open-world-shell"])>.lf-paper:has(.builtin-game-shelf){order:1}
+.open-world-product-page .product-frame-content>.lf-paper{padding:16px;margin-bottom:12px;border-radius:14px;min-width:0;overflow-wrap:anywhere}
+.open-world-product-page .product-frame-content>.lf-paper>h3,.open-world-product-page .product-frame-content>.lf-paper>h2{margin:0 0 8px}
+.open-world-product-page .product-frame-content>.lf-paper>p{margin:6px 0;line-height:1.8}
+.open-world-product-page .product-frame-content>.lf-paper>label{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-top:10px;font-size:14px}
+.open-world-product-page .product-frame-content>.lf-paper>label select{width:320px;max-width:100%;min-width:0;padding:9px 12px;font-size:16px;border:1px solid var(--border);border-radius:10px;background:var(--bg-elevated);color:var(--text-primary)}
+.open-world-product-page .home-actions{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;margin:10px 0}
+.open-world-product-page .home-actions small{font-size:13px;line-height:1.7}
+.open-world-product-page .builtin-game-shelf{margin:12px 0 0}
+.open-world-product-page .builtin-game-shelf>a,.open-world-product-page .builtin-game-shelf>div>a{padding:14px 16px}
+.open-world-product-page .builtin-game-shelf>div.grid{gap:12px}
+.open-world-product-page .builtin-game-shelf :is(p,h2){margin:6px 0}
+.open-world-product-page .builtin-game-shelf :is(p,span){overflow-wrap:anywhere}
+.open-world-product-page .builtin-game-shelf>div>a>div:last-child{margin-top:12px;flex-wrap:wrap;gap:8px}
+/* Compact the launcher/catalog, not the active game or reading surface. */
+.open-world-product-page .open-world-launcher:not(.open-world-player-boundary){min-height:0}
+.open-world-product-page .open-world-launcher-content{width:calc(100% - 32px);max-width:1040px;padding:20px 0}
+.open-world-product-page .open-world-launcher-content>h2{margin:8px 0}
+.open-world-product-page .open-world-launcher-content>p{margin:0 0 14px;font-size:14px;line-height:1.8}
+.open-world-product-page .open-world-launcher .avg-title-empty{min-height:0;padding:18px;gap:8px;text-align:center;font-size:14px}
+.open-world-product-page .open-world-library-tools{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin:12px 0}
+.open-world-product-page .open-world-library-tools input{width:320px;max-width:100%;min-width:0;box-sizing:border-box;padding:10px 12px;font-size:16px;background:#15282d;color:#f6efe3;border:1px solid #c4c5aa66;border-radius:6px}
+.open-world-product-page .open-world-library-tools button{border:1px solid #c4c5aa66;border-radius:6px;padding:8px 12px;font-size:14px;color:#f6efe3}
+.open-world-product-page .textgame-catalog-list>article>button{grid-template-columns:56px minmax(0,1fr) auto;gap:12px;padding:12px}
+.open-world-product-page .textgame-catalog-icon{width:56px;height:56px}
+.open-world-product-page .textgame-catalog-copy>strong{white-space:normal;overflow-wrap:anywhere}
+.open-world-product-page .textgame-catalog-copy>p{white-space:normal;font-size:14px;line-height:1.7}
+.open-world-product-page .textgame-catalog-copy>i,.open-world-product-page .textgame-catalog-copy>small,.open-world-product-page .textgame-catalog-open,.open-world-product-page .textgame-catalog-heading>small{font-size:13px}
+.open-world-product-page .textgame-title-page{grid-template-columns:180px minmax(0,1fr)}
+.open-world-product-page .textgame-title-art{min-height:140px;margin:12px 0 12px 12px}
+.open-world-product-page .textgame-title-copy{padding:16px;gap:10px;min-width:0}
+.open-world-product-page .textgame-title-copy>h3{overflow-wrap:anywhere}
+.open-world-product-page .textgame-title-copy>p{font-size:15px;line-height:1.8}
+.open-world-product-page .textgame-title-copy>small,.open-world-product-page .textgame-title-actions>button,.open-world-product-page .textgame-catalog-back,.open-world-product-page .textgame-title-stats>span{font-size:14px}
+.open-world-product-page .open-world-launcher-saves{margin-top:18px;padding-top:14px}
+.open-world-product-page .open-world-save-grid{gap:12px}
+.open-world-product-page .open-world-save-grid article{min-width:0}
+.open-world-product-page .open-world-save-open strong{overflow-wrap:anywhere;white-space:normal}
+/* Creator views share no state changes here: only their private presentation contracts. */
+.open-world-product-page :is([data-testid="text-open-world-creator-studio"],[data-testid="text-open-world-creator-brief-studio"],[data-testid="text-open-world-creator-production-readiness"],[data-testid="text-open-world-creator-production-start"]){padding:0;min-width:0}
+.open-world-product-page [data-testid^="text-open-world-creator-"] :is(header,footer){gap:12px}
+.open-world-product-page [data-testid^="text-open-world-creator-"]>header,.open-world-product-page [data-testid^="text-open-world-creator-"]>footer{padding:14px}
+.open-world-product-page [data-testid^="text-open-world-creator-"] :is(label,button,select,textarea){font-size:14px}
+.open-world-product-page [data-testid^="text-open-world-creator-"] :is(input,select,textarea){max-width:100%;min-width:0;box-sizing:border-box}
+.open-world-product-page [data-testid^="text-open-world-creator-"] :is(h1,h2,h3,strong,code){overflow-wrap:anywhere}
+.open-world-product-page [data-testid="creator-world-empty"]{padding:16px}
+.open-world-product-page [data-testid="text-open-world-source-empty"]{padding:16px}
+@media(max-width:650px){
+  .open-world-product-page .lf-heading{padding:10px 12px 0}
+  .open-world-product-page .product-frame-content{padding:10px 12px}
+  .open-world-product-page .product-frame-content>.lf-paper{padding:14px}
+  .open-world-product-page .product-frame-content>.lf-paper>label select{width:100%;max-width:320px}
+  .open-world-product-page .open-world-launcher-content{width:calc(100% - 24px);padding:16px 0}
+  .open-world-product-page .textgame-catalog-list>article>button{grid-template-columns:40px minmax(0,1fr);gap:10px}
+  .open-world-product-page .textgame-catalog-icon{width:40px;height:40px}
+  .open-world-product-page .textgame-title-page{grid-template-columns:minmax(0,1fr)}
+  .open-world-product-page .textgame-title-art{min-height:90px;margin:12px 12px 0}
+  .open-world-product-page .textgame-title-art svg{width:32px;height:32px}
+  .open-world-product-page .textgame-title-art span{display:none} /* decorative OPEN WORLD wordmark */
+  .open-world-product-page .textgame-title-copy{padding:14px}
+}

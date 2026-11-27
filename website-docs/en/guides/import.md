@@ -1,5 +1,21 @@
 # Import existing fiction and references
 
+## November 25: text layers, CSV grids and same-name hints
+
+Check extraction status after upload. If no copyable text is found, retain the original and unfinished session without chunking/model parsing; provide copyable text or enter it manually. This adds neither automatic OCR nor XLSX support. CSV provides a read-only row/column summary and first-ten-row preview using comma/quote/newline structure. Ragged rows/quote errors are reported without rewriting cells. Based on #617/#619/#624.
+
+Pre-start confirmation can flag existing chapter titles; character names are checked in chunk review after candidates exist. Codex candidates match within the same category/world group. Select a target group in multiworld work; unresolved targets are not guessed. Hints support review; existing confirm/cancel/dedup/write rules remain without silent overwrite/deletion. Based on #628/#633/#637/#644/#648.
+
+Parsing input follows evidenced connection capacity and full-request admission. The old 100k reference remains for unknown capacity rather than a universal ceiling. Requests exceeding real capacity may still reject before dispatch while retaining originals/frozen ranges. Based on #625/#629.
+
+## November 23: full-source entry extraction
+
+Longform setting-to-entry extraction uses recoverable V2 runs: send complete source first, splitting frozen paragraph units only on actual capacity/incomplete-output evidence. A root aggregates only genuinely dispatched, verifiable sources. Field conflicts, cross-run or forged sources block progress; established Canon is not automatically overwritten.
+
+Candidates, author edits and raw responses share one evidence chain. Reload recovery of paid responses does not resend. New tasks and unsent legacy-template requests are checked separately; old unknown requests are not resent and originals remain unchanged. Resolve cross-page task exclusion before explicitly abandoning/restarting. Based on #567.
+
+Shared candidate paths retain valid long fragments, assumptions, references and review issues without old count caps losing tails. Identity/reference/blocking/adoption checks remain. Independent product limits are not universally removed. Based on #565/#573.
+
 ## November 21: complete-request preflight
 
 Document parsing checks the rendered prompt, category catalog, prior context and provider options against capacity, not only source length. Rejection retains original text and frozen recovery ranges. New range-planning/workspace-backup-root/import-review pure contracts are foundations without a production import writer, not a new World-only import entry. Based on #538/#562.

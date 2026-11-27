@@ -22,7 +22,9 @@ import ImportUploadZone from './import/ImportUploadZone'
 import useImportDocumentPreparation from './import/useImportDocumentPreparation'
 import useImportSessionRecovery from './import/useImportSessionRecovery'
 import type { Project, WorkspaceScope } from '../../lib/types'
-import { resolveScope } from '../../lib/workspace/scope'
+import type { Character, OutlineNode } from '../../lib/types'
+import { resolveScope, readOwnedRows } from '../../lib/workspace/scope'
+import { detectSameNameConflictsV1, type SameNameConflictItemV1 } from '../../lib/import/dedup'
 import type { ImportSession, ChunkState, ImportTarget } from '../../lib/types/import-session'
 import type { SidebarModule } from '../layout/sidebar-tree'
 import { useDialog } from '../shared/Dialog'
@@ -63,6 +65,8 @@ export default function ImportDocPanel({ project, onNavigate }: Props) {
     categories: CodexImportCategoryOption[]
   } | null>(null)
   const [applyingReuse, setApplyingReuse] = useState(false)
+  /** 032-L1-d-WIRE：确认前同名清单（只读展示用，空数组=不显示区块）。 */
+  const [sameNameConflicts, setSameNameConflicts] = useState<SameNameConflictItemV1[]>([])
   const recovery = useImportSessionRecovery(project.id!, project.activeWorldId, project.activeWorkId)
   const previewTargetScope = useRef<WorkspaceScope | null>(null)
   const {
@@ -133,10 +137,48 @@ export default function ImportDocPanel({ project, onNavigate }: Props) {
   const prepareScopedConfirmation = async () => {
     try {
       previewTargetScope.current = await resolveScope({ projectId: project.id! })
+      // 032-L1-d-WIRE：确认前把目标世界已有条目与本次待导入标题做一次只读同名对照，
+      // 仅用于展示"将按既有规则合并/追加"的提示；不改写入语义、不写库、不发模型。
+      setSameNameConflicts(await readPendingSameNameConflicts())
       prepareConfirmation()
     } catch (error) {
+      // 同名清单只是提示：读取失败不能阻断作者已经开始的确认流程，清掉即可。
+      setSameNameConflicts([])
       reportImportFailure('无法确认导入目标', error)
     }
+  }
+
+  /**
+   * 032-L1-d-WIRE：只读同名清单。
+   *
+   * - existing* 来自实际目标 scope 的真实行（readOwnedRows），与 chunk-writer 同口径，
+   *   因此不会跨世界误报；authority 沿用 verifyImportProjectTargetGroupV1，未弱化。
+   * - incoming 唯一确定性来源是既有 volumeDetect 的卷/章标题（无已解析角色候选证据）。
+   *   确认前会话尚未创建，chunks[].durableParse / readPendingDocumentImportV1 都拿不到
+   *   本次待导入的角色名，因此 incomingCharacters 一律留空并在此如实记录限制。
+   */
+  const readPendingSameNameConflicts = async (): Promise<SameNameConflictItemV1[]> => {
+    const scope = previewTargetScope.current
+    if (!scope) return []
+    const worldGroupId = project.enableMultiWorld ? targetWorldGroupId : null
+    if (project.enableMultiWorld && worldGroupId == null) return []
+    // 与 handleConfirmStart 完全相同的 authority 校验；失败即抛，不绕过。
+    await verifyImportProjectTargetGroupV1(scope, worldGroupId)
+    const [characters, outlines] = await Promise.all([
+      readOwnedRows<Character>(scope, 'characters', { owner: 'world' }),
+      readOwnedRows<OutlineNode>(scope, 'outlineNodes', { owner: 'work' }),
+    ])
+    const incomingOutlines: Array<{ title: string; summary: string }> = []
+    for (const chapter of volumeDetect?.orphanChapters ?? []) incomingOutlines.push({ title: chapter.title, summary: '' })
+    for (const volume of volumeDetect?.volumes ?? [])
+      for (const chapter of volume.chapters) incomingOutlines.push({ title: chapter.title, summary: '' })
+    return detectSameNameConflictsV1({
+      existingCharacters: characters.map(character => ({ id: character.id, name: character.name })),
+      existingOutlines: outlines.map(node => ({ id: node.id, title: node.title, summary: node.summary })),
+      // 确认前没有本次待导入角色的确定性证据（禁止自造抽取器）：留空。
+      incomingCharacters: [],
+      incomingOutlines,
+    })
   }
 
   // ── 在 Confirm Modal 里确认：创建 session 并启动 ───────────
@@ -147,6 +189,8 @@ export default function ImportDocPanel({ project, onNavigate }: Props) {
       return
     }
     closeConfirm()
+    // 同名提示属于本次预览；确认后按已有 adopt 链走，不需要再留在界面上。
+    setSameNameConflicts([])
 
     useImportStatusStore.getState().reset()
     useImportStatusStore.getState().setPhase('preparing')
@@ -616,6 +660,7 @@ export default function ImportDocPanel({ project, onNavigate }: Props) {
           onChunkSizeChange={handleChunkSizeChange}
           onConfirm={handleConfirmStart}
           onCancel={closeConfirm}
+          sameNameConflicts={sameNameConflicts}
         />
       )}
 
@@ -648,6 +693,12 @@ export default function ImportDocPanel({ project, onNavigate }: Props) {
           filename={codexReview.session.filename}
           candidates={codexReview.session.merged?.codexCandidates || []}
           categories={codexReview.categories}
+          // 032-L1-d-CODEX-MULTIWORLD：把冻结会话的目标 scope 与本次实际写入的世界组口径交给模态，
+          // 与 handleConfirmCodex 的 worldGroupId 计算保持一致（避免跨世界误报）。
+          targetScope={codexReview.session.targetScope}
+          targetWorldGroupId={codexReview.session.importTarget === 'project'
+            ? (codexReview.session.targetWorldGroupId ?? null)
+            : (project.enableMultiWorld ? targetWorldGroupId : null)}
           onConfirm={candidates => handleConfirmCodex(codexReview.session, candidates)}
           onCancel={() => setCodexReview(null)}
         />

@@ -3,6 +3,7 @@ import { resolveRequestConfig, type StreamResult, type AIRequestConfigResolution
 import {
   streamRegisteredAIEntryV1,
   type FormalAICallMetaV1,
+  type PreparedChapterStreamV2,
 } from '../lib/agent/formal-ai-entry'
 import { getAIConfigRequiredMessage, isAIConfigReady } from '../lib/ai/config-readiness'
 import { useAIConfigStore } from '../stores/ai-config'
@@ -30,7 +31,7 @@ export interface UseAIStreamReturn {
    * @param messages 聊天消息
    * @param overrideConfig 临时覆盖的配置片段（例如导入面板需要 maxTokens=16384）
    */
-  start: (messages: ChatMessage[], overrideConfig: Partial<AIConfig> | undefined, meta: FormalAICallMetaV1, resolution?: AIRequestConfigResolution, result?: StreamResult) => Promise<string>
+  start: (messages: ChatMessage[], overrideConfig: Partial<AIConfig> | undefined, meta: FormalAICallMetaV1, resolution?: AIRequestConfigResolution, result?: StreamResult, prepared?: PreparedChapterStreamV2) => Promise<string>
   /** 停止生成 */
   stop: () => void
   /** 重置状态 */
@@ -126,6 +127,7 @@ export function useAIStream(sessionKey?: string): UseAIStreamReturn {
     meta: FormalAICallMetaV1,
     frozenResolution?: AIRequestConfigResolution,
     providedResult?: StreamResult,
+    prepared?: PreparedChapterStreamV2,
   ): Promise<string> => {
     // 重置状态
     if (sessionKey) {
@@ -163,6 +165,9 @@ export function useAIStream(sessionKey?: string): UseAIStreamReturn {
       return ''
     }
 
+    const stopPreparedTask = () => controller.abort(prepared?.signal?.reason)
+    if (prepared?.signal?.aborted) stopPreparedTask()
+    else prepared?.signal?.addEventListener('abort', stopPreparedTask, { once: true })
     let accumulated = ''
     const streamResult: StreamResult = providedResult ?? {}
     delete streamResult.completion
@@ -187,7 +192,7 @@ export function useAIStream(sessionKey?: string): UseAIStreamReturn {
     }
 
     try {
-      const stream = streamRegisteredAIEntryV1(messages, config, meta, controller.signal, streamResult, frozenResolution)
+      const stream = streamRegisteredAIEntryV1(messages, config, meta, controller.signal, streamResult, frozenResolution, prepared)
       for await (const chunk of stream) {
         if (controller.signal.aborted) break
         accumulated += chunk
@@ -198,7 +203,7 @@ export function useAIStream(sessionKey?: string): UseAIStreamReturn {
       }
       if (controller.signal.aborted || !ownsRequest()) streamResult.completion = 'cancelled'
     } catch (err: unknown) {
-      streamResult.completion = controller.signal.aborted || (err as Error).name === 'AbortError' ? 'cancelled' : 'failed'
+      streamResult.completion = controller.signal.aborted || (err as Error).name === 'AbortError' ? 'cancelled' : streamResult.completion ?? 'failed'
       if ((err as Error).name === 'AbortError') {
         // 用户主动停止，不算错误
       } else if (!controller.signal.aborted && ownsRequest()) {
@@ -207,6 +212,7 @@ export function useAIStream(sessionKey?: string): UseAIStreamReturn {
         else setError(errMsg)
       }
     } finally {
+      prepared?.signal?.removeEventListener('abort', stopPreparedTask)
       if (publishTimer != null) clearTimeout(publishTimer)
       publishOutput()
       if (sessionKey) {

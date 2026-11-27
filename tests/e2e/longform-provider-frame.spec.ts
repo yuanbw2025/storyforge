@@ -1,3 +1,4 @@
+import { installBrowserServiceCapacityFixtureV1 } from './helpers/browser-ai-config'
 import { expect, test, type Page } from '@playwright/test'
 import { createLongform } from './helpers/product-entry'
 
@@ -9,8 +10,9 @@ async function mixedFrame(page: Page) {
   const after = '门口的陈禾转身回到柜台，决定收好工具，合上另一份记录，关灯。'.repeat(20)
   const received = `${before}\n</think>\n${after}`
   await page.addInitScript(() => localStorage.setItem('storyforge-ai-config', JSON.stringify({ provider: 'ollama', model: 'frame-test', baseUrl: 'https://prose-frame.invalid/v1', temperature: .7, maxTokens: 4000, contextWindow: 128000 })))
+  await installBrowserServiceCapacityFixtureV1(page, { provider: 'ollama', baseUrl: 'https://prose-frame.invalid/v1', model: 'frame-test' }, 128000)
   let calls = 0
-  await page.route('https://prose-frame.invalid/**', route => { calls++; return route.fulfill({ contentType: 'text/event-stream', body: `data: ${JSON.stringify({ choices: [{ delta: { content: received }, finish_reason: 'stop' }] })}\n\ndata: [DONE]\n\n` }) })
+  await page.route('https://prose-frame.invalid/v1/chat/completions', route => { calls++; return route.fulfill({ contentType: 'text/event-stream', body: `data: ${JSON.stringify({ choices: [{ delta: { content: received }, finish_reason: 'stop' }] })}\n\ndata: [DONE]\n\n` }) })
   await createLongform(page, '不同开篇回复核对')
   const target = await page.evaluate(async () => {
     const [{ db }, { resolveScopeLike, stampNewRecord }] = await Promise.all([import('/storyforge/src/lib/db/schema.ts'), import('/storyforge/src/lib/workspace/scope.ts')])
@@ -22,6 +24,7 @@ async function mixedFrame(page: Page) {
   })
   await page.goto(`./workspace/${target.projectId}?module=chapters-list&chapter=${target.outlineNodeId}`)
   await page.locator('[data-workspace-ready=longform]').waitFor()
+  await page.getByRole('group', { name: '编辑模式', exact: true }).getByRole('button', { name: '富文本', exact: true }).click()
   await page.getByRole('button', { name: '✨ 生成正文', exact: true }).click()
   await page.getByRole('dialog', { name: '正文生成提示', exact: true }).getByRole('button', { name: '开始生成', exact: true }).click()
   await expect(page.getByRole('textbox', { name: 'AI 候选可编辑内容', exact: true })).toHaveValue(received)
@@ -54,8 +57,9 @@ test('疑似分隔只是作者提示，作者仍可保留全文及字面标签�
 
 test('重复回复原文保留并阻止直接采纳，作者选择后段后正式写入，刷新不重发', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('storyforge-ai-config', JSON.stringify({ provider: 'ollama', model: 'frame-test', baseUrl: 'https://prose-frame.invalid/v1', temperature: .7, maxTokens: 4000, contextWindow: 128000 })))
+  await installBrowserServiceCapacityFixtureV1(page, { provider: 'ollama', baseUrl: 'https://prose-frame.invalid/v1', model: 'frame-test' }, 128000)
   let calls = 0
-  await page.route('https://prose-frame.invalid/**', route => { calls++; return route.fulfill({ contentType: 'text/event-stream', body: `data: ${JSON.stringify({ choices: [{ delta: { content: raw }, finish_reason: 'stop' }], usage: { prompt_tokens: 100, completion_tokens: 1000, total_tokens: 1100 } })}\n\ndata: [DONE]\n\n` }) })
+  await page.route('https://prose-frame.invalid/v1/chat/completions', route => { calls++; return route.fulfill({ contentType: 'text/event-stream', body: `data: ${JSON.stringify({ choices: [{ delta: { content: raw }, finish_reason: 'stop' }], usage: { prompt_tokens: 100, completion_tokens: 1000, total_tokens: 1100 } })}\n\ndata: [DONE]\n\n` }) })
   await createLongform(page, '回复核对隔离实验')
   const target = await page.evaluate(async () => {
     const imp = new Function('p', 'return import(p)')
@@ -68,13 +72,13 @@ test('重复回复原文保留并阻止直接采纳，作者选择后段后正�
   })
   await page.goto(`./workspace/${target.projectId}?module=chapters-list&chapter=${target.outlineNodeId}`)
   await page.locator('[data-workspace-ready=longform]').waitFor()
+  await page.getByRole('group', { name: '编辑模式', exact: true }).getByRole('button', { name: '富文本', exact: true }).click()
   await page.getByRole('textbox', { name: '自定义指令...', exact: true }).fill('写600字，只核对后关灯。')
   await page.getByRole('button', { name: '✨ 生成正文', exact: true }).click()
   await page.getByRole('dialog', { name: '正文生成提示', exact: true }).getByRole('button', { name: '开始生成', exact: true }).click()
   await expect(page.getByRole('textbox', { name: 'AI 候选可编辑内容', exact: true })).toHaveValue(raw)
   await expect(page.getByRole('alert').filter({ hasText: '推理分隔符' })).toBeVisible()
-  await page.getByRole('button', { name: '采纳', exact: true }).click()
-  await expect(page.getByText(/重复了正文/).last()).toBeVisible()
+  await expect(page.getByRole('button', { name: '采纳', exact: true })).toHaveCount(0)
   expect(await page.evaluate(async id => { const [{ db }, { htmlToPlainText }] = await Promise.all([import('/storyforge/src/lib/db/schema.ts'), import('/storyforge/src/lib/utils/html.ts')]); return htmlToPlainText((await db.chapters.get(id))!.content) }, target.chapterId)).toBe('')
   await page.getByRole('button', { name: '保留分隔后的正文供核对', exact: true }).click()
   await expect(page.getByRole('textbox', { name: 'AI 候选可编辑内容', exact: true })).toHaveValue(`# 第1章 收店\n${final}`)

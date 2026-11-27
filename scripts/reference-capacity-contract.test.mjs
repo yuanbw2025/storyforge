@@ -9,7 +9,7 @@ test('capacity evaluation is registered and cannot acquire writing or other tran
   for (const patch of [{ boundary: 'formal' }, { adoptAllowed: true }, { adoptionTargets: ['references'] },
     { transport: 'local-codex-subscription' }, { caller: 'scripts/other.mjs' }, { contract: 'scripts/reference-quality-contract.mjs' }]) {
     const changed = registry()
-    Object.assign(changed.offlineEvaluations.find(entry => entry.entryId === 'eval.reference.service-capacity'), patch)
+    Object.assign(changed.offlineEvaluations.find((/** @type {import('./reference-capacity-contract.mjs').OfflineCapacityEntry} */ entry) => entry.entryId === 'eval.reference.service-capacity'), patch)
     assert.throws(() => assertOfflineReferenceCapacityEntry(changed), /Missing read-only/)
   }
   assert.throws(() => assertOfflineReferenceCapacityEntry({}), /Missing read-only/)

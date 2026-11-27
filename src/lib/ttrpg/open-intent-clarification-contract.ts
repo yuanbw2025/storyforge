@@ -20,9 +20,9 @@ export type TtrpgOpenIntentClarificationV2 = Omit<TtrpgOpenIntentClarificationV1
 export type TtrpgOpenIntentClarification = TtrpgOpenIntentClarificationV1 | TtrpgOpenIntentClarificationV2
 export function parseTtrpgOpenIntentSelectionV1(value: unknown): TtrpgOpenIntentSelectionV1 {
   const r = p.record(value, ['goal', 'method', 'targetRefs', 'requestedOutcome'], 'human intent selection')
-  return { goal: p.text(r.goal, 'clarified goal', 2000), method: p.nullable(r.method, p.key, 'clarified method'),
+  return { goal: p.contentText(r.goal, 'clarified goal'), method: p.nullable(r.method, p.key, 'clarified method'),
     targetRefs: p.list(r.targetRefs, 'clarified targets', p.key, 1, 0),
-    requestedOutcome: p.nullable(r.requestedOutcome, (v,l) => p.text(v,l,2000), 'clarified outcome') }
+    requestedOutcome: p.nullable(r.requestedOutcome, p.contentText, 'clarified outcome') }
 }
 export function parseTtrpgOpenIntentClarification(value: unknown): TtrpgOpenIntentClarification {
   const hasSceneScope = Object.prototype.hasOwnProperty.call(p.object(value,'intent clarification'),'sceneScope')

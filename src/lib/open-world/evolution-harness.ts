@@ -1,4 +1,6 @@
-import { chat } from '../ai/client'
+import { chat, resolveRequestConfig } from '../ai/client'
+import { evidencedInputBudgetV1, prepareModelCapacityV1 } from '../ai/model-capacity'
+import { requireFixedBudgetValueV1 } from '../agent/finite-budget'
 import { createAgentSkillExecutionBindingV1 } from '../agent/execution-binding'
 import { getAgentSkillV1, type AgentSkillId } from '../agent/skill-registry'
 import { createAgentRunCheckpointV1, readLatestVerifiedAgentRunCheckpointV1 } from '../agent/run/checkpoint'
@@ -130,11 +132,35 @@ function parseDraft(
   } as OpenWorldEvolutionPresentationCandidateV1
 }
 
+/** B39：文字开放世界演化运行时输入预算跟随已绑定连接的已证实容量（预留本
+ * Skill 输出），不再固定 16k 应用额度。注入 adapter（runAI）沿用缺省；未知/
+ * 保守容量不低于原参考，不放大作者上限；请求级装配/准入继续兜底。 */
+const OPEN_WORLD_EVOLUTION_RUNTIME_DEFAULT_INPUT_TOKENS_V1 = 16_000
+
+export async function openWorldEvolutionRuntimeInputBudgetV1(input: {
+  aiConfig?: AIConfig
+  projectId: number
+  category: string
+  outputReservation: number
+}): Promise<number> {
+  if (!input.aiConfig) return OPEN_WORLD_EVOLUTION_RUNTIME_DEFAULT_INPUT_TOKENS_V1
+  try {
+    const resolved = resolveRequestConfig(input.aiConfig, { category: input.category, projectId: input.projectId }).config
+    const prepared = await prepareModelCapacityV1(resolved)
+    const value = evidencedInputBudgetV1({ config: prepared, outputReservation: input.outputReservation })
+    if (value != null) return Math.max(OPEN_WORLD_EVOLUTION_RUNTIME_DEFAULT_INPUT_TOKENS_V1, value)
+  } catch {
+    // 容量未证实（离线/未知模型）时退回缺省参考。
+  }
+  return OPEN_WORLD_EVOLUTION_RUNTIME_DEFAULT_INPUT_TOKENS_V1
+}
+
 function contract(input: {
   objective: string
   boundary: Awaited<ReturnType<typeof captureOpenWorldEvolutionRuntimeHarnessBoundaryV1>>
   skillId: OpenWorldEvolutionRuntimeSkillIdV1
   runtimeBindingHash: string
+  inputBudgetTokens: number
 }) {
   const skill = getAgentSkillV1(input.skillId)
   return {
@@ -145,7 +171,7 @@ function contract(input: {
     permissions: { contextSourceKeys: ['textOpenWorldEvolutionRuntime'], writeTargets: [] },
     runtimeBindingHash: input.runtimeBindingHash,
     executionBindings: [{ stepId: OPEN_WORLD_EVOLUTION_RUNTIME_STEP_ID_V1, ...createAgentSkillExecutionBindingV1(skill) }],
-    budget: { maxModelCalls: 1, maxToolCalls: 0, maxInputTokens: 16_000, maxOutputTokens: skill.maxOutputTokens, maxAttemptsPerStep: 1 },
+    budget: { maxModelCalls: 1, maxToolCalls: 0, maxInputTokens: input.inputBudgetTokens, maxOutputTokens: skill.maxOutputTokens, maxAttemptsPerStep: 1 },
     acceptance: [
       { id: 'runtime.candidate', kind: 'output-present' as const, required: true },
       { id: 'runtime.freshness', kind: 'deterministic-check' as const, required: true },
@@ -203,11 +229,16 @@ export async function generateOpenWorldEvolutionRuntimeCandidateV1(input: {
       ? { provider: 'test-adapter', model: 'injected', transport: 'chat-v1' }
       : { provider: input.aiConfig?.provider, model: input.aiConfig?.model, transport: 'chat-v1' },
   })
+  const runtimeInputBudget = await openWorldEvolutionRuntimeInputBudgetV1({
+    aiConfig: input.aiConfig, projectId: input.scope.projectId,
+    category: `runtime.${input.skillId}`,
+    outputReservation: requireFixedBudgetValueV1(skill.maxOutputTokens),
+  })
   let snapshot = await createAgentRunV1({
     scope: input.scope,
     productRuntimeSessionId: input.productRuntimeSessionId,
     worldGroupId: boundary.scope.worldGroupId,
-    contract: contract({ objective, boundary, skillId: input.skillId, runtimeBindingHash }),
+    contract: contract({ objective, boundary, skillId: input.skillId, runtimeBindingHash, inputBudgetTokens: runtimeInputBudget }),
   })
   await input.onRunCreated?.(snapshot.run.id)
   snapshot = await append(input.scope, snapshot, 'step.scheduled', { stepId: OPEN_WORLD_EVOLUTION_RUNTIME_STEP_ID_V1 })
@@ -221,7 +252,7 @@ export async function generateOpenWorldEvolutionRuntimeCandidateV1(input: {
       sourceKeys: ['textOpenWorldEvolutionRuntime'],
       modelConfig: input.aiConfig, provider: input.aiConfig?.provider,
       model: input.aiConfig?.model,
-      inputBudgetMaxTokens: 16_000,
+      inputBudgetMaxTokens: runtimeInputBudget,
     })
     if (!assembled.included.includes('textOpenWorldEvolutionRuntime')) fail('文字开放世界内部状态演化运行时上下文为空')
     await assertOpenWorldEvolutionRuntimeHarnessFreshV1({ scope: input.scope, contractScope: snapshot.contract.scope })

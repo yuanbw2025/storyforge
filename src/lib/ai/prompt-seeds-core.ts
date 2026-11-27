@@ -470,7 +470,7 @@ const CORE_PROMPT_BASE_SEEDS: PromptSeed[] = [
 
 输出必须是一个 JSON 对象，不要 Markdown 围栏或解释：
 {
-  "summary": "100-200字客观摘要",
+  "summary": "客观摘要；覆盖全章实际发生的关键信息，长度随章节信息量自然伸缩",
   "handoff": {
     "finalScene": {
       "location": "结尾地点；未知则空字符串",

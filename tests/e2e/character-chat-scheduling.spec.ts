@@ -7,7 +7,7 @@ test.beforeEach(async ({page}) => {
   await page.addInitScript(() => {
     localStorage.setItem('storyforge_guide_completed', 'e2e')
   })
-  registerBrowserFixtureAIConfigV1(page, { provider: 'openai', baseUrl: 'https://chat-scheduling.invalid/v1', model: 'test', maxTokens: 8000, apiKey: 'isolated-test-key' })
+  registerBrowserFixtureAIConfigV1(page, { provider: 'custom', baseUrl: 'https://chat-scheduling.invalid/v1', model: 'test', maxTokens: 8000, apiKey: 'isolated-test-key' }, { serviceContextWindow: 64000 })
 })
 
 async function seed(page: Page, partial = false) {
@@ -36,7 +36,7 @@ async function seed(page: Page, partial = false) {
 
 async function provider(page: Page, waiting = false) {
   const receipt = {actors: [] as string[], calls: 0}
-  await page.route('https://chat-scheduling.invalid/**', async route => {
+  await page.route('https://chat-scheduling.invalid/v1/chat/completions', async route => {
           if (await fulfillChatActionChoiceFixture(route)) return
     receipt.calls++
     const prompt = route.request().postDataJSON().messages.map((m: {content: string}) => m.content).join('\n')
@@ -135,7 +135,7 @@ test('waiting for the player stops the entire group without generating the next 
 test('a player can interrupt resumed automatic scheduling without selecting a new manual actor', async ({page}) => {
   let calls = 0, release!: () => void
   const gate = new Promise<void>(resolve => {release = resolve})
-  await page.route('https://chat-scheduling.invalid/**', async route => {
+  await page.route('https://chat-scheduling.invalid/v1/chat/completions', async route => {
           if (await fulfillChatActionChoiceFixture(route)) return
     calls++
     await gate
