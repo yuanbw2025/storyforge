@@ -21,9 +21,19 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261127-feedback541-capacity-main-v2.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261127-markdown051-descriptions-v2.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261127-markdown051-descriptions-v1.json",
+        "sha256": "4be643a188bc5f821942501483bd04e172c6d71686ac30f77b89f02946c6026c",
+        "note": "Preserve the measured Markdown051 description receipt before merging the published main inputs; remeasure combined deterministic evidence without changing corpus or outcomes."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261127-feedback541-capacity-main-v2.json",
+        "sha256": "d20643a90715b3fb030ddc41b361a05fa132bdc53b328656a397e6729ce3f45e",
+        "note": "Preserve the published main receipt before integrating exact StoryCore author text; no release or model acceptance inferred."
+      },
       {
         "path": "tests/acceptance/narrative-world/baseline-20261127-feedback541-capacity-main-v1.json",
         "sha256": "80839352b281b2ac38e0660f046b75cd529dab9317d42c28cd3fa1599b2954db",

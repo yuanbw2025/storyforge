@@ -268,7 +268,7 @@ function FieldEditor({
 
       {/* 内容区 — 行内编辑 */}
       <div className="bg-bg-surface border border-border rounded-lg p-4">
-        <InlineTextarea
+        <InlineTextarea markdownRead
           inputAreaLayout={inputAreaLayoutV1(resizableInputs, `story.${field.key}`)}
           value={value}
           onChange={onChange}

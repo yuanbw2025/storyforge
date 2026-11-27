@@ -42,7 +42,7 @@ export default function PowerSystemDetails({ project, initialRecordId, resizable
       ['rules', '体系规则', '修炼条件、突破瓶颈、禁忌…'],
     ] as const).map(([key, label, placeholder]) => <div key={key}>
       <h3 className="mb-1 text-sm font-medium">{label}</h3>
-      <InlineTextarea inputAreaLayout={inputAreaLayoutV1(resizableInputs, `power.${key}`)} value={record?.[key] ?? ''} onChange={value => save({ [key]: value })} placeholder={placeholder}/>
+      <InlineTextarea markdownRead inputAreaLayout={inputAreaLayoutV1(resizableInputs, `power.${key}`)} value={record?.[key] ?? ''} onChange={value => save({ [key]: value })} placeholder={placeholder}/>
     </div>)}
   </fieldset>
 }

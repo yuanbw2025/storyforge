@@ -149,8 +149,9 @@ export default function ReferencePanel({ project, initialReferenceId }: Props) {
             referenceIndex={references.findIndex(r => r.id === selectedRef.id)}
             onUpdate={(data) => {
               if (selectedRef?.id) {
-                updateReference(selectedRef.id, data)
+                return updateReference(selectedRef.id, data)
               }
+              return Promise.reject(new Error('参考已不可编辑，输入尚未保存。'))
             }}
             onDelete={() => handleDelete(selectedRef)}
           />

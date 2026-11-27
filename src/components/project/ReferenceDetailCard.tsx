@@ -42,7 +42,7 @@ type DetailTab = 'worldview' | 'characters' | 'outline' | 'deep-analysis' | 'inf
 interface Props {
   reference: Reference
   referenceIndex: number
-  onUpdate: (data: Partial<Reference>) => void
+  onUpdate: (data: Partial<Reference>) => void | Promise<void>
   onDelete: () => void
 }
 
@@ -138,7 +138,7 @@ export default function ReferenceDetailCard({ reference, referenceIndex, onUpdat
   )
 }
 
-function ReferenceInfoTab({ reference, onUpdate }: { reference: Reference; onUpdate: (data: Partial<Reference>) => void }) {
+function ReferenceInfoTab({ reference, onUpdate }: { reference: Reference; onUpdate: (data: Partial<Reference>) => void | Promise<void> }) {
   return (
     <div className="space-y-0 divide-y divide-border/40">
       <ReferenceInfoRow label="标题">
@@ -156,7 +156,7 @@ function ReferenceInfoTab({ reference, onUpdate }: { reference: Reference; onUpd
         </select>
       </ReferenceInfoRow>
       <ReferenceInfoRow label="参考要点">
-        <InlineTextarea value={reference.note} onChange={value => onUpdate({ note: value })} placeholder="记录你希望借鉴这部作品的哪些方面…" />
+        <InlineTextarea markdownRead value={reference.note} onChange={value => onUpdate({ note: value })} placeholder="记录你希望借鉴这部作品的哪些方面…" />
       </ReferenceInfoRow>
     </div>
   )

@@ -164,9 +164,9 @@ describe('R-HARNESS31 · 故事核心面板统一进入主 Agent Harness', () =>
       promptExecution: { version: 1, moduleKey: 'story.generate' },
     })
 
-    const manualDisplay = Array.from(host.querySelectorAll('div.cursor-text'))
-      .find(element => element.textContent === '旧的一句话故事')!
-    await act(async () => manualDisplay.click())
+    const manualDisplay = Array.from(host.querySelectorAll('[data-markdown-read-view]'))
+      .find(element => element.textContent?.includes('旧的一句话故事'))!
+    await act(async () => Array.from(manualDisplay.querySelectorAll('button')).find(button => button.textContent === '编辑源码')!.click())
     const manual = host.querySelector<HTMLTextAreaElement>('textarea[placeholder="点击填写一句话故事…"]')!
     await act(async () => setInputValue(manual, '作者手写的一句话故事'))
     await act(async () => manual.dispatchEvent(new FocusEvent('focusout', { bubbles: true })))

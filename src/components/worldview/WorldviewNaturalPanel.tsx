@@ -405,7 +405,7 @@ function NaturalResourcesEditor({ naturalResources, setNaturalResources, save, r
           <div key={r.key} className={`flex items-start gap-3 ${compact ? 'lf-world-resource-row' : ''}`}>
             <span className="text-sm text-text-secondary w-28 flex-shrink-0 pt-0.5">{r.label}</span>
             <div className="flex-1">
-              <InlineTextarea inputAreaLayout={inputAreaLayoutV1(resizableInputs, worldviewInputAreaFieldV1(r.key))} value={naturalResources[r.key]} onChange={v => update(r.key, v)} placeholder={r.placeholder} />
+              <InlineTextarea markdownRead inputAreaLayout={inputAreaLayoutV1(resizableInputs, worldviewInputAreaFieldV1(r.key))} value={naturalResources[r.key]} onChange={v => update(r.key, v)} placeholder={r.placeholder} />
             </div>
           </div>
         ))}
