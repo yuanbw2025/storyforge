@@ -5,6 +5,8 @@ import { trimMessagesToFit } from '../ai/context-budget'
 import { freezeModelCapacityV1, modelInputBudgetV1 } from '../ai/model-capacity'
 import { formatCodexImportCatalog, type CodexImportCategoryOption } from './codex-classification'
 
+export const DOCUMENT_PARSE_KNOWN_CONTEXT_V1 = '无：仅阅读本块已确认原文。'
+
 /** The real document-parse frame, also available to opt-in new-plan previews.
  * Source/context/catalog are supplied whole; this function never assembles or clips them. */
 export function buildDocumentParseFrameV1(input: {

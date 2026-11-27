@@ -1,7 +1,6 @@
 import { requireFixedBudgetValueV1 } from '../agent/finite-budget'
 import { hashDocumentImportChunkBindingV1 } from './document-parse-binding'
-/** Candidate-only foundation. The current import UI does not dispatch through
- * this entry until it can show and explicitly adopt its recovered candidate. */
+/** Document parsing persists a candidate; only explicit author confirmation writes formal content. */
 import {
   bindImportChunkParseRunV1, hashImportChunkTextV1, readImportSessionAuthorityInTransactionV1,
   readImportSessionAuthorityV1, reserveImportChunkParseV1,
@@ -15,7 +14,7 @@ import { getAIConfigRequiredMessage, isAIConfigReady } from '../ai/config-readin
 import { resolveRequestConfig, type ChatResult } from '../ai/client'
 import { modelDispatchWasCancelledV1 } from '../ai/codex-transport'
 import { prepareModelCapacityV1, freezeModelCapacityV1, modelInputBudgetV1 } from '../ai/model-capacity'
-import { buildDocumentParseFrameV1, assessDocumentParseRequestV1 } from './document-parse-request'
+import { buildDocumentParseFrameV1, assessDocumentParseRequestV1, DOCUMENT_PARSE_KNOWN_CONTEXT_V1 } from './document-parse-request'
 import { createAgentSkillExecutionBindingV1 } from '../agent/execution-binding'
 import { executeFrozenFormalAIEntryV1, freezeFormalAIEntryBindingV1 } from '../agent/formal-ai-entry'
 import { getAgentSkillV1 } from '../agent/skill-registry'
@@ -60,6 +59,19 @@ export function documentParseChunkInputBudgetV1(config: import('../types').AICon
   // 已证实容量更大时按容量；未知/保守容量不得低于原参考，避免把既有可用
   // 分块压回更小窗口（固定值只是下限，不再是上限）。
   return Math.max(DOCUMENT_PARSE_DEFAULT_INPUT_TOKENS_V1, value)
+}
+/** Same routed request policy for new-plan feasibility and actual dispatch. */
+export async function prepareDocumentParseRequestConfigV1(projectId: number) {
+  const config = structuredClone(useAIConfigStore.getState().config)
+  const skill = getAgentSkillV1(SKILL, 'inspiration')
+  const metadata = { category: 'import.parse-chunk', projectId, contextOverflowPolicy: 'reject' as const,
+    configOverrides: { maxTokens: 0 } }
+  const routed = resolveRequestConfig(config, metadata)
+  if (!isAIConfigReady(routed.config)) fail(getAIConfigRequiredMessage(routed.config))
+  const resolved = { ...routed, config: await prepareModelCapacityV1(routed.config) }
+  freezeModelCapacityV1(resolved.config)
+  const inputBudgetTokens = documentParseChunkInputBudgetV1(resolved.config, requireFixedBudgetValueV1(skill.maxOutputTokens))
+  return { config, skill, metadata, resolved, inputBudgetTokens }
 }
 const ATTEMPT = 1
 const CATEGORIES = 'documentImportCodexCategories'
@@ -154,15 +166,7 @@ export async function createDocumentImportChunkCandidateV1(input: ChunkInput & {
   const text = input.sourceText ?? getChunkText(session.id, input.chunkIndex)
   if (!text || !chunk.sourceTextHash || await hashImportChunkTextV1(text) !== chunk.sourceTextHash)
     fail('当前分块不是已确认原文件。')
-  const config = structuredClone(useAIConfigStore.getState().config)
-  const skill = getAgentSkillV1(SKILL, 'inspiration')
-  const metadata = { category: 'import.parse-chunk', projectId: input.projectId, contextOverflowPolicy: 'reject' as const,
-    configOverrides: { maxTokens: 0 } }
-  const routed = resolveRequestConfig(config, metadata)
-  if (!isAIConfigReady(routed.config)) fail(getAIConfigRequiredMessage(routed.config))
-  const resolved = { ...routed, config: await prepareModelCapacityV1(routed.config) }
-  freezeModelCapacityV1(resolved.config)
-  const inputBudgetTokens = documentParseChunkInputBudgetV1(resolved.config, requireFixedBudgetValueV1(skill.maxOutputTokens))
+  const { config, skill, metadata, resolved, inputBudgetTokens } = await prepareDocumentParseRequestConfigV1(input.projectId)
   // A fresh World may reach document import before opening Codex. Initialize its
   // built-in definitions through the store before the registered read-only source.
   if (session.importTarget === 'project') await useCodexStore.getState().ensureBuiltIns(scope)
@@ -186,7 +190,7 @@ export async function createDocumentImportChunkCandidateV1(input: ChunkInput & {
   const { messages, options: providerOptions } = buildDocumentParseFrameV1({
     template: usePromptStore.getState().getActive('import.parse-chunk'), provider: resolved.config.provider,
     chunkIndex: input.chunkIndex, totalChunks: session.totalChunks, sourceText: text, categories,
-    knownContext: '无：仅阅读本块已确认原文。',
+    knownContext: DOCUMENT_PARSE_KNOWN_CONTEXT_V1,
   })
   if (!messages.some(message => message.content.includes(text))) fail('原分块没有逐字进入请求。')
   const admission = assessDocumentParseRequestV1({ config: resolved.config, messages, options: providerOptions,

@@ -19,6 +19,7 @@ export default function useImportDocumentPreparation() {
   const [extractInfo, setExtractInfo] = useState<string | null>(null)
   const [plans, setPlans] = useState<ChunkPlan[] | null>(null)
   const [chunkSize, setChunkSize] = useState(DEFAULT_CHUNK_SIZE)
+  const [automaticChunking, setAutomaticChunking] = useState(true)
   const [showConfirm, setShowConfirm] = useState(false)
   const [volumeDetect, setVolumeDetect] = useState<VolumeDetectResult | null>(null)
   const [textLayerBlocked, setTextLayerBlocked] = useState<TextLayerBlockedV1 | null>(null)
@@ -35,6 +36,7 @@ export default function useImportDocumentPreparation() {
     setFilename(file.name)
     setRawText('')
     setPlans(null)
+    setAutomaticChunking(true)
     setTextLayerBlocked(null)
     setLoadingFile(true)
     lastUploadedFile.current = file
@@ -72,20 +74,28 @@ export default function useImportDocumentPreparation() {
     if (text.trim()) { setTextLayerBlocked(null); setFileError(null); setCsvGrid(null); publishCsvGridViewV1(null) }
     setRawText(text)
     setPlans(null)
+    setAutomaticChunking(true)
     lastUploadedFile.current = null
   }
 
   const prepareConfirmation = () => {
     // 没有可复制文本时，作者手动补文字前不允许进入确认/解析。
     if (textLayerBlocked || !rawText.trim()) return
-    setPlans(chunkDocument(rawText, { targetChars: chunkSize }))
+    setPlans(automaticChunking ? [{ index: 0, startChar: 0, endChar: rawText.length, charCount: rawText.length,
+      label: '开始前自动分块', text: rawText }] : chunkDocument(rawText, { targetChars: chunkSize }))
     setVolumeDetect(detectVolumeStructure(rawText))
     setShowConfirm(true)
   }
 
   const handleChunkSizeChange = (size: number) => {
+    setAutomaticChunking(false)
     setChunkSize(size)
     if (rawText.trim()) setPlans(chunkDocument(rawText, { targetChars: size }))
+  }
+  const handleAutomaticChunkingChange = (automatic: boolean) => {
+    setAutomaticChunking(automatic)
+    if (rawText.trim()) setPlans(automatic ? [{ index: 0, startChar: 0, endChar: rawText.length, charCount: rawText.length,
+      label: '开始前自动分块', text: rawText }] : chunkDocument(rawText, { targetChars: chunkSize }))
   }
 
   const sourceBlob = () => ({
@@ -94,9 +104,9 @@ export default function useImportDocumentPreparation() {
   })
 
   const previewPlans = useMemo(() => {
-    if (!rawText.trim()) return null
+    if (automaticChunking || !rawText.trim()) return null
     return plans || chunkDocument(rawText, { targetChars: chunkSize })
-  }, [chunkSize, plans, rawText])
+  }, [automaticChunking, chunkSize, plans, rawText])
 
   return {
     filename,
@@ -106,6 +116,8 @@ export default function useImportDocumentPreparation() {
     extractInfo,
     plans,
     chunkSize,
+    automaticChunking,
+    handleAutomaticChunkingChange,
     showConfirm,
     volumeDetect,
     previewPlans,
