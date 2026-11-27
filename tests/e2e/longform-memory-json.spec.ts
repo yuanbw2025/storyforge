@@ -1,3 +1,4 @@
+import { enterChapterSummaryEditorV1 } from './helpers/markdown-source'
 import { installBrowserServiceCapacityFixtureV1 } from './helpers/browser-ai-config'
 import { expect, test, type Page } from '@playwright/test'
 import { createLongform } from './helpers/product-entry'
@@ -14,9 +15,9 @@ async function addChapter(page: Page, first: boolean) {
   await page.getByRole('button', { name: '大纲与章纲', exact: true }).click()
   if (first) await page.getByRole('button', { name: '添加卷', exact: true }).click()
   await page.getByRole('button', { name: '添加章节', exact: true }).click()
-  const summaries = page.getByLabel('章节摘要', { exact: true })
-  await expect(summaries).toHaveCount(first ? 1 : 2)
-  await summaries.last().fill('先询问意愿，再回应关门，不展开次日。')
+  await expect(page.getByLabel('章节标题', { exact: true })).toHaveCount(first ? 1 : 2)
+  const summary = await enterChapterSummaryEditorV1(page, first ? 0 : 1)
+  await summary.fill('先询问意愿，再回应关门，不展开次日。')
   await page.getByTitle('编辑本章细纲', { exact: true }).last().click()
   await page.getByRole('button', { name: '添加场景', exact: true }).click()
   await page.getByPlaceholder('一句话场景概要...', { exact: true }).fill('询问、回应、关门。')
@@ -60,7 +61,9 @@ test('手动记忆使用 JSON 对象；正文完整读取修改后的前章，�
   await page.getByRole('button', { name: '生成章节记忆', exact: true }).click()
   await expect(page.getByRole('button', { name: '刷新章节记忆', exact: true })).toBeVisible()
   expect(requests).toHaveLength(1)
-  expect(requests[0]).toMatchObject({ stream: false, response_format: { type: 'json_object' }, model: 'memory-json-test', max_tokens: 4000, temperature: 0 })
+  expect(requests[0]).toMatchObject({ stream: false, response_format: { type: 'json_object' }, model: 'memory-json-test', temperature: 0 })
+  expect(requests[0]).not.toHaveProperty('max_tokens')
+  expect(JSON.parse(await page.evaluate(() => localStorage.getItem('storyforge-ai-config')!)).maxTokens).toBe(4000)
   const first = (await chapters(page))[0]
   expect(first.summary).toBe(summary)
   expect(first.continuityHandoff.sourceTextHash).toBe(first.summarySourceTextHash)
@@ -102,7 +105,9 @@ test('采纳后经作者授权的记忆任务使用 JSON 模式，完成后刷�
   await page.getByRole('button', { name: '确认并开始章后任务', exact: true }).click()
   await expect(page.getByRole('button', { name: '刷新章节记忆', exact: true })).toBeVisible()
   expect(requests).toHaveLength(2)
-  expect(requests[1]).toMatchObject({ stream: false, response_format: { type: 'json_object' }, max_tokens: 4000 })
+  expect(requests[1]).toMatchObject({ stream: false, response_format: { type: 'json_object' } })
+  expect(requests[1]).not.toHaveProperty('max_tokens')
+  expect(JSON.parse(await page.evaluate(() => localStorage.getItem('storyforge-ai-config')!)).maxTokens).toBe(4000)
   const stored = (await chapters(page))[0]
   expect(stored.summary).toBe(summary)
   expect(stored.continuityHandoff.sourceTextHash).toBe(stored.summarySourceTextHash)
