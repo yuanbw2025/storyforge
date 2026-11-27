@@ -1,5 +1,7 @@
 import { useForeshadowStore } from '../../stores/foreshadow'
-import type { Foreshadow, ForeshadowStatus, ForeshadowType } from '../../lib/types'
+import type { Foreshadow, ForeshadowStatus, ForeshadowType, WorkspaceScope } from '../../lib/types'
+import { useState } from 'react'
+import { flushPendingEditsV1 } from '../../lib/authoring/pending-edit-coordinator'
 
 const STATUS_COLUMNS: { key: ForeshadowStatus; label: string; dot: string; accent: string; border: string }[] = [
   { key: 'planned', label: '已计划', dot: 'bg-text-muted', accent: 'text-text-primary', border: 'border-l-border' },
@@ -16,19 +18,28 @@ const TYPE_EMOJI: Record<ForeshadowType, string> = {
 
 interface Props {
   onSelectForeshadow: (id: number) => void
+  scope?: WorkspaceScope
 }
 
-export default function ForeshadowKanban({ onSelectForeshadow }: Props) {
-  const { foreshadows, updateStatus } = useForeshadowStore()
+export default function ForeshadowKanban({ onSelectForeshadow, scope }: Props) {
+  const { foreshadows, updateStatus, loadedScope } = useForeshadowStore()
+  const [error, setError] = useState('')
+  const persistStatus = async (f: Foreshadow, status: ForeshadowStatus) => {
+    try {
+      await flushPendingEditsV1()
+      await updateStatus(f.id!, status, { scope: scope ?? loadedScope ?? undefined, expected: { status: f.status } })
+      setError('')
+    } catch (error) { setError(error instanceof Error ? error.message : '伏笔状态未保存，请重试。') }
+  }
 
   const getColumnItems = (status: ForeshadowStatus) =>
-    foreshadows.filter(f => f.status === status)
+    foreshadows.filter(f => f.status === status && (!scope || (f.projectId === scope.projectId && Reflect.get(f, 'workId') === scope.workId)))
 
   const handleAdvance = (f: Foreshadow) => {
     const flow: ForeshadowStatus[] = ['planned', 'planted', 'echoed', 'resolved']
     const idx = flow.indexOf(f.status)
     if (idx < flow.length - 1 && f.id) {
-      updateStatus(f.id, flow[idx + 1])
+      void persistStatus(f, flow[idx + 1])
     }
   }
 
@@ -36,12 +47,13 @@ export default function ForeshadowKanban({ onSelectForeshadow }: Props) {
     const flow: ForeshadowStatus[] = ['planned', 'planted', 'echoed', 'resolved']
     const idx = flow.indexOf(f.status)
     if (idx > 0 && f.id) {
-      updateStatus(f.id, flow[idx - 1])
+      void persistStatus(f, flow[idx - 1])
     }
   }
 
   return (
     <div className="grid grid-cols-1 gap-4 pb-4 md:grid-cols-2 xl:grid-cols-4">
+      {error && <p role="alert" className="col-span-full text-sm text-error">{error}</p>}
       {STATUS_COLUMNS.map(col => {
         const items = getColumnItems(col.key)
         return (

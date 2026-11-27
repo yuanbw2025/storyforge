@@ -1,4 +1,7 @@
-import { CInput, CTextarea } from '../shared/CompositionInput'
+import AcknowledgedTextField from '../shared/AcknowledgedTextField'
+import { useAuthorRecordSavesV1 } from '../shared/AuthorRecordSaveScope'
+import { flushPendingEditsV1 } from '../../lib/authoring/pending-edit-coordinator'
+import type { LocalSaveIntentV1 } from '../../lib/authoring/local-save-evidence'
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { Plus, Trash2, ArrowRight, Sparkles, Loader2, LayoutList, LayoutGrid, Info } from 'lucide-react'
 import { useForeshadowStore } from '../../stores/foreshadow'
@@ -41,7 +44,8 @@ const STATUS_FLOW: ForeshadowStatus[] = ['planned', 'planted', 'echoed', 'resolv
 interface Props { project: Project }
 
 export default function ForeshadowPanel({ project }: Props) {
-  const { foreshadows, loadAll: loadForeshadows, addForeshadow, updateForeshadow, deleteForeshadow, updateStatus } = useForeshadowStore()
+  const { foreshadows, loadAll: loadForeshadows, addForeshadow, updateForeshadow, deleteForeshadow, updateStatus, loadError } = useForeshadowStore()
+  const projectScope = useMemo(() => ({ projectId: project.id!, worldId: project.activeWorldId!, workId: project.activeWorkId! }), [project.id, project.activeWorldId, project.activeWorkId])
   const { chapters, loadAll: loadChapters } = useChapterStore()
   const { nodes: outlineNodes, loadAll: loadOutline } = useOutlineStore()
   const { config } = useAIConfigStore()
@@ -67,19 +71,31 @@ export default function ForeshadowPanel({ project }: Props) {
   const deleteOperation = useRef<{ ownerKey: string; id: number } | null>(null)
   const [deleting, setDeleting] = useState<{ ownerKey: string; id: number } | null>(null)
   const [deleteError, setDeleteError] = useState<{ ownerKey: string; id: number; message: string } | null>(null)
+  const [commandError, setCommandError] = useState('')
+  const guarded = async (action: () => void | Promise<unknown>) => {
+    const owner = ownerKey
+    try {
+      await flushPendingEditsV1()
+      if (!mounted.current || deleteView.current.ownerKey !== owner) return
+      await action()
+      if (mounted.current && deleteView.current.ownerKey === owner) setCommandError('')
+    } catch (error) {
+      if (mounted.current && deleteView.current.ownerKey === owner) setCommandError(error instanceof Error ? error.message : '伏笔操作尚未完成。')
+    }
+  }
   useEffect(() => {
     mounted.current = true
     return () => { mounted.current = false; deleteOperation.current = null }
   }, [])
 
   useEffect(() => {
-    loadForeshadows(project.id!)
-    loadChapters(project.id!)
-    loadOutline(project.id!)
-  }, [project.id, loadForeshadows, loadChapters, loadOutline])
+    void Promise.all([loadForeshadows(projectScope), loadChapters(projectScope), loadOutline(projectScope)]).catch(error => {
+      if (mounted.current && deleteView.current.ownerKey === ownerKey) setCommandError(error instanceof Error ? error.message : '伏笔资料读取失败。')
+    })
+  }, [projectScope, ownerKey, loadForeshadows, loadChapters, loadOutline])
 
   useEffect(() => {
-    if (!project.id) return
+    if (!projectScope.projectId) return
     let cancelled = false
     setAICandidate(null)
     setAIRunId(null)
@@ -88,7 +104,7 @@ export default function ForeshadowPanel({ project }: Props) {
     setResumeAdoption(false)
     setUnsafeRunId(null)
     void (async () => {
-      const scope = await resolveScopeLike(project.id!)
+      const scope = await resolveScopeLike(projectScope)
       const pending = await readPendingForeshadowSuggestionCandidateV1({ scope })
       if (cancelled) return
       if (pending) {
@@ -119,19 +135,19 @@ export default function ForeshadowPanel({ project }: Props) {
       if (!cancelled) setAIMessage(error instanceof Error ? error.message : String(error))
     })
     return () => { cancelled = true }
-  }, [project.id, project.activeWorldId, project.activeWorkId])
+  }, [projectScope])
 
   const projectForeshadows = useMemo(
-    () => foreshadows.filter(f => f.projectId === project.id),
-    [foreshadows, project.id],
+    () => foreshadows.filter(f => f.projectId === project.id && Reflect.get(f, 'workId') === project.activeWorkId),
+    [foreshadows, project.id, project.activeWorkId],
   )
   const projectChapters = useMemo(
-    () => chapters.filter(ch => ch.projectId === project.id && ch.id != null),
-    [chapters, project.id],
+    () => chapters.filter(ch => ch.projectId === project.id && Reflect.get(ch, 'workId') === project.activeWorkId && ch.id != null),
+    [chapters, project.id, project.activeWorkId],
   )
   const projectOutlineNodes = useMemo(
-    () => outlineNodes.filter(node => node.projectId === project.id),
-    [outlineNodes, project.id],
+    () => outlineNodes.filter(node => node.projectId === project.id && Reflect.get(node, 'workId') === project.activeWorkId),
+    [outlineNodes, project.id, project.activeWorkId],
   )
   const chapterOptions = useMemo(() => {
     const { sequence } = resolveCanonicalChapterSequence(projectOutlineNodes, projectChapters)
@@ -155,6 +171,7 @@ export default function ForeshadowPanel({ project }: Props) {
 
   const filtered = filterStatus === 'all' ? projectForeshadows : projectForeshadows.filter(f => f.status === filterStatus)
   const selectedF = projectForeshadows.find(f => f.id === selected)
+  const localSave = useAuthorRecordSavesV1('foreshadows', selectedF)
   const statusCounts = STATUS_FLOW.reduce<Record<ForeshadowStatus, number>>((acc, status) => {
     acc[status] = projectForeshadows.filter(f => f.status === status).length
     return acc
@@ -164,18 +181,21 @@ export default function ForeshadowPanel({ project }: Props) {
     const id = await addForeshadow({
       projectId: project.id!, name: '新伏笔', type: 'chekhov', status: 'planned',
       description: '', plantChapterId: null, echoChapterIds: '[]', resolveChapterId: null, notes: '',
-    })
-    setSelected(id)
+    }, projectScope)
+    if (mounted.current && deleteView.current.ownerKey === ownerKey) setSelected(id)
   }
 
-  const handleUpdate = (field: keyof Foreshadow, value: string | number | null) => {
-    if (selectedF?.id) updateForeshadow(selectedF.id, { [field]: value })
+  const handleUpdate = (field: keyof Foreshadow, value: string | number | null, expected: unknown = selectedF?.[field], confirmation?: LocalSaveIntentV1) => {
+    if (!selectedF?.id) return Promise.reject(new Error('原伏笔记录已变化，输入已保留。'))
+    const expectedPatch = { [field]: expected } as Partial<Foreshadow>
+    return confirmation ? updateForeshadow(selectedF.id, { [field]: value }, { scope: projectScope, expected: expectedPatch, confirmation })
+      : updateForeshadow(selectedF.id, { [field]: value }, { scope: projectScope, expected: expectedPatch })
   }
 
   const handleNextStatus = (f: Foreshadow) => {
     const idx = STATUS_FLOW.indexOf(f.status)
     if (idx < STATUS_FLOW.length - 1 && f.id) {
-      updateStatus(f.id, STATUS_FLOW[idx + 1])
+      return updateStatus(f.id, STATUS_FLOW[idx + 1], { scope: projectScope, expected: { status: f.status } })
     }
   }
 
@@ -186,6 +206,8 @@ export default function ForeshadowPanel({ project }: Props) {
     setDeleting(operation)
     setDeleteError(null)
     try {
+      await flushPendingEditsV1()
+      if (!mounted.current || deleteView.current.ownerKey !== operation.ownerKey) return
       await deleteForeshadow(id)
       if (mounted.current && deleteOperation.current === operation && deleteView.current.ownerKey === operation.ownerKey) {
         setSelected(current => current === id ? null : current)
@@ -236,7 +258,7 @@ export default function ForeshadowPanel({ project }: Props) {
     const newIds = ids.includes(chapterId)
       ? ids.filter(id => id !== chapterId)
       : [...ids, chapterId]
-    handleUpdate('echoChapterIds', JSON.stringify(newIds))
+    return handleUpdate('echoChapterIds', JSON.stringify(newIds))
   }
 
   // AI 建议伏笔
@@ -248,7 +270,7 @@ export default function ForeshadowPanel({ project }: Props) {
     setAIBusy(true)
     setAIMessage(null)
     try {
-      const scope = await resolveScopeLike(project.id)
+      const scope = await resolveScopeLike(projectScope)
       const generated = await generateForeshadowSuggestionCandidateV1({
         scope,
         worldGroupId: null,
@@ -271,7 +293,7 @@ export default function ForeshadowPanel({ project }: Props) {
         : '没有生成可靠的新伏笔；确认空批次即可留下完整审计回执。')
     } catch (error) {
       setAIMessage(error instanceof Error ? error.message : '伏笔建议失败')
-      const scope = await resolveScopeLike(project.id)
+      const scope = await resolveScopeLike(projectScope)
       const pending = await readPendingForeshadowSuggestionCandidateV1({ scope }).catch(() => null)
       if (pending) {
         setAICandidate(pending.candidate)
@@ -300,7 +322,7 @@ export default function ForeshadowPanel({ project }: Props) {
     setAIBusy(true)
     setAIMessage(null)
     try {
-      const scope = await resolveScopeLike(project.id)
+      const scope = await resolveScopeLike(projectScope)
       const result = await adoptForeshadowSuggestionCandidateV1({
         scope,
         runId: aiRunId,
@@ -315,7 +337,7 @@ export default function ForeshadowPanel({ project }: Props) {
       setAIMessage(`已原子写入 ${result.written} 条伏笔并完成终验。`)
     } catch (error) {
       setAIMessage(error instanceof Error ? error.message : '确认伏笔失败')
-      const scope = await resolveScopeLike(project.id)
+      const scope = await resolveScopeLike(projectScope)
       const recoverable = await readRecoverableForeshadowSuggestionRunV1({ scope }).catch(() => null)
       if (recoverable?.safeToResume && recoverable.candidate && recoverable.adoptionPending) {
         setAICandidate(recoverable.candidate)
@@ -333,7 +355,7 @@ export default function ForeshadowPanel({ project }: Props) {
     if (!project.id || aiRunId == null || !aiCandidate || selectionFrozen) return
     setAIBusy(true)
     try {
-      const scope = await resolveScopeLike(project.id)
+      const scope = await resolveScopeLike(projectScope)
       await rejectForeshadowSuggestionCandidateV1({ scope, runId: aiRunId })
       setAICandidate(null)
       setAIRunId(null)
@@ -350,7 +372,7 @@ export default function ForeshadowPanel({ project }: Props) {
     if (!project.id || unsafeRunId == null || aiBusy) return
     setAIBusy(true)
     try {
-      const scope = await resolveScopeLike(project.id)
+      const scope = await resolveScopeLike(projectScope)
       await abandonForeshadowSuggestionRunV1({ scope, runId: unsafeRunId })
       setUnsafeRunId(null)
       setAIMessage('已放弃结果不可判定的旧运行，可以重新生成。')
@@ -377,14 +399,14 @@ export default function ForeshadowPanel({ project }: Props) {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={handleAISuggest}
+          <button onClick={() => { void guarded(handleAISuggest) }}
             disabled={aiBusy || aiCandidate != null || unsafeRunId != null || !isAIConfigReady(resolveRequestConfig(config, { category: 'foreshadow.suggest' }).config)}
             className="flex items-center gap-1.5 rounded-md border border-border bg-bg-elevated px-3 py-2 text-sm text-text-secondary transition-colors hover:text-accent disabled:opacity-40"
             title="AI 建议伏笔">
             {aiBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
             AI 建议
           </button>
-          <button onClick={handleAdd}
+          <button onClick={() => { void guarded(handleAdd) }}
             className="flex items-center gap-1.5 rounded-md bg-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-accent-hover">
             <Plus className="w-4 h-4" /> 新建伏笔
           </button>
@@ -418,7 +440,7 @@ export default function ForeshadowPanel({ project }: Props) {
         {/* 视图切换 */}
         <div className="flex items-center gap-1 bg-bg-elevated rounded-lg p-0.5">
           <button
-            onClick={() => setViewMode('list')}
+            onClick={() => { void guarded(() => setViewMode('list')) }}
             className={`flex items-center gap-1 px-2.5 py-1.5 text-xs rounded-md transition ${
               viewMode === 'list' ? 'bg-bg-surface text-accent shadow-sm' : 'text-text-muted hover:text-text-primary'
             }`}
@@ -427,7 +449,7 @@ export default function ForeshadowPanel({ project }: Props) {
             <LayoutList className="w-3.5 h-3.5" /> 列表
           </button>
           <button
-            onClick={() => setViewMode('kanban')}
+            onClick={() => { void guarded(() => setViewMode('kanban')) }}
             className={`flex items-center gap-1 px-2.5 py-1.5 text-xs rounded-md transition ${
               viewMode === 'kanban' ? 'bg-bg-surface text-accent shadow-sm' : 'text-text-muted hover:text-text-primary'
             }`}
@@ -438,9 +460,12 @@ export default function ForeshadowPanel({ project }: Props) {
         </div>
       </div>
 
+      {(commandError || loadError) && <p role="alert" className="text-sm text-error">{commandError || loadError}
+        {loadError && <button type="button" className="ml-2 underline" onClick={() => { void guarded(() => loadForeshadows(projectScope)) }}>重新读取伏笔</button>}
+      </p>}
       {/* 看板视图 */}
       {viewMode === 'kanban' ? (
-        <ForeshadowKanban onSelectForeshadow={(id) => { setSelected(id); setViewMode('list') }} />
+        <ForeshadowKanban key={ownerKey} scope={projectScope} onSelectForeshadow={(id) => { void guarded(() => { setSelected(id); setViewMode('list') }) }} />
       ) : (
       <div className="flex gap-4">
       {/* 左侧列表 */}
@@ -448,12 +473,12 @@ export default function ForeshadowPanel({ project }: Props) {
 
         {/* 状态筛选 */}
         <div className="flex flex-wrap gap-1">
-          <button onClick={() => setFilterStatus('all')}
+          <button onClick={() => { void guarded(() => setFilterStatus('all')) }}
             className={`px-2 py-1 text-xs rounded ${filterStatus === 'all' ? 'bg-accent text-white' : 'bg-bg-elevated text-text-muted'}`}>
             全部
           </button>
           {STATUS_FLOW.map(s => (
-            <button key={s} onClick={() => setFilterStatus(s)}
+            <button key={s} onClick={() => { void guarded(() => setFilterStatus(s)) }}
               className={`px-2 py-1 text-xs rounded ${filterStatus === s ? 'bg-accent text-white' : 'bg-bg-elevated text-text-muted'}`}>
               {STATUS_LABELS[s].label}
             </button>
@@ -461,7 +486,7 @@ export default function ForeshadowPanel({ project }: Props) {
         </div>
 
         {filtered.map(f => (
-          <button key={f.id} onClick={() => { setSelected(f.id!); setShowAI(false) }}
+          <button key={f.id} onClick={() => { void guarded(() => { setSelected(f.id!); setShowAI(false) }) }}
             className={`w-full text-left px-3 py-2 rounded-md text-sm transition-colors ${
               selected === f.id ? 'bg-accent/10 text-accent border border-accent/30' : 'bg-bg-surface text-text-secondary hover:bg-bg-hover'
             }`}>
@@ -527,12 +552,12 @@ export default function ForeshadowPanel({ project }: Props) {
                 ))}
                 <div className="flex justify-end gap-2 pt-1">
                   {!selectionFrozen && (
-                    <button onClick={handleRejectSuggestions} disabled={aiBusy}
+                    <button onClick={() => { void guarded(handleRejectSuggestions) }} disabled={aiBusy}
                       className="rounded border border-border px-3 py-1.5 text-xs text-text-secondary disabled:opacity-40">
                       拒绝整批
                     </button>
                   )}
-                  <button onClick={handleAcceptSuggestions}
+                  <button onClick={() => { void guarded(handleAcceptSuggestions) }}
                     aria-label="确认所选伏笔候选"
                     disabled={aiBusy || (!resumeAdoption && aiCandidate.suggestions.length > 0 && selectedCandidates.size === 0)}
                     className="rounded bg-accent px-3 py-1.5 text-xs text-white disabled:opacity-40">
@@ -545,12 +570,12 @@ export default function ForeshadowPanel({ project }: Props) {
         )}
 
         {selectedF ? (
-          <div className="bg-bg-surface border border-border rounded-lg p-4 space-y-3">
+          <div key={selectedF.id} className="bg-bg-surface border border-border rounded-lg p-4 space-y-3">
             <div className="flex items-center justify-between">
-              <CInput value={selectedF.name} onChange={e => handleUpdate('name', e.target.value)}
+              <AcknowledgedTextField input label="伏笔名称" localSave={localSave('name')} value={selectedF.name} onCommit={(value, expected, confirmation) => handleUpdate('name', value, expected, confirmation)}
                 className="text-lg font-bold bg-transparent text-text-primary border-none outline-none" />
               <div className="flex items-center gap-2">
-                <button onClick={() => handleNextStatus(selectedF)}
+                <button onClick={() => { void guarded(() => handleNextStatus(selectedF)) }}
                   disabled={selectedF.status === 'resolved'}
                   className="flex items-center gap-1 px-2 py-1 text-xs bg-bg-elevated text-text-secondary rounded hover:text-accent disabled:opacity-30">
                   <ArrowRight className="w-3 h-3" /> 推进状态
@@ -568,7 +593,7 @@ export default function ForeshadowPanel({ project }: Props) {
             <div className="flex gap-3">
               <div>
                 <label className="block text-xs text-text-muted mb-1">类型</label>
-                <select value={selectedF.type} onChange={e => handleUpdate('type', e.target.value)}
+                <select value={selectedF.type} onChange={e => { const value = e.target.value; void guarded(() => handleUpdate('type', value)) }}
                   className="px-2 py-1.5 bg-bg-elevated text-text-secondary text-xs rounded border border-border">
                   {Object.entries(TYPE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                 </select>
@@ -583,7 +608,7 @@ export default function ForeshadowPanel({ project }: Props) {
 
             <div>
               <label className="block text-xs text-text-muted mb-1">伏笔描述</label>
-              <CTextarea value={selectedF.description} onChange={e => handleUpdate('description', e.target.value)}
+              <AcknowledgedTextField markdownRead label="伏笔描述" localSave={localSave('description')} value={selectedF.description} onCommit={(value, expected, confirmation) => handleUpdate('description', value, expected, confirmation)}
                 rows={4} className="w-full p-2 bg-bg-base border border-border rounded text-sm text-text-primary resize-y focus:outline-none focus:border-accent" />
             </div>
 
@@ -596,7 +621,7 @@ export default function ForeshadowPanel({ project }: Props) {
                 <label className="block text-xs text-text-muted mb-1">埋设章节（在哪一章埋下伏笔）</label>
                 <select
                   value={selectedF.plantChapterId ?? ''}
-                  onChange={e => handleUpdate('plantChapterId', e.target.value ? Number(e.target.value) : null)}
+                  onChange={e => { const value = e.target.value ? Number(e.target.value) : null; void guarded(() => handleUpdate('plantChapterId', value)) }}
                   className="w-full px-2 py-1.5 bg-bg-base border border-border rounded text-sm text-text-primary">
                   {renderChapterOptions(selectedF.plantChapterId)}
                 </select>
@@ -610,7 +635,7 @@ export default function ForeshadowPanel({ project }: Props) {
                     {chapterOptions.map(ch => {
                       const isSelected = getEchoIds(selectedF).includes(ch.id)
                       return (
-                        <button key={ch.id} onClick={() => toggleEchoChapter(ch.id)}
+                        <button key={ch.id} onClick={() => { void guarded(() => toggleEchoChapter(ch.id)) }}
                           className={`px-2 py-1 text-xs rounded transition-colors ${
                             isSelected ? 'bg-accent text-white' : 'bg-bg-elevated text-text-muted hover:text-text-primary'
                           }`}>
@@ -627,7 +652,7 @@ export default function ForeshadowPanel({ project }: Props) {
                     {getEchoIds(selectedF).filter(id => !chapterOptionById.has(id)).map(id => (
                       <button
                         key={id}
-                        onClick={() => toggleEchoChapter(id)}
+                        onClick={() => { void guarded(() => toggleEchoChapter(id)) }}
                         className="rounded border border-warning/40 bg-warning/10 px-2 py-0.5 hover:bg-warning/20"
                         title="点击移除这个失效/非规范章节引用"
                       >
@@ -643,7 +668,7 @@ export default function ForeshadowPanel({ project }: Props) {
                 <label className="block text-xs text-text-muted mb-1">回收章节（在哪一章回收伏笔）</label>
                 <select
                   value={selectedF.resolveChapterId ?? ''}
-                  onChange={e => handleUpdate('resolveChapterId', e.target.value ? Number(e.target.value) : null)}
+                  onChange={e => { const value = e.target.value ? Number(e.target.value) : null; void guarded(() => handleUpdate('resolveChapterId', value)) }}
                   className="w-full px-2 py-1.5 bg-bg-base border border-border rounded text-sm text-text-primary">
                   {renderChapterOptions(selectedF.resolveChapterId)}
                 </select>
@@ -652,7 +677,7 @@ export default function ForeshadowPanel({ project }: Props) {
 
             <div>
               <label className="block text-xs text-text-muted mb-1">备注</label>
-              <CTextarea value={selectedF.notes} onChange={e => handleUpdate('notes', e.target.value)}
+              <AcknowledgedTextField markdownRead label="伏笔备注" localSave={localSave('notes')} value={selectedF.notes} onCommit={(value, expected, confirmation) => handleUpdate('notes', value, expected, confirmation)}
                 rows={2} className="w-full p-2 bg-bg-base border border-border rounded text-xs text-text-muted resize-y focus:outline-none focus:border-accent" />
             </div>
           </div>
