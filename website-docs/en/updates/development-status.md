@@ -1,5 +1,32 @@
 # Pending development and branch audit
 
+## November 27, 2026 follow-up · covers/capacity merged; new local work needs review
+
+Reviewed successful baseline `0a447f38` through `27d3dffc`. The initial inventory contains **218 local branches, 47 worktrees (including detached), 36 heads outside main ancestry and 10 worktrees with uncommitted status**. Stable patches, net file differences, PRs and actual consumers are deduplicated rather than counting commits as features. Original branch/worktree states are preserved.
+
+### Deduplicating delivered scope
+
+- **#681 merged:** shared complete materials/automatic output, nodes and original-response recovery enter main and are no longer pending. Existing finite contracts, explicit author/consumption authorization and real service limits remain.
+- **#685 merged:** the 035 source now connects full work-card generation, preview/adoption and local saved-response recovery. The full runner/UI is no longer broadly listed as undelivered. Offline replay of a historical real PNG is not new online generation, visual-quality or release acceptance.
+- #688/#692/#693/#694 add reading, first-save and selection fixes. Deduplicate the 037 prototype against merged slices; complete 037, physical IMEs and long-text performance on all devices remain unaccepted. This review still finds the session-to-view entity-completion parameter forwarding gap.
+- The 032 source's 14 commits outside main still have zero net file changes. Preserve its three uncommitted import changes separately from merged #689 reference-duplicate hints, without counting them again as new features. Deduplicate old template sources through #581/#682 and historical producers through merged slices. Chat planning has zero net change; old validation variants are not missing product features.
+
+A pre-commit mainline sync confirms #695 merged: the initial 57 capacity-worktree status entries became committed/pushed work. Output/prose/review follow-up is no longer undelivered. Candidate Markdown persistence barriers in #696 subsequently merged normally as well. Story-core/character/outline candidates switch to reading after actual draft persistence and are no longer pending.
+
+### New local development and follow-up for its authors to inspect
+
+| Branch | Observed scope | Status and boundary |
+| --- | --- | --- |
+| `feat/internationalization-20261127` | Three local commits, 15 net files: project internationalization inventory, acceptance matrix and multilingual-review rules | Unpushed, no PR, unmerged. Planning/governance is not completion of all languages; the knowledge base currently enables Chinese and English |
+| `fix/ai-output-review-unbounded-20261127` | The initial 57 status entries across output settings, copilots, review, context and tests subsequently became committed/pushed work | #695 normally merged, reviewed as a separate stage from #681 and no longer pending |
+| `fix/markdown-history-051-20261127` | Recheck finds seven new uncommitted history timeline/keyword/panel, store and test changes | Observed follow-up, incomplete/unmerged; #696 candidate reading does not establish history-page delivery |
+| `feat/workshop-marketplace-20261116` | Six uncommitted entries: writing-academy construction/implementation plans and document-index/checker registration | Uncommitted, unpushed planning drafts, not an implemented academy or workshop |
+
+At recheck, the capacity worktree retains only three test caches, not product changes. Eight other existing dirty states remain: feedback 6, import 3, old extraction 9, old release 5, tool metadata 2, private art 6,308, old budgets 31, and history/backup/contracts 30. Full paths, commits and differences remain in private evidence; private materials are not published.
+
+[#574](https://github.com/yuanbw2025/storyforge/pull/574) remains open, deduplicated against merged semantic consumers such as #645. [#675](https://github.com/yuanbw2025/storyforge/pull/675) only archives traffic. This task does not commit, push, merge or clean that development or merge those product PRs. Power interaction, candidate-target policies, the formal history-import writer and private content production retain their own acceptance scope; engineering receipts do not establish literary, experience or commercial acceptance. Older dated sections below are snapshots from those dates.
+
+
 ## November 27, 2026 · Template wiring merged; capacity closeout pending
 
 Review from successful baseline `965a53a0` through `9ec67ee7` initially enumerates **207 local branches, 46 worktrees (including detached), 37 heads outside main ancestry and nine worktrees with uncommitted status**. Stable patches, net files, actual implementation and PRs were compared. All nine status-path sets match the previous audit; one consists only of three test caches on the worktree now hosting capacity closeout.

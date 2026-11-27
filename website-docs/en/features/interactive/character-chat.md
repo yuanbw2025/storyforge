@@ -1,9 +1,14 @@
 ---
 productId: upper.character-interaction
 status: preview
-lastVerified: 2026-11-25
+lastVerified: 2026-11-27
 ---
 # Character chat
+
+## November 27 follow-up: recover original responses and usage evidence
+
+Recovery of an already returned action choice reuses its response and manifest accounting evidence and rechecks sources, without requesting the model again to rebuild the display. Shared per-source/role proportions no longer silently clip complete selected materials. Proven service windows, explicit consumption authorization, scene action units, versions and character-knowledge permissions remain. Keep the original task when the outcome is unknown; it is not automatically resent. This fix does not establish long-running interaction or acceptance of every historical contract. Based on #681.
+
 
 ## November 25: dialogue input and full read-aloud text
 

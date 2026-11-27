@@ -1,5 +1,12 @@
 # Versions, upgrades, and data compatibility
 
+## November 27, 2026 follow-up · cover and capacity closeout merged
+
+This review reaches mainline `27d3dffc`: #681 capacity closeout, #685 full cover generation/recovery and #688/#693/#694 reading/persistence, #695 output/review closeout and #696 candidate persistence are merged. Database v16 and full-backup v20 remain, without another migration. Historical tasks read their frozen contracts; cover recovery retains Work identity, images and provenance.
+
+The latest public formal release remains [v4.0.8](https://github.com/yuanbw2025/storyforge/releases/tag/v4.0.8), published November 19, 2026 at 16:02 UTC, fixed at `41a6e865`, database v14/backup v18. v4.0.9 remains an unpublished draft without a formal date. Keep the original backup before upgrading; old programs must not open the newer database directly. See the guides for operations and [development records](/en/updates/development-status) for remaining acceptance/local work.
+
+
 ## November 27, 2026 · Mainline template configuration and prose fixes
 
 The latest public formal release remains [v4.0.8](https://github.com/yuanbw2025/storyforge/releases/tag/v4.0.8) (`41a6e865`, November 19 at 16:02 UTC; database v14/backup v18). v4.0.9 remains an unpublished draft. Reviewed mainline `9ec67ee7` retains database v16/backup v20; inspiration configuration reuses existing tables/lifecycles without a migration.

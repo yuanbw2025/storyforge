@@ -1,5 +1,12 @@
 # Current capabilities and maturity
 
+## November 27 follow-up: covers, complete materials and source editing
+
+Longform work cards now generate one AI cover, preview it for explicit adoption, and recover returned images or saved responses. See [work covers](/en/features/longform/planning) for current image connections and charges. Old quotas in shared long-content, node and review paths are removed; check automatic output, unknown service capacity and historical tasks in [model configuration](/en/getting-started/model-config). Setting/reference/Codex long fields expand safe Markdown reading and source editing. Project-reference import adds within-work duplicate hints, and My feedback updates offline status promptly. #695 removes old API output settings and remaining review caps; #696 candidate reading waits for actual draft persistence (#681/#685/#688/#689/#691/#692/#693/#694/#695/#696).
+
+This check reaches `27d3dffc`; catalog statuses remain released/preview/experimental as before. Cover recovery engineering evidence, real online generation, visual quality, complete 037 and long-running quality require separate acceptance. Remaining local development is in [development records](/en/updates/development-status).
+
+
 ## November 13: current capability review
 
 Explicitly enabled local experimental community/commercial entries retain their original admission settings. Switching accounts/services reads the current relationship before acting; late favorite states cannot submit for another account. Retried long/Chinese forms reuse their original submission ID. Repurchases after refunds use the current valid entitlement while retaining refund history. These remain default-hidden experimental capabilities with no catalog maturity promotion. Sources: [#313](https://github.com/yuanbw2025/storyforge/pull/313), [#338](https://github.com/yuanbw2025/storyforge/pull/338).

@@ -1,5 +1,12 @@
 # Costs, tokens, and saving money
 
+## November 27 follow-up: automatic output and image-recovery charges
+
+#681 removes old text/count quotas and additional fixed output caps from the shared long-content paths. New requests also ignore old global/preset/per-call API output caps under #695. Actual service capability, consumption authorization, balance and permissions remain. A content-length target in a creative task is distinct from an API output cap. Unknown capacity is not unlimited: the service may reject a complete request. Actual responses supply usage; recovery of a returned chat response reuses its accounting evidence without sending the request again.
+
+One work-cover Generate authorizes at most one image POST. Recover returned image and Recover image from saved raw response process existing results only. Stopping the wait or an unknown outcome does not prove there was no charge. Generate a new image sends another request, with unknown cost. Inspect the original task and candidate before deciding to send again. Based on #681/#685.
+
+
 ## November 25: forecasts, limits and actual usage
 
 Team reservations and UI estimates serve accounting/authorization preflight rather than automatically becoming per-dispatch content caps. Actual requests remain subject to explicit author/template limits, Skill/protocol restrictions, balance and service capability. Long tasks can use more tokens; required compression, revisions and steps also incur usage. Range-revision reservations follow frozen contracts and invalid budgets fail explicitly. Automatic settings/removal of old constants mean neither free nor unlimited service. Based on #604/#607/#614/#615.

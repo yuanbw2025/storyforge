@@ -1,5 +1,12 @@
 # Import existing fiction and references
 
+## November 27 follow-up: check duplicate project references
+
+Before confirming Import project reference, a hint checks the current work for a matching original-file fingerprint or reference name. Inspect existing materials, then continue importing or cancel. The hint does not automatically merge, delete or overwrite, and detection alone does not call a model. After changing the file or target work, a late old preview cannot open the confirmation window.
+
+If existing references cannot be read, the hint may be absent while confirmation remains available; no hint is not proof of no duplicate. This adds only within-work reference checks, not OCR, XLSX or original files carried in portable backups. Based on #689. See [model configuration](/en/getting-started/model-config) for complete materials and unknown service capacity.
+
+
 ## November 25: text layers, CSV grids and same-name hints
 
 Check extraction status after upload. If no copyable text is found, retain the original and unfinished session without chunking/model parsing; provide copyable text or enter it manually. This adds neither automatic OCR nor XLSX support. CSV provides a read-only row/column summary and first-ten-row preview using comma/quote/newline structure. Ragged rows/quote errors are reported without rewriting cells. Based on #617/#619/#624.

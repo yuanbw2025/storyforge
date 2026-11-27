@@ -1,5 +1,12 @@
 # Longform: outlines, scene beats, and prose
 
+## November 27 follow-up: long prose instructions and automatic output
+
+The prose copilot accepts complete long instructions without requiring the tail to be removed for an old fixed length cap. New requests do not reuse old API output caps from global, preset or per-call configurations. Output follows verified service capability; the service decides when that capability is unknown. To control manuscript length, use the task's length target and inspect the actual draft; a target does not guarantee completion in one response.
+
+Whole-chapter quality reviews/rechecks preserve complete long reports, strengths and issue lists. Report structure, quotation positions, work permissions and author adoption remain checked. Unknown original requests are not automatically resent; historical tasks recover from saved evidence. Based on #695; see [usage](/en/guides/token-cost) for charges.
+
+
 ## November 27: duplicated-prose review and Markdown adoption
 
 When a model repeats prose around a reasoning separator, the full response now remains a reviewable candidate. Do not adopt the duplicated whole: compare both portions, use the offered Keep later portion action to create an author-revised candidate, then explicitly adopt. Reload retains the original response; selecting a portion adds no model request. Incomplete replies/other validation failures retain their actual status. Based on #668.
