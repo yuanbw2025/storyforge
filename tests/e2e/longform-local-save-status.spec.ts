@@ -905,3 +905,71 @@ test('050 Power native original fields retain failed source and confirm reopened
     return db.powerSystems.toArray()
   })).toEqual(before)
 })
+
+test('050 Cultivation native stage source preserves original DAG and failed text through retry and reopened tab', async ({ page, context }) => {
+  const scope = await seed(page)
+  const id = await page.evaluate(async scope => {
+    const { useCultivationStore } = await (new Function('return import("/storyforge/src/stores/cultivation.ts")'))()
+    return useCultivationStore.getState().addSystem({ projectId: scope.projectId, name: '原修炼050', description: '原修炼原理050', stages: JSON.stringify([
+      { id: 'native-root', name: '初境050', features: '原能力050', breakthrough: '原代价050', parentStageIds: [], authorExtra: { keep: '作者原注', number: 125 } },
+      { id: 'native-left', name: '左路050', parentStageIds: ['native-root'] },
+      { id: 'native-right', name: '右路050', parentStageIds: ['native-root'] },
+      { id: 'native-merge', name: '合流050', parentStageIds: ['native-left','native-right'] },
+    ]) }, scope)
+  }, scope)
+  await page.goto(`./workspace/${scope.projectId}?module=worldview-origin&originField=power`)
+  const panel = page.getByRole('region', { name: '修炼体系编辑', exact: true })
+  const readView = (text: string) => panel.locator('[data-markdown-read-view]').filter({ hasText: text })
+  await expect(panel.locator('[data-local-save-status][data-local-save-status="saved"]')).toHaveCount(2)
+  await readView('原修炼原理050').getByRole('button', { name: '编辑源码', exact: true }).click()
+  const principle = panel.getByPlaceholder('点击说明这套体系的核心原理、适用者和代价…')
+  await principle.fill('# 修炼原理新稿\n\n保留尾空白。  '); const principleRaw = await principle.inputValue(); await flush(page)
+  await panel.getByRole('button', { name: '初境050', exact: true }).click()
+  await readView('原能力050').getByRole('button', { name: '编辑源码', exact: true }).click()
+  const features = panel.getByPlaceholder('能做到什么、不能做到什么…')
+  await features.dispatchEvent('compositionstart'); await features.fill('# 境界能力新稿\n\n中文尾 é 😀。  ')
+  await expect(flush(page)).rejects.toThrow('输入法')
+  await features.dispatchEvent('compositionend'); const raw = await features.inputValue()
+  await page.evaluate(async () => {
+    const { db } = await (new Function('return import("/storyforge/src/lib/db/schema.ts")'))()
+    const fault = () => { throw new DOMException('isolated cultivation quota failure', 'QuotaExceededError') }
+    db.cultivationSystems.hook('updating', fault)
+    Object.assign(window, { clearCultivation050Fault: () => db.cultivationSystems.hook('updating').unsubscribe(fault) })
+  })
+  await expect(flush(page)).rejects.toThrow('isolated cultivation quota failure')
+  await panel.getByRole('button', { name: /^右路050/ }).click()
+  await expect(flush(page)).rejects.toThrow('isolated cultivation quota failure')
+  await expect(features).toHaveValue(raw); await expect(panel.locator('[data-local-save-status="failed"]')).toHaveCount(1)
+  await features.press('Tab'); await expect(flush(page)).rejects.toThrow('isolated cultivation quota failure')
+  await page.evaluate(() => (window as unknown as { clearCultivation050Fault: () => void }).clearCultivation050Fault())
+  await panel.getByRole('button', { name: '重试', exact: true }).press('Enter')
+  await expect(panel.locator('[data-local-save-status="failed"]')).toHaveCount(0)
+  await expect(readView('境界能力新稿')).toBeVisible()
+  const before = await page.evaluate(async id => {
+    const { db } = await (new Function('return import("/storyforge/src/lib/db/schema.ts")'))()
+    return db.cultivationSystems.get(id)
+  }, id)
+  expect(before).toMatchObject({ name: '原修炼050', description: principleRaw, worldId: scope.worldId })
+  const graph = JSON.parse(before.stages)
+  expect(graph[0]).toMatchObject({ id: 'native-root', features: raw, breakthrough: '原代价050', authorExtra: { keep: '作者原注', number: 125 } })
+  expect(graph[3].parentStageIds).toEqual(['native-left','native-right'])
+  const url = page.url(); await page.close(); const reopened = await context.newPage(); await reopened.goto(url)
+  const reopenedPanel = reopened.getByRole('region', { name: '修炼体系编辑', exact: true })
+  await reopenedPanel.getByRole('button', { name: '初境050', exact: true }).click()
+  await expect(reopenedPanel.locator('[data-markdown-read-view]').filter({ hasText: '境界能力新稿' })).toBeVisible()
+  expect(await reopened.evaluate(async id => {
+    const { db } = await (new Function('return import("/storyforge/src/lib/db/schema.ts")'))()
+    return db.cultivationSystems.get(id)
+  }, id)).toEqual(before)
+  await reopened.evaluate(async ({ scope, id }) => {
+    const { db } = await (new Function('return import("/storyforge/src/lib/db/schema.ts")'))()
+    const { useCultivationStore } = await (new Function('return import("/storyforge/src/stores/cultivation.ts")'))()
+    await db.cultivationSystems.update(id, { stages: '{broken native original' }); await useCultivationStore.getState().loadAll(scope)
+  }, { scope, id })
+  await expect(reopenedPanel.getByText('阶段数据无法安全编辑，原始内容已保留。', { exact: false })).toBeVisible()
+  await expect(reopenedPanel.getByRole('button', { name: '添加后续境界', exact: true })).toBeDisabled()
+  expect(await reopened.evaluate(async id => {
+    const { db } = await (new Function('return import("/storyforge/src/lib/db/schema.ts")'))()
+    return (await db.cultivationSystems.get(id)).stages
+  }, id)).toBe('{broken native original')
+})

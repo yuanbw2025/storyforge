@@ -1,5 +1,16 @@
+import type { Table, Transaction } from 'dexie'
 import { db } from '../db/schema'
 import { parseCultivationStages, type CultivationStage } from '../types'
+
+/** Capture the original native table even after a cryptographic preimage await. */
+export function cultivationLifecycleTableV1<T>(table: Table<T, number>, transaction?: Transaction): Table<T, number> {
+  if (!transaction) return table
+  const native = transaction.idbtrans
+  if (transaction.db !== db || !transaction.active || transaction.mode !== 'readwrite' || !native
+    || !transaction.storeNames.includes(table.name) || !native.objectStoreNames.contains(table.name))
+    throw new Error('修炼引用更新缺少原生写事务或登记表。')
+  return transaction.table<T, number>(table.name)
+}
 
 /** 章节删除保留正文证据与冗余标题，只断开 FK 并降级复核。 */
 export async function detachCultivationProgressForDeletedChapters(
@@ -72,10 +83,11 @@ export async function refreshCultivationProgressStageSources(args: {
   systemId: number
   previousStages: string
   nextStages: string
-}): Promise<void> {
+}, transaction?: Transaction): Promise<void> {
   const previous = new Map(parseCultivationStages(args.previousStages).map(stage => [stage.id, stage]))
   const next = new Map(parseCultivationStages(args.nextStages).map(stage => [stage.id, stage]))
-  const rows = await db.cultivationProgress
+  const table = cultivationLifecycleTableV1(db.cultivationProgress, transaction), update = db.cultivationProgress.update.bind(table)
+  const rows = await table
     .where('projectId').equals(args.projectId)
     .filter(row => row.cultivationSystemId === args.systemId)
     .toArray()
@@ -84,7 +96,7 @@ export async function refreshCultivationProgressStageSources(args: {
     const before = previous.get(row.stageId)
     const after = next.get(row.stageId)
     if (!after) {
-      await db.cultivationProgress.update(row.id, {
+      await update(row.id, {
         stageId: null,
         status: 'source-missing',
         updatedAt: Date.now(),
@@ -92,7 +104,7 @@ export async function refreshCultivationProgressStageSources(args: {
       continue
     }
     if (before && stageDefinitionChanged(before, after) && row.status === 'confirmed') {
-      await db.cultivationProgress.update(row.id, {
+      await update(row.id, {
         status: 'stale',
         updatedAt: Date.now(),
       })
