@@ -28,6 +28,7 @@ const RETIRED_MODELS: ReadonlyArray<{ provider: AIProvider; model: string; retir
   { provider: 'gemini', model: 'gemini-2.0-flash', retiredOn: '2026-06-01', sourceUrl: 'https://ai.google.dev/gemini-api/docs/deprecations' },
   { provider: 'doubao', model: 'doubao-1-5-pro-32k-250115', retiredOn: '2026-09-21', sourceUrl: 'https://docs.volcengine.com/docs/ark/model-deprecation-notice?lang=zh' },
   { provider: 'doubao', model: 'deepseek-v4-flash-260425', retiredOn: '2026-09-21', sourceUrl: 'https://docs.volcengine.com/docs/ark/model-deprecation-notice?lang=zh' },
+  { provider: 'doubao', model: 'deepseek-v4-pro-260425', retiredOn: '2026-11-24', sourceUrl: 'https://docs.volcengine.com/docs/ark/model-deprecation-notice?lang=zh' },
 ]
 
 export function getModelRetirement(config: ModelTarget) {

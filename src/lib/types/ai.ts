@@ -90,7 +90,7 @@ export const PROVIDER_MODELS: Record<string, { value: string; label: string; des
     { value: 'doubao-seed-2-0-lite-260428', label: 'Doubao Seed 2.0 Lite（LTS）', desc: '官方当前推荐迁移项；新建配置使用，已有配置不迁移' },
     { value: 'doubao-1-5-pro-32k-250115', label: 'Doubao 1.5 Pro 32K', desc: '官方 API 已于 2026-09-21 下线；已有配置保留，需手动选择可用型号' },
     { value: 'deepseek-v4-flash-ga-260731', label: 'DeepSeek V4 Flash 正式版', desc: '火山方舟·快速文本推理' },
-    { value: 'deepseek-v4-pro-260425', label: 'DeepSeek V4 Pro', desc: '火山方舟官方计划于 2026-11-24 下线；请提前由作者选择迁移型号' },
+    { value: 'deepseek-v4-pro-260425', label: 'DeepSeek V4 Pro', desc: '火山方舟官方已于 2026-11-24 下线；接入点替换或关停以平台为准，已有配置保留' },
     { value: 'deepseek-v4-flash-260425', label: 'DeepSeek V4 Flash', desc: '火山方舟官方 API 已于 2026-09-21 下线；已有配置保留' },
   ],
   // Gemini lifecycle labels reviewed 2026-11-19; saved IDs remain author-owned.
