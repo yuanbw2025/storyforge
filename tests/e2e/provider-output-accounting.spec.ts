@@ -4,7 +4,7 @@ for (const config of [
   { provider: 'poe', baseUrl: 'https://api.poe.com/v1', model: 'GPT-4o' },
   { provider: 'gemini', baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai', model: 'gemini-3.5-flash' },
 ] as const) {
-  test(`隔离浏览器实际传输请求 usage 并保留输出预算：${config.provider}`, async ({ page }) => {
+  test(`隔离浏览器实际传输请求 usage 并保持服务端输出容量：${config.provider}`, async ({ page }) => {
     // A synthetic protocol probe, not a new product AI entry. No external
     // request is allowed through and no author browser/profile data is used.
     await page.route(/^https?:\/\//, route => {
@@ -30,10 +30,15 @@ for (const config of [
       const receipt: { usage?: { inputTokens: number; outputTokens: number; totalTokens: number } } = {}
       let text = ''
       for await (const chunk of streamChat([{ role: 'user', content: '合成协议请求' }], config, undefined, receipt)) text += chunk
-      return { text, usage: receipt.usage }
+      return { text, usage: receipt.usage, savedLegacyMaxTokens: useAIConfigStore.getState().config.maxTokens }
     }, config)
-    expect(result).toEqual({ text: '合成协议回执', usage: { inputTokens: 2, outputTokens: 3, totalTokens: 5 } })
+    expect(result).toEqual({ text: '合成协议回执', usage: { inputTokens: 2, outputTokens: 3, totalTokens: 5 }, savedLegacyMaxTokens: 1024 })
     expect(requests).toHaveLength(1)
-    expect(requests[0]).toMatchObject({ model: config.model, max_tokens: 1024, stream_options: { include_usage: true } })
+    // The registered Gemini profile has an output capacity; Poe's unregistered
+    // model remains provider-managed. Neither request inherits the legacy 1024.
+    if (config.provider === 'gemini') expect(requests[0].max_tokens).toBe(65_536)
+    else expect(requests[0]).not.toHaveProperty('max_tokens')
+    expect(requests[0]).not.toHaveProperty('max_completion_tokens')
+    expect(requests[0]).toMatchObject({ model: config.model, stream_options: { include_usage: true } })
   })
 }
