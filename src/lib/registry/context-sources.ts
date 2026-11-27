@@ -53,7 +53,6 @@ import { readStorylineProgressContext } from '../storyline/storyline-progress'
 import { readCodexExtractionBaselineContextV1 } from '../codex/extraction'
 import { readHistoryAgentBaselineContextV1 } from '../history/agent-baseline'
 import { readReferenceDerivedBaselineContextV1 } from '../reference-analysis/derived-agent-baseline'
-import { buildEditImpactGraphV1 } from '../consistency/impact-analysis'
 import {
   buildLongTermConsistencyDossierV1,
   formatLongTermConsistencyDossierV1,
@@ -1600,6 +1599,9 @@ async function readConsistencyReport(
   scope?: WorkspaceScope,
 ): Promise<string> {
   if (chapterId == null) return ''
+  // The impact graph is only needed for this explicit source read. Keep its
+  // analysis dependencies out of ordinary context-source initialization.
+  const { buildEditImpactGraphV1 } = await import('../consistency/impact-analysis')
   const impact = await buildEditImpactGraphV1(scope ?? projectId, chapterId)
   const staleFacts = impact.nodes.filter(node => node.kind === 'fact' && node.status && ['stale', 'source-missing', 'invalid-range'].includes(node.status))
   const lines = [
