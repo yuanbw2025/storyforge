@@ -6,8 +6,18 @@ import { feedbackSnapshot, subscribeFeedback, rememberFeedbackNotices } from '..
 import { installFeedbackFollowup, readFeedbackProgress, refreshFeedbacks, removeExpiredFeedback, stopFeedbackFollowup } from '../../lib/feedback/followup-service'
 
 const button = 'rounded border border-border px-3 py-2 disabled:opacity-50'
+function subscribeConnectivity(listener: () => void) {
+  window.addEventListener('online', listener)
+  window.addEventListener('offline', listener)
+  return () => {
+    window.removeEventListener('online', listener)
+    window.removeEventListener('offline', listener)
+  }
+}
+const connectivitySnapshot = () => navigator.onLine
 export default function FeedbackInbox({ monitor = false }: { monitor?: boolean }) {
   const { entries, error: storageError } = useSyncExternalStore(subscribeFeedback, feedbackSnapshot)
+  const online = useSyncExternalStore(subscribeConnectivity, connectivitySnapshot)
   const [open, setOpen] = useState(false), [busy, setBusy] = useState(false), [error, setError] = useState('')
   const [notice, setNotice] = useState(false)
   const mounted = useRef(true)
@@ -41,8 +51,8 @@ export default function FeedbackInbox({ monitor = false }: { monitor?: boolean }
     {open && <section role="dialog" aria-label="我的反馈" aria-modal="false" className={monitor ? 'fixed inset-x-3 bottom-3 z-50 mx-auto max-h-[80vh] max-w-2xl overflow-auto rounded-lg border border-border bg-bg-surface p-4 text-text-primary shadow-lg' : 'mt-4 rounded border border-border p-4'}>
       <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="font-semibold">我的反馈</h2><button type="button" className={button} onClick={() => setOpen(false)}>关闭</button></div>
       <p className="my-3 text-sm text-text-muted">本机接收的反馈进展。跟进可用 90 天，到期清理不代表问题已解决。清除浏览器数据会丢失跟进记录。</p>
-      <button type="button" disabled={busy || !navigator.onLine} className={button} onClick={() => void act(() => refreshFeedbacks(true))}>{busy ? '正在检查…' : '检查进展'}</button>
-      {!navigator.onLine && <p role="status">当前离线，下次联网打开应用后补收。</p>}
+      <button type="button" disabled={busy || !online} className={button} onClick={() => void act(() => refreshFeedbacks(true))}>{busy ? '正在检查…' : '检查进展'}</button>
+      {!online && <p role="status">当前离线，下次联网打开应用后补收。</p>}
       {(error || storageError) && <p role="alert">{error || storageError}</p>}
       {!entries.length && !storageError && <p className="mt-3">暂无本机跟进记录。提交反馈时可选择接收处理进展；以前未选择的反馈不会自动出现在这里。</p>}
       <ul className="space-y-3">{entries.map(row => <li key={row.id} className="mt-3 rounded border border-border p-3">
