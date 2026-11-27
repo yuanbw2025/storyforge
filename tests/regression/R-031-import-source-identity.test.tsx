@@ -59,3 +59,18 @@ it('does not let completion of the first file clear the second pending file or r
   expect(source.sourceBlob()).toEqual({ blob: originalB, filename: originalB.name })
   expect(await source.sourceBlob().blob.text()).toBe('second synthetic original bytes')
 })
+
+it('keeps a large uploaded original out of the editable preview and replaces it explicitly when the author pastes', async () => {
+  const body = '完整原文🌊。'.repeat(160000)
+  const original = file('large.txt', body)
+  const parserSpy = vi.spyOn(parser, 'extractTextFromFile')
+  await act(async () => choose(original))
+  expect(parserSpy).not.toHaveBeenCalled()
+  expect(source.totalChars).toBe(body.length); expect(source.rawText.length).toBeLessThanOrEqual(8192)
+  expect(source.blobTextSource?.blob).toBe(original); expect(source.hasSourceText).toBe(true)
+  await act(async () => source.prepareConfirmation())
+  expect(source.plans?.[0].endChar).toBe(body.length)
+  await act(async () => source.handleRawTextChange('作者改为粘贴的新原文'))
+  expect(source.blobTextSource).toBeNull(); expect(source.totalChars).toBe('作者改为粘贴的新原文'.length)
+  expect(source.sourceBlob().filename).toBe('粘贴内容.txt')
+})

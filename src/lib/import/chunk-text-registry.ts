@@ -14,11 +14,13 @@ interface ChunkTextRegistry {
 }
 
 const IN_MEM_CHUNK_TEXT: ChunkTextRegistry = {}
+const READERS = new Map<number, { read: (index: number) => Promise<string | undefined>; current?: { index: number; text: string } }>()
 
 export function registerChunkTexts(
   sessionId: number,
   chunks: Array<{ index: number; text: string }>,
 ): void {
+  READERS.delete(sessionId)
   const m = new Map<number, string>()
   for (const c of chunks) m.set(c.index, c.text)
   IN_MEM_CHUNK_TEXT[sessionId] = m
@@ -26,13 +28,41 @@ export function registerChunkTexts(
 
 export function hasChunkTexts(sessionId: number): boolean {
   const m = IN_MEM_CHUNK_TEXT[sessionId]
-  return !!m && m.size > 0
+  return (!!m && m.size > 0) || READERS.has(sessionId)
 }
 
 export function clearChunkTexts(sessionId: number): void {
   delete IN_MEM_CHUNK_TEXT[sessionId]
+  READERS.delete(sessionId)
 }
 
 export function getChunkText(sessionId: number, chunkIndex: number): string | undefined {
-  return IN_MEM_CHUNK_TEXT[sessionId]?.get(chunkIndex)
+  const current = READERS.get(sessionId)?.current
+  return current?.index === chunkIndex ? current.text : IN_MEM_CHUNK_TEXT[sessionId]?.get(chunkIndex)
+}
+
+/** Caller has checked frozen ranges/digests against the immutable original Blob.
+ * Only the currently reviewed/dispatched chunk is cached for synchronous CAS guards. */
+export function registerChunkTextReaderV1(sessionId: number, read: (index: number) => Promise<string | undefined>) {
+  clearChunkTexts(sessionId)
+  READERS.set(sessionId, { read })
+}
+
+export function captureChunkTextReaderV1(sessionId: number) {
+  const reader = READERS.get(sessionId)
+  if (!reader) {
+    const strings = new Map(IN_MEM_CHUNK_TEXT[sessionId])
+    return { lazy: false, read: async (index: number) => strings.get(index) }
+  }
+  return { lazy: true, async read(index: number) {
+    if (READERS.get(sessionId) !== reader) throw new Error('原文件已经替换，请重新打开原导入。')
+    const text = await reader.read(index)
+    if (READERS.get(sessionId) !== reader) throw new Error('原文件已经替换，请重新打开原导入。')
+    reader.current = text === undefined ? undefined : { index, text }
+    return text
+  } }
+}
+
+export async function readChunkTextV1(sessionId: number, index: number) {
+  return captureChunkTextReaderV1(sessionId).read(index)
 }

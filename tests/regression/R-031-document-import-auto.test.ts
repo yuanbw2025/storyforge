@@ -1,6 +1,10 @@
+import { Blob as NativeBlob } from 'node:buffer'
+import { openImportBlobTextSourceV1 } from '../../src/lib/import/blob-text-source'
+import { registerBlobImportSourceV1, verifyBlobImportSourceV1 } from '../../src/lib/import/frozen-source-recovery'
+import { readChunkTextV1, clearChunkTexts, getChunkText } from '../../src/lib/import/chunk-text-registry'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { db } from '../../src/lib/db/schema'
-import { planNewDocumentImportV1 } from '../../src/lib/import/document-import-plan'
+import { planNewDocumentImportV1, planNewBlobDocumentImportV1 } from '../../src/lib/import/document-import-plan'
 import { recoverFrozenImportSourceV1 } from '../../src/lib/import/frozen-source-recovery'
 import { chunkDocument, planAdaptiveDocumentParseChunksV1, quickHash, type ChunkPlan } from '../../src/lib/import/chunker'
 import { hashImportChunkTextV1, useImportSessionStore } from '../../src/stores/import-session'
@@ -92,4 +96,42 @@ it('rejects changed originals or forged range hashes without replanning or alter
   await expect(recoverFrozenImportSourceV1(text + ' ', frozen)).rejects.toThrow('原导入文件不同')
   await expect(recoverFrozenImportSourceV1(text, { ...frozen, chunks: frozen.chunks.map((chunk, index) => index ? chunk : { ...chunk, sourceTextHash: 'a'.repeat(64) }) })).rejects.toThrow('分块摘要不一致')
   expect(await db.importSessions.get(frozen.id!)).toEqual(frozen); expect(await db.agentRuns.count()).toBe(0)
+})
+
+it('plans the streamed original using complete request budgets and recovers immutable ranges without retaining all chunk text', async () => {
+  const { scope } = await seedCurrentWorkspace('031 bounded source')
+  useAIConfigStore.setState({ config: await finiteServiceConfigFixtureV1(32_768) })
+  const text = '第一章 全文\r\n' + '逐字原文🌊e\u0301。'.repeat(19000) + '\r\n最后原文。'
+  const blob = new NativeBlob([text]) as unknown as Blob
+  const source = await openImportBlobTextSourceV1(blob)
+  const plans = await planNewBlobDocumentImportV1({ scope, source, importTarget: 'reference', targetWorldGroupId: null })
+  expect(plans.length).toBeGreaterThan(2); expect(plans.every(plan => !('text' in plan))).toBe(true)
+  let cursor = 0
+  for (const plan of plans) {
+    expect(plan.startChar).toBe(cursor); cursor = plan.endChar
+    expect(plan.sourceTextHash).toBe(await hashImportChunkTextV1(text.slice(plan.startChar, plan.endChar)))
+  }
+  expect(cursor).toBe(text.length)
+  const materialized = await Promise.all(plans.map(async plan => ({ ...plan, text: await source.read(plan.startChar, plan.endChar) })))
+  const frozen = await session(scope, text, materialized, Math.max(...plans.map(plan => plan.charCount)))
+  try {
+    const restored = await openImportBlobTextSourceV1(blob)
+    await verifyBlobImportSourceV1(restored, frozen)
+    registerBlobImportSourceV1(frozen.id!, restored, frozen.chunks)
+    expect(getChunkText(frozen.id!, 0)).toBeUndefined()
+    expect(await readChunkTextV1(frozen.id!, plans.length - 1)).toBe(materialized.at(-1)!.text)
+    expect(getChunkText(frozen.id!, 0)).toBeUndefined()
+    expect(await db.importSessions.get(frozen.id!)).toEqual(frozen)
+    frozen.chunks[0].sourceTextHash = 'forged'
+    await expect(verifyBlobImportSourceV1(restored, frozen)).rejects.toThrow('分块摘要不一致')
+  } finally { clearChunkTexts(frozen.id!) }
+})
+it('cancels streamed planning without creating a paid attempt or replacing the original source', async () => {
+  const { scope } = await seedCurrentWorkspace('031 cancelled plan')
+  useAIConfigStore.setState({ config: await finiteServiceConfigFixtureV1(32_768) })
+  const source = await openImportBlobTextSourceV1(new NativeBlob(['原文'.repeat(120000)]) as unknown as Blob)
+  const controller = new AbortController()
+  await expect(planNewBlobDocumentImportV1({ scope, source, importTarget: 'reference', targetWorldGroupId: null,
+    signal: controller.signal, onProgress: () => controller.abort() })).rejects.toThrow()
+  expect(await db.importSessions.count()).toBe(0); expect(await db.agentRuns.count()).toBe(0)
 })

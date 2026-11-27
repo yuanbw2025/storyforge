@@ -5,7 +5,7 @@
  * .doc（Word 97-2003 二进制格式）mammoth 不支持，会抛明确错误提示用户转成 .docx。
  *
  * 所有大小限制是「本地文件大小上限」，与 AI 一次处理能力无关——
- * AI 解析阶段仍会被 import-adapter 的 MAX_CHARS 再截断一次。
+ * 大 txt/md 由文档导入入口按窗口读取；正式 AI 请求按完整分块核对预算，不截断原文。
  */
 // Vite URL import — pdfjs 的 worker 必须走 URL 引入（仅 URL 字符串，不进主包）
 import { parseCsvGridV1, type CsvGridV1 } from './import/csv-grid'

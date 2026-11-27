@@ -34,7 +34,7 @@ vi.mock('../../src/components/system/import/useImportDocumentPreparation', async
     const [showConfirm, setShowConfirm] = useState(upload.showConfirm)
     const text = upload.text
     const plans = [{ index: 0, startChar: 0, endChar: text.length, charCount: text.length, text }]
-    return { filename: 'fixture.txt', rawText: text, fileError: '', loadingFile: false,
+    return { filename: 'fixture.txt', rawText: text, totalChars: text.length, hasSourceText: !!text.trim(), blobTextSource: null, cancelFileRead: () => {}, fileError: '', loadingFile: false,
       extractInfo: null, plans, chunkSize: 1000, showConfirm, volumeDetect: null,
       previewPlans: plans, handleFile: () => {}, handleRawTextChange: () => {},
       prepareConfirmation: () => setShowConfirm(true), handleChunkSizeChange: () => {},

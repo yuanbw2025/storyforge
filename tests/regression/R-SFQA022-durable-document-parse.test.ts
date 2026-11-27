@@ -1,3 +1,7 @@
+import { Blob as NativeBlob } from 'node:buffer'
+import { openImportBlobTextSourceV1 } from '../../src/lib/import/blob-text-source'
+import { registerBlobImportSourceV1, verifyBlobImportSourceV1 } from '../../src/lib/import/frozen-source-recovery'
+import { registerChunkTextReaderV1 } from '../../src/lib/import/chunk-text-registry'
 import { usePromptStore } from '../../src/stores/prompt'
 import { exportProjectJSON, importProjectJSON } from '../../src/lib/export/json-export'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
@@ -509,4 +513,32 @@ it('031-F rejects a new complete frame before claiming even when its source fits
     expect(await db.importSessions.get(f.input.sessionId)).toEqual(original)
     expect((await db.importSessions.get(f.input.sessionId))?.chunks[0].durableParse).toBeUndefined()
   } finally { usePromptStore.setState(promptState) }
+})
+
+it('031 lazy original survives candidate recovery and author adoption without re-sending or changing the receipt', async () => {
+  const f = await fixture(), id = f.input.sessionId
+  const original = await openImportBlobTextSourceV1(new NativeBlob([source]) as unknown as Blob)
+  const session = (await db.importSessions.get(id))!
+  await verifyBlobImportSourceV1(original, session)
+  registerBlobImportSourceV1(id, original, session.chunks)
+  const post = vi.fn(async () => reply(adoptableRaw)); vi.stubGlobal('fetch', post)
+  const candidate = await createDocumentImportChunkCandidateV1(f.input)
+  clearChunkTexts(id)
+  await verifyBlobImportSourceV1(original, session)
+  registerBlobImportSourceV1(id, original, session.chunks)
+  const receipt = await confirmDocumentImportChunkV1({ ...f.input, candidateHash: candidate.candidateHash })
+  expect(await db.worldviews.toArray()).toMatchObject([{ worldOrigin: '初稿：这里曾是群岛。' }])
+  expect(await confirmDocumentImportChunkV1({ ...f.input, candidateHash: candidate.candidateHash })).toEqual(receipt)
+  expect(post).toHaveBeenCalledTimes(1)
+})
+it('031 cancelling the preparation handoff while a lazy read is pending never reserves or dispatches a model attempt', async () => {
+  const f = await fixture(), controller = new AbortController()
+  let release!: (value: string) => void, entered!: () => void
+  const reading = new Promise<void>(resolve => { entered = resolve })
+  registerChunkTextReaderV1(f.input.sessionId, async () => { entered(); return new Promise(resolve => { release = resolve }) })
+  const post = vi.fn(); vi.stubGlobal('fetch', post)
+  const running = runSession({ ...f.input, signal: controller.signal })
+  await reading; controller.abort(); release(source); await running
+  expect(post).not.toHaveBeenCalled(); expect(await db.agentRuns.count()).toBe(0)
+  expect((await db.importSessions.get(f.input.sessionId))!.chunks[0].attempts).toBe(0)
 })

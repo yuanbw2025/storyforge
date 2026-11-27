@@ -35,7 +35,7 @@ import { assembleContext } from '../registry/assemble-context'
 import type { UnifiedParseResult, WorkspaceScope } from '../types'
 import type { ExactRunArtifactKindV1 } from '../types/memory-engineering'
 import type { CodexImportCategoryOption } from './codex-classification'
-import { getChunkText } from './chunk-text-registry'
+import { getChunkText, readChunkTextV1 } from './chunk-text-registry'
 import { normalizeUnified } from './unified-merge'
 
 const STEP = 'document-import.parse'
@@ -163,7 +163,7 @@ export async function createDocumentImportChunkCandidateV1(input: ChunkInput & {
   const session = await sessionFor(input), scope = session.targetScope
   const chunk = session.chunks[input.chunkIndex]
   if (chunk.durableParse) fail('原分块已有候选或尝试记录；请读取原证据，不能再次发送。')
-  const text = input.sourceText ?? getChunkText(session.id, input.chunkIndex)
+  const text = input.sourceText ?? await readChunkTextV1(session.id, input.chunkIndex)
   if (!text || !chunk.sourceTextHash || await hashImportChunkTextV1(text) !== chunk.sourceTextHash)
     fail('当前分块不是已确认原文件。')
   const { config, skill, metadata, resolved, inputBudgetTokens } = await prepareDocumentParseRequestConfigV1(input.projectId)
