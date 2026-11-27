@@ -235,6 +235,9 @@ describe.sequential('B02 C1–C6 · ordinary UI task to same-client durable cand
     expect(sent.posts).toHaveLength(4)
     const run = (await db.agentRuns.toArray())[0], rawBefore = (await db.agentRunArtifacts.toArray()).filter(row => row.artifactKind === 'raw-response')
     const edited = '甲'.repeat(100) + '\n作者已经保存的补注。'
+    expect(document.querySelector('[data-markdown-body]')?.textContent).toBe('甲'.repeat(100))
+    expect((await db.worldviews.get(f.worldviewId))?.worldOrigin).toBe('')
+    await click('编辑源码')
     await act(async () => {
       const editor = document.querySelector<HTMLTextAreaElement>('[aria-label="世界来源候选内容"]')!
       Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(editor, edited)
@@ -246,7 +249,9 @@ describe.sequential('B02 C1–C6 · ordinary UI task to same-client durable cand
       expect(button('采纳').disabled).toBe(false)
     })
     await unmountControls(); await mount()
-    await waitFor(() => expect(document.querySelector<HTMLTextAreaElement>('[aria-label="世界来源候选内容"]')?.value).toBe(edited), { timeout: 15000 })
+    await waitFor(() => expect(document.querySelector('[data-markdown-body]')?.textContent).toBe(edited), { timeout: 15000 })
+    await click('查看源码')
+    expect(document.querySelector('[data-markdown-source]')?.textContent).toBe(edited)
     expect(document.body.textContent).not.toContain('主 Agent 计划检查点')
     expect(sent.posts).toHaveLength(4)
     await click('采纳'); expect(adoption).toBeDefined(); await act(async () => { await adoption })
