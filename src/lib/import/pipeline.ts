@@ -224,7 +224,7 @@ async function analyzeConfirmedReference(
       totalChars: session.totalChars, expectedChunks: sourceChunks.length,
       sourceKind: 'unknown', usageScope: 'analysis-only',
       rightsNote: '由项目导入流程建立；尚未在版本面板补充来源声明', rightsConfirmed: false,
-      sourceText: sourceChunks.map(chunk => chunk.text).join('\n\n'), sourceChunks,
+      sourceChunks,
     }, firstStart)
     registerRefChunks(run.id!, sourceChunks)
     statusStore?.pushActivity('info', `开始深层分析（${sourceChunks.length} 块）`)
