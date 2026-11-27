@@ -41,7 +41,7 @@ describe('CF-20260703-6 · 角色完整维度草稿', () => {
     document.body.append(host)
     const root = createRoot(host)
     const patches: Partial<Character>[] = []
-    const onChange = (patch: Partial<Character>) => patches.push(patch)
+    const onChange = (patch: Partial<Character>) => { patches.push(patch) }
 
     await act(async () => {
       root.render(createElement(CharacterDimensionFields, { character: character(), onChange }))

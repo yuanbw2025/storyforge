@@ -39608,36 +39608,6 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-CF20260703-6-character-dimension-draft.test.tsx\",\"TS2769\",\"No overload matches this call.\\n  The last overload gave the following error.\\n    Type '(patch: Partial<Character>) => number' is not assignable to type '(patch: Partial<Character>, expected?: Partial<Character> | undefined) => void | Promise<void>'.\\n      Type 'number' is not assignable to type 'void | Promise<void>'.\",\"857323d0228deb888bb799c3a6db825cc425b93f9c4542bf229f784fa4161b1a\",85,8]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-CF20260703-6-character-dimension-draft.test.tsx",
-        "code": "TS2769",
-        "message": "No overload matches this call.\n  The last overload gave the following error.\n    Type '(patch: Partial<Character>) => number' is not assignable to type '(patch: Partial<Character>, expected?: Partial<Character> | undefined) => void | Promise<void>'.\n      Type 'number' is not assignable to type 'void | Promise<void>'.",
-        "anchor": "857323d0228deb888bb799c3a6db825cc425b93f9c4542bf229f784fa4161b1a",
-        "line": 47,
-        "column": 85,
-        "start": 1479,
-        "length": 8
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/regression/R-CF20260703-6-character-dimension-draft.test.tsx\",\"TS2769\",\"No overload matches this call.\\n  The last overload gave the following error.\\n    Type '(patch: Partial<Character>) => number' is not assignable to type '(patch: Partial<Character>, expected?: Partial<Character> | undefined) => void | Promise<void>'.\\n      Type 'number' is not assignable to type 'void | Promise<void>'.\",\"dfff6bc5c634086dc7d0aa1e72088e91906f4cf4612a57e49c849e2414b3881b\",9,8]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-CF20260703-6-character-dimension-draft.test.tsx",
-        "code": "TS2769",
-        "message": "No overload matches this call.\n  The last overload gave the following error.\n    Type '(patch: Partial<Character>) => number' is not assignable to type '(patch: Partial<Character>, expected?: Partial<Character> | undefined) => void | Promise<void>'.\n      Type 'number' is not assignable to type 'void | Promise<void>'.",
-        "anchor": "dfff6bc5c634086dc7d0aa1e72088e91906f4cf4612a57e49c849e2414b3881b",
-        "line": 59,
-        "column": 9,
-        "start": 1953,
-        "length": 8
-      }
-    },
-    {
       "identity": "[\"typescript\",\"tests/regression/R-CF20260703-6-character-dimension-draft.test.tsx\",\"TS7017\",\"Element implicitly has an 'any' type because type 'typeof globalThis' has no index signature.\",\"1f00af7d80c4a6011d464872eb219f08179cce18a4270326a8a87e701f6344ee\",12,24]",
       "count": 1,
       "diagnostic": {
