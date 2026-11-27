@@ -320,6 +320,7 @@ export default function WorldviewAgentControls({
             visibleDraft={visibleDraft}
             viewBinding={legacyReview?legacyFence.viewBinding:undefined}
             onEditorCompositionStateChange={legacyReview?legacyFence.onEditorCompositionStateChange:undefined}
+            onCommit={!legacyReview ? () => copilot.flushCandidateDraft(candidate.event.id!) : undefined}
             onUpdate={(content, rawValue) => {
               if (candidateEventId != null && currentSession(true)) void copilot.updateCandidate(candidateEventId, content, { rawValue })
             }}
