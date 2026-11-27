@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPendingEditsV1, resetPendingEditCoordinatorForTestsV1 } from '../../src/lib/authoring/pending-edit-coordinator'
 import type { Project } from '../../src/lib/types'
+import { db } from '../../src/lib/db/schema'
 
 const mocks = vi.hoisted(() => ({
   work: { id: 11, projectId: 1, worldId: 7, title: '雾港', description: '', genres: ['other'], targetWordCount: 300000 } as any,
@@ -38,11 +39,18 @@ beforeEach(() => {
   resetPendingEditCoordinatorForTestsV1()
   mocks.update.mockReset().mockResolvedValue(undefined)
   mocks.work = { id: 11, projectId: 1, worldId: 7, title: '雾港', description: '', genres: ['other'], targetWordCount: 300000 }
+  // These draft scheduling cases mock readback as well as the writer. Actual
+  // IndexedDB evidence and dishonest writer results are covered in R-050.
+  vi.spyOn(db.works, 'get').mockImplementation(async () => {
+    const last = mocks.update.mock.calls.at(-1) as unknown as [number, object, { projectId: number; workId: number; worldId: number }]
+    return last ? { ...mocks.work, ...last[1], ...last[2], id: last[2].workId, updatedAt: Date.now() } : mocks.work
+  })
   host = document.createElement('div'); document.body.append(host); root = createRoot(host)
 })
 afterEach(async () => {
   await act(async () => root.unmount())
   host.remove(); vi.useRealTimers(); resetPendingEditCoordinatorForTestsV1()
+  vi.restoreAllMocks()
 })
 
 describe('分步骤基本信息防丢保存', () => {
@@ -54,7 +62,7 @@ describe('分步骤基本信息防丢保存', () => {
     await type('作品名称', '雾港修钟人')
     await act(async () => { await flushPendingEditsV1() })
     expect(mocks.update).toHaveBeenLastCalledWith(1, expect.objectContaining({ title: '雾港修钟人', description: '午夜失去一分钟' }), { projectId: 1, worldId: 7, workId: 11 })
-    expect(host.querySelector('[role="status"]')?.textContent).toBe('修改后自动保存')
+    expect(host.querySelector('[role="status"]')?.textContent).toBe('已保存到本机')
   })
   it('自动保存失败保留输入并阻止切页，显式重试后解除阻止', async () => {
     await render(); await type('作品简介', '不能丢的草稿')
@@ -98,6 +106,9 @@ describe('分步骤基本信息防丢保存', () => {
   })
 
   it('does not roll a saved form back to an older Work echo while readback is delayed', async () => {
+    // Both observations may share one millisecond; equality is not evidence
+    // that the older liveQuery value superseded the committed readback.
+    mocks.work.updatedAt = Date.now()
     await render(); await type('作品名称', '已保存的新作品名'); await type('作品简介', '已保存的新简介')
     await act(async () => { await flushPendingEditsV1() })
     expect(host.querySelector<HTMLInputElement>('[aria-label="作品名称"]')?.value).toBe('已保存的新作品名')
