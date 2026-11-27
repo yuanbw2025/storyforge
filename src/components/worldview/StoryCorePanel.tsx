@@ -9,6 +9,7 @@ import PromptRunPanel from '../shared/PromptRunPanel'
 import { InlineTextarea } from '../shared/InlineEdit'
 import AIFieldModeTabs from '../shared/AIFieldModeTabs'
 import CandidateDraftEditor from '../agent/CandidateDraftEditor'
+import CandidateSaveFeedback from '../agent/CandidateSaveFeedback'
 import { useMasterCopilot, type PendingMasterCandidate } from '../agent/useMasterCopilot'
 import {
   formatStoryCoreGenerationRequestV1,
@@ -336,18 +337,22 @@ function FieldEditor({
                   : `${candidate.payload.contextSources.length} 个输入来源`}
               </span>
             </div>
-            <CandidateDraftEditor
-              key={candidate.event.id}
-              resizableInputs={resizableInputs}
-              inputAreaField={`story.${field.key}`}
-              payload={candidate.payload}
-              value={candidate.event.content}
-              disabled={copilot.busy}
-              onCommit={() => copilot.flushCandidateDraft(candidate.event.id!)}
-              onChange={content => {
-                void copilot.updateCandidate(candidate.event.id!, content)
-              }}
-            />
+            <CandidateSaveFeedback event={candidate.event} scope={copilot.candidateLocalSaveScope}
+              draftState={copilot.readCandidateLocalDraftState?.(candidate.event.id!)} busy={copilot.busy}
+              onRetry={() => copilot.flushCandidateDraft(candidate.event.id!)}>
+              <CandidateDraftEditor
+                key={candidate.event.id}
+                resizableInputs={resizableInputs}
+                inputAreaField={`story.${field.key}`}
+                payload={candidate.payload}
+                value={candidate.event.content}
+                disabled={copilot.busy}
+                onCommit={() => copilot.flushCandidateDraft(candidate.event.id!)}
+                onChange={content => {
+                  void copilot.updateCandidate(candidate.event.id!, content)
+                }}
+              />
+            </CandidateSaveFeedback>
             <HarnessEvidencePanel
               contextEvidence={candidate.payload.contextEvidence}
               lifecycle={candidate.lifecycle}

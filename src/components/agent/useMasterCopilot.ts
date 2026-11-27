@@ -44,6 +44,7 @@ import { revalidateStoryArcCreativeDraftV1 } from '../../lib/agent/story-arc-cop
 import { revalidateOutlineCreativeDraftV1 } from '../../lib/agent/outline-copilot'
 import { revalidateProseCreativeDraftV1 } from '../../lib/agent/prose-copilot'
 import { flushPendingEditsV1 } from '../../lib/authoring/pending-edit-coordinator'
+import type { CandidateLocalDraftStateV1 } from '../../lib/authoring/candidate-local-save-evidence'
 import {
   CandidateDraftSyncErrorV1,
   flushCandidateDraftV1,
@@ -244,6 +245,8 @@ export function useMasterCopilot(input: {
   const abortRef = useRef<AbortController | null>(null)
   const runtimeCandidates = useRef(new Map<number, ExecutedMasterCandidate>())
   const localCandidateDrafts = useRef(new Map<number, string>())
+  const candidateSaveStates = useRef(new Map<number, CandidateLocalDraftStateV1>())
+  const reloadSequence = useRef(0)
   const activeCandidateScope = useRef('')
   const workspaceScope = useMemo<WorkspaceScope | undefined>(() => (
     project.id != null && project.activeWorldId != null && project.activeWorkId != null
@@ -263,13 +266,18 @@ export function useMasterCopilot(input: {
   ), [])
 
   const reload = useCallback(async (id: number) => {
-    const rows = await projectWorldviewImportedHistoryV2(workspaceScope,await readAgentEvents(id, workspaceScope))
-    const endable = workspaceScope ? await findEndableWorldviewRunV2({scope:workspaceScope,conversationId:id}) : null
-    const received = workspaceScope ? await findWorldviewReceivedRunV2({ scope: workspaceScope, conversationId: id, worldGroupId }) : null
-    if (activeCandidateScope.current === scopeKey) {
-      setEvents(overlayLocalCandidateDrafts(rows))
-      setEndableWorldviewRun(endable)
-      setReceivedWorldviewRun(received)
+    const request = ++reloadSequence.current
+    try {
+      const rows = await projectWorldviewImportedHistoryV2(workspaceScope,await readAgentEvents(id, workspaceScope))
+      const endable = workspaceScope ? await findEndableWorldviewRunV2({scope:workspaceScope,conversationId:id}) : null
+      const received = workspaceScope ? await findWorldviewReceivedRunV2({ scope: workspaceScope, conversationId: id, worldGroupId }) : null
+      if (activeCandidateScope.current === scopeKey && request === reloadSequence.current) {
+        setEvents(overlayLocalCandidateDrafts(rows))
+        setEndableWorldviewRun(endable)
+        setReceivedWorldviewRun(received)
+      }
+    } catch (cause) {
+      if (activeCandidateScope.current === scopeKey && request === reloadSequence.current) throw cause
     }
   }, [overlayLocalCandidateDrafts, scopeKey, workspaceScope, worldGroupId])
 
@@ -309,6 +317,8 @@ export function useMasterCopilot(input: {
     abortRef.current?.abort()
     runtimeCandidates.current.clear()
     localCandidateDrafts.current.clear()
+    candidateSaveStates.current.clear()
+    reloadSequence.current++
     setConversationId(null)
     setEvents([])
     setAuthorRequest('')
@@ -715,6 +725,9 @@ export function useMasterCopilot(input: {
       setError('此候选在字段面板还有未确认的编辑，请先修正或放弃该修改。')
       return Promise.resolve()
     }
+    const revision = (candidateSaveStates.current.get(eventId)?.revision ?? 0) + 1
+    candidateSaveStates.current.set(eventId, { revision, status: visible?.error ? 'blocked' : 'saving', error: visible?.error })
+    refreshVisibleCandidateDraft(value => value + 1)
     const edit: VisibleMasterCandidateDraftV1 | undefined = visible && {
       ...visible,
       status: visible.error ? 'blocked' : 'saving',
@@ -756,8 +769,18 @@ export function useMasterCopilot(input: {
         }
         if (activeCandidateScope.current !== editingScope) return
         const currentDraft = localCandidateDrafts.current.get(eventId)
-        if (currentDraft === persistedDraft) localCandidateDrafts.current.delete(eventId)
+        if (currentDraft === persistedDraft) {
+          localCandidateDrafts.current.delete(eventId)
+          const previousSave = candidateSaveStates.current.get(eventId)
+          if (persistedDraft === draft && previousSave?.revision === revision) {
+            candidateSaveStates.current.set(eventId, { revision, status: 'idle' })
+            if (previousSave.error) setError(current => current === previousSave.error ? null : current)
+          }
+        }
         const nextPayload = typeof result === 'string' ? result : null
+        // An older read may finish after this committed revision. Its snapshot
+        // cannot replace the acknowledged author draft or its durable payload.
+        reloadSequence.current++
         setEvents(current => current.map(event => event.id === eventId
           ? {
               ...event,
@@ -773,7 +796,11 @@ export function useMasterCopilot(input: {
           edit.error = syncError.message
           if (activeCandidateScope.current === editingScope) refreshVisibleCandidateDraft(value => value + 1)
         }
-        if (activeCandidateScope.current === editingScope) setError(syncError.message)
+        if (activeCandidateScope.current === editingScope) {
+          candidateSaveStates.current.set(eventId, { revision, status: visible?.error ? 'blocked' : 'failed', error: syncError.message })
+          refreshVisibleCandidateDraft(value => value + 1)
+          setError(syncError.message)
+        }
       },
     })
     return Promise.resolve()
@@ -785,6 +812,8 @@ export function useMasterCopilot(input: {
     const current = visibleCandidateDrafts.get(key)
     if (!current || current.status === 'discarding') return
     const discarding: VisibleMasterCandidateDraftV1 = { rawValue: current.rawValue, status: 'discarding' }
+    const revision = (candidateSaveStates.current.get(eventId)?.revision ?? 0) + 1
+    candidateSaveStates.current.set(eventId, { revision, status: 'discarding' })
     setVisibleCandidateDraft(key, discarding)
     refreshVisibleCandidateDraft(value => value + 1)
     // Serialize the read behind any in-flight save of this candidate. Discard
@@ -805,6 +834,8 @@ export function useMasterCopilot(input: {
         setVisibleCandidateDraft(key)
         if (activeCandidateScope.current !== scopeKey) return
         localCandidateDrafts.current.delete(eventId)
+        candidateSaveStates.current.set(eventId, { revision, status: 'idle' })
+        reloadSequence.current++
         setEvents(rows => rows.map(event => event.id === eventId ? saved : event))
         setError(null)
         refreshVisibleCandidateDraft(value => value + 1)
@@ -815,6 +846,7 @@ export function useMasterCopilot(input: {
         discarding.status = 'failed'
         discarding.error = syncError.message
         if (activeCandidateScope.current === scopeKey) {
+          candidateSaveStates.current.set(eventId, { revision, status: 'failed', error: syncError.message })
           setError(syncError.message)
           refreshVisibleCandidateDraft(value => value + 1)
         }
@@ -1079,6 +1111,8 @@ export function useMasterCopilot(input: {
     resume,
     stop,
     updateCandidate,
+    candidateLocalSaveScope: workspaceScope,
+    readCandidateLocalDraftState: (eventId: number) => candidateSaveStates.current.get(eventId),
     flushCandidateDraft: (eventId: number) => flushCandidateDraftV1(candidateDraftKey(eventId)),
     readVisibleCandidateDraft: (eventId?: number) => eventId == null || conversationId == null
       ? undefined : visibleCandidateDrafts.get(candidateDraftKey(eventId)),

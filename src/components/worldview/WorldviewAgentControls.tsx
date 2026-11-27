@@ -16,6 +16,7 @@ import type { FieldGenerationMode } from '../../lib/ai/field-generation-context'
 import type { Project } from '../../lib/types'
 import HarnessEvidencePanel from '../agent/HarnessEvidencePanel'
 import WorldviewFieldCandidateReview, { isWorldviewReviewViewV1, worldviewReviewSessionKeyV1, worldviewEditorSessionKeyV1, readWorldviewEditorSessionKeyV1, type WorldviewReviewViewV1, type WorldviewEditorCompositionV1 } from './WorldviewFieldCandidateReview'
+import CandidateSaveFeedback from '../agent/CandidateSaveFeedback'
 import { db } from '../../lib/db/schema'
 import { assertRecordInScope } from '../../lib/workspace/scope'
 import CopilotGenerationStatus from '../agent/CopilotGenerationStatus'
@@ -313,21 +314,25 @@ export default function WorldviewAgentControls({
                 : `${candidate.payload.contextSources.length} 个输入来源`}
             </span>
           </div>
-          <WorldviewFieldCandidateReview
-            resizableInputs={resizableInputs}
-            candidate={candidate}
-            busy={copilot.busy || visibleDraft?.status === 'discarding'}
-            visibleDraft={visibleDraft}
-            viewBinding={legacyReview?legacyFence.viewBinding:undefined}
-            onEditorCompositionStateChange={legacyReview?legacyFence.onEditorCompositionStateChange:undefined}
-            onCommit={!legacyReview ? () => copilot.flushCandidateDraft(candidate.event.id!) : undefined}
-            onUpdate={(content, rawValue) => {
-              if (candidateEventId != null && currentSession(true)) void copilot.updateCandidate(candidateEventId, content, { rawValue })
-            }}
-            onInvalidEdit={(rawValue, error) => {
-              if (candidateEventId != null && currentSession(true)) void copilot.updateCandidate(candidateEventId, rawValue, { rawValue, error })
-            }}
-          />
+          <CandidateSaveFeedback event={candidate.event} scope={copilot.candidateLocalSaveScope}
+            draftState={copilot.readCandidateLocalDraftState?.(candidate.event.id!)} busy={copilot.busy}
+            onRetry={() => copilot.flushCandidateDraft(candidate.event.id!)}>
+            <WorldviewFieldCandidateReview
+              resizableInputs={resizableInputs}
+              candidate={candidate}
+              busy={copilot.busy || visibleDraft?.status === 'discarding'}
+              visibleDraft={visibleDraft}
+              viewBinding={legacyReview?legacyFence.viewBinding:undefined}
+              onEditorCompositionStateChange={legacyReview?legacyFence.onEditorCompositionStateChange:undefined}
+              onCommit={!legacyReview ? () => copilot.flushCandidateDraft(candidate.event.id!) : undefined}
+              onUpdate={(content, rawValue) => {
+                if (candidateEventId != null && currentSession(true)) void copilot.updateCandidate(candidateEventId, content, { rawValue })
+              }}
+              onInvalidEdit={(rawValue, error) => {
+                if (candidateEventId != null && currentSession(true)) void copilot.updateCandidate(candidateEventId, rawValue, { rawValue, error })
+              }}
+            />
+          </CandidateSaveFeedback>
           {visibleDraft && (
             <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
               <p role={visibleDraft.error ? 'alert' : 'status'} className={visibleDraft.error ? 'text-error' : 'text-text-muted'}>
