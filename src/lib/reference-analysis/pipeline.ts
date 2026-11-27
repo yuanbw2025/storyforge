@@ -46,7 +46,8 @@ import {
   getReferenceAnalysisRunChunks,
   listReferenceAnalysisRuns,
   patchReferenceAnalysisRun,
-  readReferenceAnalysisChunks,
+  readReferenceAnalysisChunkPlanV1,
+  readReferenceAnalysisChunkV1,
   readReferenceChunkAuthorityV1,
   writeReferenceChunkRunLinkV1,
   type ReferenceChunkRunLinkV1,
@@ -199,7 +200,7 @@ export async function runRefAnalysis(refId: number, requestedRunId?: number): Pr
     listener.onDone?.(refId, false, run.id)
     return
   }
-  const chunks = await readReferenceAnalysisChunks(run.id)
+  const chunks = await readReferenceAnalysisChunkPlanV1(run.id)
   if (!chunks || chunks.length === 0) {
     await patchReferenceAnalysisRun(run.id, {
       status: 'failed',
@@ -234,14 +235,16 @@ export async function runRefAnalysis(refId: number, requestedRunId?: number): Pr
 
     let completed = doneSet.size
     const total = chunks.length
-    for (const chunk of chunks) {
+    for (const planned of chunks) {
       if (activePaused.value) {
         listener.onActivity?.('warn', '⏸ 分析已中止')
         await patchReferenceAnalysisRun(run.id, { status: 'cancelled', error: '用户取消' })
         listener.onDone?.(refId, false, run.id)
         return
       }
-      if (doneSet.has(chunk.index)) continue
+      if (doneSet.has(planned.index)) continue
+      const chunk = await readReferenceAnalysisChunkV1(run.id, planned.index)
+      if (!chunk) throw new Error('本次参考分块原文已丢失，未发送模型请求。')
 
       const analysis = await analyzeChunkDurably({
         runId: run.id, ref, depth, chunk, totalChunks: total,

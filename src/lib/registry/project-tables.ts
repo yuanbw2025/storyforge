@@ -1677,7 +1677,7 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
       via: { table: 'referenceAnalysisRuns', field: 'analysisRunId', resolveProject: 'projectId' },
       onDelete: 'cascade',
     }],
-    note: 'IDEA-1 本地断点续跑原文；不进 JSON 备份，报告与来源哈希仍可便携往返' },
+    note: 'IDEA-1 本地断点续跑原文；旧字符串或显式 utf16le-blob-chunks 私有逐块来源共用原 run 主键及级联生命周期，不迁移旧来源；不进 JSON 备份，报告与来源哈希仍可便携往返' },
 
   // ───────────────────── 临时态 / blob ─────────────────────
   { table: db.importSessions, name: 'importSessions', owner: 'transient', exportable: false,
