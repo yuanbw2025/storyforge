@@ -26,6 +26,7 @@ import { adoptCharacterDrivenVolumes } from '../../lib/story-planning/character-
 import CharacterRevisionPanel from './CharacterRevisionPanel'
 import { useMasterCopilot } from '../agent/useMasterCopilot'
 import HarnessEvidencePanel from '../agent/HarnessEvidencePanel'
+import CandidateSaveFeedback from '../agent/CandidateSaveFeedback'
 
 type CharacterArcInput = CharacterDrivenPlanArc
 type PlotVolume = CharacterDrivenPlotVolume
@@ -596,6 +597,9 @@ export default function CharacterDrivenPlotPanel({ project, worldGroupId }: Prop
                   : `${candidate.payload.contextSources.length} 个输入来源`}
               </span>
             </div>
+            <CandidateSaveFeedback event={candidate.event} scope={copilot.candidateLocalSaveScope}
+              draftState={copilot.readCandidateLocalDraftState?.(candidate.event.id!)} busy={copilot.busy}
+              onRetry={() => copilot.flushCandidateDraft(candidate.event.id!)}>
             <AutoResizeTextarea
               aria-label="角色驱动卷章候选内容"
               value={candidate.event.content}
@@ -606,6 +610,7 @@ export default function CharacterDrivenPlotPanel({ project, worldGroupId }: Prop
               className="min-h-72 w-full resize-y bg-bg-base border border-border px-3 py-2 font-mono text-xs leading-5 text-text-primary rounded"
               minRows={14}
             />
+            </CandidateSaveFeedback>
             <HarnessEvidencePanel
               contextEvidence={candidate.payload.contextEvidence}
               lifecycle={candidate.lifecycle}

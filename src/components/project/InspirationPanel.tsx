@@ -22,6 +22,7 @@ import { characterAxesLabel } from '../../lib/character/character-axes'
 import InspirationMultiWorldResult from './InspirationMultiWorldResult'
 import InspirationSingleResult from './InspirationSingleResult'
 import InspirationFusionReview from './InspirationFusionReview'
+import CandidateSaveFeedback from '../agent/CandidateSaveFeedback'
 import type { InspirationSourceKind } from '../../lib/types/inspiration-workspace'
 import { useIncrementalInspiration } from '../../hooks/useIncrementalInspiration'
 import { useInspirationPromptConfig } from '../../hooks/useInspirationPromptConfig'
@@ -479,6 +480,9 @@ function InspirationPanelContent({ project }: Props) {
           pendingDiff={pendingDiff}
           confirming={confirmingFusion}
           candidateDraft={pendingCandidate?.event.content ?? null}
+          wrapCandidateEditor={pendingCandidate ? editor => <CandidateSaveFeedback event={pendingCandidate.event} scope={copilot.candidateLocalSaveScope}
+            draftState={copilot.readCandidateLocalDraftState?.(pendingCandidate.event.id!)} busy={copilot.busy}
+            onRetry={() => copilot.flushCandidateDraft(pendingCandidate.event.id!)}>{editor}</CandidateSaveFeedback> : undefined}
           candidateInputSummary={pendingCandidate?.payload.contextEvidence
             ? '实际输入：' + (pendingCandidate.payload.contextEvidence.included.join('、') || '无')
               + '；估算 ' + pendingCandidate.payload.contextEvidence.estimatedInputTokens.toLocaleString() + ' tokens'

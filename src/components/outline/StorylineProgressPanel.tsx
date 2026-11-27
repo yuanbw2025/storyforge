@@ -3,6 +3,7 @@ import { Check, Loader2, Network, RefreshCw, Sparkles, Trash2 } from 'lucide-rea
 import { useStorylineProgressStore } from '../../stores/storyline-progress'
 import { useMasterCopilot } from '../agent/useMasterCopilot'
 import { CTextarea } from '../shared/CompositionInput'
+import CandidateSaveFeedback from '../agent/CandidateSaveFeedback'
 import type { Chapter, StoryArc } from '../../lib/types'
 import { parseStages } from '../../lib/types'
 import { htmlToPlainText } from '../../lib/utils/html'
@@ -277,7 +278,9 @@ export default function StorylineProgressPanel(props: {
               ><RefreshCw className="w-3 h-3" /> 清空</button>
             </div>
           </div>
-          {pendingCandidate && <CTextarea
+          {pendingCandidate && <CandidateSaveFeedback event={pendingCandidate.event} scope={props.copilot.candidateLocalSaveScope}
+            draftState={props.copilot.readCandidateLocalDraftState?.(pendingCandidate.event.id!)} busy={props.copilot.busy}
+            onRetry={() => props.copilot.flushCandidateDraft(pendingCandidate.event.id!)}><CTextarea
             aria-label="故事线进度候选 JSON"
             value={pendingCandidate.event.content}
             disabled={props.copilot.busy || accepted}
@@ -285,7 +288,7 @@ export default function StorylineProgressPanel(props: {
             onCompositionEndCapture={() => { candidateComposingRef.current = false; setCandidateComposing(false) }}
             onChange={event => { void props.copilot.updateCandidate(pendingCandidate.event.id!, event.target.value) }}
             className="min-h-40 w-full resize-y font-mono text-xs leading-5"
-          />}
+          /></CandidateSaveFeedback>}
           {candidateReview.error && <p role="alert" className="text-xs text-error">{candidateReview.error}</p>}
           {!hasCandidates && !props.copilot.busy && <p className="text-xs text-text-muted">没有通过闭集与逐字证据校验的候选。</p>}
           {candidates.progress.map(item => (

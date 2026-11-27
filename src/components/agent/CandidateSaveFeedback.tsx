@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import type { AgentEvent, WorkspaceScope } from '../../lib/types'
 import { readCandidateLocalSaveWitnessV1, type CandidateLocalDraftStateV1, type CandidateLocalSaveWitnessV1 } from '../../lib/authoring/candidate-local-save-evidence'
-import { flushPendingEditsV1 } from '../../lib/authoring/pending-edit-coordinator'
+import { flushPendingEditsV1, registerPendingDraftFlusherV1 } from '../../lib/authoring/pending-edit-coordinator'
+import { useBeforeUnload } from '../../hooks/useBeforeUnload'
 
 /** Observes the original candidate queue and DB. It never writes a candidate. */
 export default function CandidateSaveFeedback({ event, scope, draftState, busy, onRetry, children }: {
@@ -18,11 +19,22 @@ export default function CandidateSaveFeedback({ event, scope, draftState, busy, 
   const [confirmed, setConfirmed] = useState<{ event: AgentEvent; identity: string; witness: CandidateLocalSaveWitnessV1 } | null>(null)
   const [requested, setRequested] = useState({ identity, revision: 0 })
   const [composing, setComposing] = useState(false)
+  const composingRef = useRef(false)
+  const explicitRetry = useRef(false), flushCurrent = useRef(onRetry), currentDraft = useRef(draftState)
+  flushCurrent.current = onRetry; currentDraft.current = draftState
   const [retrying, setRetrying] = useState(false), [retryError, setRetryError] = useState(''), [readVersion, setReadVersion] = useState(0)
   const current = useRef(identity); current.current = identity
   const unsubmitted = requested.identity === identity && requested.revision > revision
+  useBeforeUnload(composing || unsubmitted || ['failed', 'blocked', 'saving', 'discarding'].includes(state))
+  useEffect(() => registerPendingDraftFlusherV1(async () => {
+    if (composingRef.current) throw new Error('候选输入法仍在组合文字，请完成输入后再保存或采纳。')
+    if (explicitRetry.current) return
+    if (currentDraft.current?.status === 'failed' || currentDraft.current?.status === 'blocked')
+      throw new Error(currentDraft.current.error || '候选编辑尚未保存，请显式重试或核对输入。')
+    if (currentDraft.current?.status === 'saving') await flushCurrent.current()
+  }), [])
   const projectId = scope?.projectId, worldId = scope?.worldId, workId = scope?.workId
-  useEffect(() => { setRequested({ identity, revision: 0 }); setComposing(false); setRetrying(false); setRetryError('') }, [identity])
+  useEffect(() => { setRequested({ identity, revision: 0 }); composingRef.current = false; setComposing(false); setRetrying(false); setRetryError('') }, [identity])
   useEffect(() => {
     let active = true
     setConfirmed(null)
@@ -39,13 +51,14 @@ export default function CandidateSaveFeedback({ event, scope, draftState, busy, 
         : confirmed?.event === event && confirmed.identity === identity ? 'saved' : 'unconfirmed'
   const retry = async () => {
     const owner = identity
+    explicitRetry.current = true
     setRetryError(''); setRetrying(true)
     try { await flushPendingEditsV1(); await onRetry() }
     catch (cause) { if (current.current === owner) setRetryError(cause instanceof Error ? cause.message : '候选尚未保存，输入已保留。') }
-    finally { if (current.current === owner) { setRetrying(false); setReadVersion(value => value + 1) } }
+    finally { explicitRetry.current = false; if (current.current === owner) { setRetrying(false); setReadVersion(value => value + 1) } }
   }
   return <div onInputCapture={() => { setRetryError(''); setRequested({ identity, revision: revision + 1 }) }}
-    onCompositionStartCapture={() => setComposing(true)} onCompositionEndCapture={() => setComposing(false)}>
+    onCompositionStartCapture={() => { composingRef.current = true; setComposing(true) }} onCompositionEndCapture={() => { composingRef.current = false; setComposing(false) }}>
     {children}
     <p role="status" data-candidate-local-save-status={status} className="mt-1 min-h-4 text-[10px] text-text-muted"
       title="候选已保存表示当前候选及其运行记录已在本机数据库中核对；尚未采纳写入正式稿。本机保存、云同步和外部备份分别完成。">
