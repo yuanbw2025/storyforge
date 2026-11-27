@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import Dexie from 'dexie'
 import { db } from '../lib/db/schema'
 import type { OutlineNode, WorkspaceScope } from '../lib/types'
 import { normalizeOutlineNode } from '../lib/outline/normalize'
@@ -12,6 +13,12 @@ import { assertRecordInScope, readOwnedRows, resolveReadScopeLike, resolveScopeL
 import { coordinatePendingEditV1 } from '../lib/authoring/pending-edit-coordinator'
 import { FIELD_BY_TARGET } from '../lib/registry/field-registry'
 
+import { assertRecordTextSaveExpectedV1, recordTextSaveRequestV1, recordTextSaveAckV1 } from '../lib/authoring/record-text-save-evidence'
+import type { LocalSaveIntentV1, LocalSaveAckV1 } from '../lib/authoring/local-save-evidence'
+interface OutlineTextUpdateV1 {
+  (id: number, data: Partial<OutlineNode>, options?: { scope?: WorkspaceScope; expected?: Partial<OutlineNode> }): Promise<void>
+  (id: number, data: Partial<OutlineNode>, options: { scope: WorkspaceScope; expected?: Partial<OutlineNode>; confirmation: LocalSaveIntentV1 }): Promise<LocalSaveAckV1>
+}
 interface OutlineStore {
   nodes: OutlineNode[]
   loading: boolean
@@ -20,7 +27,7 @@ interface OutlineStore {
 
   loadAll: (scope: WorkspaceScopeLike) => Promise<void>
   addNode: (node: Omit<OutlineNode, 'id' | 'createdAt' | 'updatedAt'>, scope?: WorkspaceScope) => Promise<number>
-  updateNode: (id: number, data: Partial<OutlineNode>, options?: { scope?: WorkspaceScope; expected?: Partial<OutlineNode> }) => Promise<void>
+  updateNode: OutlineTextUpdateV1
   deleteNode: (id: number, scope?: WorkspaceScope) => Promise<void>
   deleteNodes: (ids: number[], scope?: WorkspaceScope) => Promise<void>
   /** 批量添加节点（AI 生成大纲后） */
@@ -42,7 +49,7 @@ interface OutlineStore {
 }
 
 const now = () => Date.now()
-let loadSequence = 0
+let loadSequence = 0, confirmedWriteRevision = 0
 const sameWork = (a: WorkspaceScope | null, b: WorkspaceScope) => a?.projectId === b.projectId && a.worldId === b.worldId && a.workId === b.workId
 const authorFields = new Map((FIELD_BY_TARGET.get('outlineNodes') ?? []).filter(field => !field.adoptionPolicy).map(field => [field.field, field]))
 
@@ -134,7 +141,14 @@ export const useOutlineStore = create<OutlineStore>((set, get) => ({
       const scope = await resolveReadScopeLike(scopeInput)
       if (request !== loadSequence) return
       if (!sameWork(get().loadedScope, scope)) set({ nodes: [], loadedScope: null })
-      const nodes = (await readOwnedRows<OutlineNode>(scope, 'outlineNodes', { owner: 'work' })).sort((a, b) => a.order - b.order).map(normalizeOutlineNode)
+      let nodes: OutlineNode[] = [], observed = -1
+      for (let attempt = 0; attempt < 3; attempt++) {
+        observed = confirmedWriteRevision
+        nodes = (await readOwnedRows<OutlineNode>(scope, 'outlineNodes', { owner: 'work' })).sort((a, b) => a.order - b.order).map(normalizeOutlineNode)
+        if (request !== loadSequence) return
+        if (observed === confirmedWriteRevision) break
+      }
+      if (observed !== confirmedWriteRevision) throw new Error('读取期间大纲持续变化，请重新读取。')
       if (request === loadSequence) set({ nodes, loading: false, loadedScope: scope })
     } catch (cause) {
       if (request === loadSequence) set({ loading: false, loadError: cause instanceof Error ? cause.message : '大纲读取失败。' })
@@ -162,8 +176,14 @@ export const useOutlineStore = create<OutlineStore>((set, get) => ({
     })
   },
 
-  updateNode: (id, input, options) => {
+  updateNode: ((id: number, input: Partial<OutlineNode>, options?: { scope?: WorkspaceScope; expected?: Partial<OutlineNode>; confirmation?: LocalSaveIntentV1 }) => {
     const data = structuredClone(input)
+    const confirmation = options?.confirmation ? structuredClone(options.confirmation) : undefined
+    if (confirmation && Dexie.currentTransaction) return Promise.reject(new Error('文字保存确认需要独立提交。'))
+    let proof: ReturnType<typeof recordTextSaveRequestV1> | undefined
+    try { proof = confirmation ? recordTextSaveRequestV1('outlineNodes', id, data, options?.scope, confirmation) : undefined }
+    catch (error) { return Promise.reject(error) }
+    let ack: LocalSaveAckV1 | undefined
     const cached = get().nodes.find(node => node.id === id)
     const selected = options?.scope ? { ...options.scope } : (cached ? get().loadedScope ?? undefined : undefined)
     const expected = structuredClone(options?.expected ?? cached)
@@ -172,7 +192,7 @@ export const useOutlineStore = create<OutlineStore>((set, get) => ({
       return resolveScopeLike(row.projectId)
     })
     void scopePromise.catch(() => undefined)
-    return coordinatePendingEditV1({
+    const operation = coordinatePendingEditV1({
       key: `outline-node:${id}`,
       persist: async () => {
         for (const [key, value] of Object.entries(data)) {
@@ -187,14 +207,18 @@ export const useOutlineStore = create<OutlineStore>((set, get) => ({
         const scope = await scopePromise
         const saved = await db.transaction('rw', scopeTransactionTables(db.outlineNodes, db.chapters, db.worldGroups), async () => {
           await resolveScopeLike(scope)
-          const before = await db.outlineNodes.get(id)
+          const transaction = Dexie.currentTransaction!
+          const table = transaction.table<OutlineNode, number>('outlineNodes')
+          const update = db.outlineNodes.update.bind(table)
+          const before = await table.get(id)
           if (!before || !await assertRecordInScope(scope, 'outlineNodes', before, { owner: 'work' })) throw new Error('大纲节点已删除或作品归属已变化，输入尚未保存。')
           if (expected && Object.keys(data).some(key => JSON.stringify(before[key as keyof OutlineNode]) !== JSON.stringify(expected[key as keyof OutlineNode]))) throw new Error('大纲字段已被其他页面修改，输入已保留，请核对后保存。')
+          if (confirmation) await Dexie.waitFor(assertRecordTextSaveExpectedV1(before, confirmation, transaction))
           const ts = Math.max(now(), (Number.isFinite(before.updatedAt) ? before.updatedAt : 0) + 1)
           const next = normalizeOutlineNode({ ...before, ...data, updatedAt: ts })
           if ('parentId' in data) await assertParentPath(scope, next.parentId, id)
           if ('worldGroupId' in data) await assertGroup(scope, next.worldGroupId)
-          if (await db.outlineNodes.update(id, { ...data, updatedAt: ts }) !== 1) throw new Error('大纲节点已删除，输入尚未保存。')
+          if (await update(id, { ...data, updatedAt: ts }) !== 1) throw new Error('大纲节点已删除，输入尚未保存。')
           const chapterIds: number[] = []
           if (before.type === 'chapter' && 'title' in data) {
             for (const chapter of await db.chapters.where('outlineNodeId').equals(id).toArray()) {
@@ -203,8 +227,15 @@ export const useOutlineStore = create<OutlineStore>((set, get) => ({
             }
             if (chapterIds.length && await db.chapters.bulkUpdate(chapterIds.map(key => ({ key, changes: { title: next.title, updatedAt: ts } }))) !== chapterIds.length) throw new Error('正文标题未完整保存，请重试。')
           }
+          if (confirmation && proof) await Dexie.waitFor(recordTextSaveAckV1(await table.get(id), confirmation, proof.raw))
           return { next, chapterIds }
         })
+        if (confirmation && proof) {
+          confirmedWriteRevision++
+          const actual = await db.outlineNodes.get(id)
+          ack = await recordTextSaveAckV1(actual, confirmation, proof.raw)
+          saved.next = normalizeOutlineNode(actual!)
+        }
         if (saved.chapterIds.length) {
           const ids = new Set(saved.chapterIds)
           useChapterStore.setState(state => ({
@@ -215,7 +246,8 @@ export const useOutlineStore = create<OutlineStore>((set, get) => ({
         if (sameWork(get().loadedScope, scope)) set({ nodes: get().nodes.map(node => node.id === id ? saved.next : node) })
       },
     })
-  },
+    return operation.then(() => ack)
+  }) as OutlineTextUpdateV1,
 
   deleteNode: (id, scope) => get().deleteNodes([id], scope),
 

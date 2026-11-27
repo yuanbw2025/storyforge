@@ -390,7 +390,9 @@ export default function CharacterPanel({ project, view = 'generator', initialCha
                 glyphColor={GLYPH_COLORS[characters.findIndex(c => c.id === selectedChar.id) % GLYPH_COLORS.length]}
                 project={project}
                 onUpdateField={handleUpdate}
-                onPatch={(patch, expected) => updateCharacter(selectedChar.id!, patch, { scope: loadedScope ?? undefined, expected: expected ?? selectedChar })}
+                onPatch={(patch, expected, confirmation) => confirmation && loadedScope
+                  ? updateCharacter(selectedChar.id!, patch, { scope: loadedScope, expected: expected ?? selectedChar, confirmation })
+                  : updateCharacter(selectedChar.id!, patch, { scope: loadedScope ?? undefined, expected: expected ?? selectedChar })}
                 onReload={() => loadAll(project.id!)}
                 onDelete={() => { void guarded(async () => { await deleteCharacter(selectedChar.id!); setSelected(null) }) }}
                 multiWorld={!!project.enableMultiWorld}

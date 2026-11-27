@@ -1,3 +1,5 @@
+import { useAuthorRecordSavesV1 } from '../shared/AuthorRecordSaveScope'
+import type { LocalSaveIntentV1, LocalSaveAckV1 } from '../../lib/authoring/local-save-evidence'
 import { useMemo } from 'react'
 import { Plus, Sparkles, Trash2, Search, RefreshCw } from 'lucide-react'
 import type { OutlineNode, StoryStructure, WorldGroup } from '../../lib/types'
@@ -22,7 +24,7 @@ interface Props {
   getActiveChapterDrag: GetActiveChapterDrag
   onChapterDragStart: (payload: ChapterDragPayload) => void
   onChapterDragEnd: () => void
-  onUpdateNode: (id: number, patch: Partial<OutlineNode>, options?: { expected?: Partial<OutlineNode> }) => void | Promise<void>
+  onUpdateNode: (id: number, patch: Partial<OutlineNode>, options?: { expected?: Partial<OutlineNode>; confirmation?: LocalSaveIntentV1 }) => void | Promise<void | LocalSaveAckV1>
   onDeleteNode: (id: number) => void
   onGenerateVolume: (volumeId: number) => void
   onGenerateAllChapters: () => void
@@ -66,6 +68,7 @@ export default function OutlineVolumeDetail({
   onReviewChapters,
   onClearChapters,
 }: Props) {
+  const savedText = useAuthorRecordSavesV1('outlineNodes', volume)
   const storyBlocks = useMemo(() => (
     volume
       ? nodes.filter(node => node.parentId === volume.id && node.type === 'storyBlock').sort((a, b) => a.order - b.order)
@@ -99,7 +102,8 @@ export default function OutlineVolumeDetail({
       <div className="flex items-center justify-between">
         <AcknowledgedTextField input label="卷标题"
           value={volume.title}
-          onCommit={(value, expected) => onUpdateNode(volume.id!, { title: value }, { expected: { title: expected as string } })}
+          localSave={savedText('title')}
+          onCommit={(value, expected, confirmation) => onUpdateNode(volume.id!, { title: value }, { expected: { title: expected as string }, ...(confirmation ? { confirmation } : {}) })}
           className="text-lg font-bold bg-transparent text-text-primary outline-none flex-1"
         />
         <div className="flex items-center gap-1.5">
@@ -155,7 +159,8 @@ export default function OutlineVolumeDetail({
         <label className="text-xs text-text-muted mb-1 block">卷情节摘要</label>
         <AcknowledgedTextField markdownRead autoGrow label="卷情节摘要"
           value={volume.summary}
-          onCommit={(value, expected) => onUpdateNode(volume.id!, { summary: value }, { expected: { summary: expected as string } })}
+          localSave={savedText('summary')}
+          onCommit={(value, expected, confirmation) => onUpdateNode(volume.id!, { summary: value }, { expected: { summary: expected as string }, ...(confirmation ? { confirmation } : {}) })}
           placeholder="描述本卷的核心冲突、关键转折和主要情节..."
           rows={3}
           className="w-full px-3 py-2 bg-bg-surface border border-border rounded-md text-text-secondary text-sm focus:outline-none focus:border-accent"

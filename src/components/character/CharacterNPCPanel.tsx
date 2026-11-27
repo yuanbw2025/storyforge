@@ -1,3 +1,4 @@
+import type { LocalSaveIntentV1 } from '../../lib/authoring/local-save-evidence'
 import { useEffect, useState } from 'react'
 import { Plus, Trash2, ChevronDown, ChevronRight } from 'lucide-react'
 import { useCharacterStore } from '../../stores/character'
@@ -48,7 +49,8 @@ export default function CharacterNPCPanel({ project }: Props) {
     motivation: '', abilities: '', relationships: '', arc: '',
   })
 
-  const update = (id: number, patch: Partial<Character>, expected?: Partial<Character>) => updateCharacter(id, patch, { scope: loadedScope ?? undefined, expected })
+  const update = (id: number, patch: Partial<Character>, expected?: Partial<Character>, confirmation?: LocalSaveIntentV1) => confirmation && loadedScope
+    ? updateCharacter(id, patch, { scope: loadedScope, expected, confirmation }) : updateCharacter(id, patch, { scope: loadedScope ?? undefined, expected })
 
   return (
     <>
@@ -89,21 +91,24 @@ export default function CharacterNPCPanel({ project }: Props) {
                 </button>
                 <CharacterDraftField input
                   value={c.name}
-                  onCommit={(value, expected) => update(c.id!, { name: value }, { name: expected } as Partial<Character>)}
+                  character={c} field="name"
+                  onCommit={(value, expected, confirmation) => update(c.id!, { name: value }, { name: expected } as Partial<Character>, confirmation)}
                   dimension={{ label: '姓名', rows: 2 }}
                   placeholder="姓名"
                   className="w-32 flex-shrink-0 px-2 py-1 bg-bg-base border border-border rounded text-sm font-medium text-text-primary focus:outline-none focus:border-accent"
                 />
                 <CharacterDraftField input
                   value={c.location}
-                  onCommit={(value, expected) => update(c.id!, { location: value }, { location: expected } as Partial<Character>)}
+                  character={c} field="location"
+                  onCommit={(value, expected, confirmation) => update(c.id!, { location: value }, { location: expected } as Partial<Character>, confirmation)}
                   dimension={{ label: '常驻地点', rows: 2 }}
                   placeholder="地点"
                   className="w-28 flex-shrink-0 px-2 py-1 bg-bg-base border border-border rounded text-sm text-text-primary focus:outline-none focus:border-accent"
                 />
                 <CharacterDraftField input
                   value={c.shortDescription}
-                  onCommit={(value, expected) => update(c.id!, { shortDescription: value }, { shortDescription: expected } as Partial<Character>)}
+                  character={c} field="shortDescription"
+                  onCommit={(value, expected, confirmation) => update(c.id!, { shortDescription: value }, { shortDescription: expected } as Partial<Character>, confirmation)}
                   dimension={{ label: '一句话简介', rows: 2 }}
                   placeholder="一句话描述（性格/职业/作用）..."
                   className="flex-1 px-2 py-1 bg-bg-base border border-border rounded text-sm text-text-primary focus:outline-none focus:border-accent"
@@ -135,7 +140,7 @@ export default function CharacterNPCPanel({ project }: Props) {
               </div>
               {isOpen && (
                 <div className="mt-3 pl-7">
-                  <CharacterDimensionFields character={c} onChange={(patch, expected) => update(c.id!, patch, expected)} exclude={['shortDescription', 'location']} />
+                  <CharacterDimensionFields character={c} onChange={(patch, expected, confirmation) => update(c.id!, patch, expected, confirmation)} exclude={['shortDescription', 'location']} />
                 </div>
               )}
             </div>

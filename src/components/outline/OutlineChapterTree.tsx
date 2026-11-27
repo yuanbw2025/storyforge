@@ -1,3 +1,5 @@
+import { useAuthorRecordSavesV1 } from '../shared/AuthorRecordSaveScope'
+import type { LocalSaveIntentV1, LocalSaveAckV1 } from '../../lib/authoring/local-save-evidence'
 import { useEffect, useState } from 'react'
 import { ChevronDown, ChevronRight, CornerDownRight, GripVertical, LayoutList, Plus, Sparkles, Trash2 } from 'lucide-react'
 import AcknowledgedTextField from '../shared/AcknowledgedTextField'
@@ -20,7 +22,7 @@ interface ChapterRowProps {
   ch: { id?: number; title: string; summary: string }
   idx: number
   targeted?: boolean
-  onUpdate: (id: number, patch: Record<string, string>, options?: { expected?: Record<string, string> }) => void | Promise<void>
+  onUpdate: (id: number, patch: Record<string, string>, options?: { expected?: Record<string, string>; confirmation?: LocalSaveIntentV1 }) => void | Promise<void | LocalSaveAckV1>
   onDelete: (id: number) => void
   onOpen?: (id: number) => void
   onOpenDetail?: (id: number) => void
@@ -53,6 +55,7 @@ export function OutlineChapterRow({
   onChapterDragStart,
   onChapterDragEnd,
 }: ChapterRowProps) {
+  const savedText = useAuthorRecordSavesV1('outlineNodes', ch)
   const crossParentDrop = parentId != null && onMoveChapter
     ? chapterDropProps({
       targetParentId: parentId,
@@ -119,12 +122,14 @@ export function OutlineChapterRow({
       <div className="flex-1 min-w-0">
         <AcknowledgedTextField input label="章节标题"
           value={ch.title}
-          onCommit={(value, expected) => onUpdate(ch.id!, { title: value }, { expected: { title: expected as string } })}
+          localSave={savedText('title')}
+          onCommit={(value, expected, confirmation) => onUpdate(ch.id!, { title: value }, { expected: { title: expected as string }, ...(confirmation ? { confirmation } : {}) })}
           className="w-full bg-transparent text-text-primary text-sm font-medium outline-none"
         />
         <AcknowledgedTextField markdownRead autoGrow label="章节摘要" rows={1}
           value={ch.summary}
-          onCommit={(value, expected) => onUpdate(ch.id!, { summary: value }, { expected: { summary: expected as string } })}
+          localSave={savedText('summary')}
+          onCommit={(value, expected, confirmation) => onUpdate(ch.id!, { summary: value }, { expected: { summary: expected as string }, ...(confirmation ? { confirmation } : {}) })}
           placeholder="章节摘要（可编辑，失焦自动保存）"
           className="w-full bg-transparent text-text-muted text-xs outline-none mt-0.5 resize-none overflow-hidden leading-relaxed"
         />
@@ -177,7 +182,7 @@ export function OutlineStoryBlockSection({
   block: { id?: number; title: string; summary: string }
   chapters: { id?: number; title: string; summary: string }[]
   initialTargetNodeId?: number | null
-  onUpdateNode: (id: number, patch: Record<string, string>, options?: { expected?: Record<string, string> }) => void | Promise<void>
+  onUpdateNode: (id: number, patch: Record<string, string>, options?: { expected?: Record<string, string>; confirmation?: LocalSaveIntentV1 }) => void | Promise<void | LocalSaveAckV1>
   onDeleteNode: (id: number) => void
   onAddChapter: () => void
   onOpenChapter?: (id: number) => void
@@ -191,6 +196,7 @@ export function OutlineStoryBlockSection({
   onChapterDragStart: (payload: ChapterDragPayload) => void
   onChapterDragEnd: () => void
 }) {
+  const savedText = useAuthorRecordSavesV1('outlineNodes', block)
   const toast = useToast()
   const [expanded, setExpanded] = useState(true)
   const containsInitialTarget = block.id === initialTargetNodeId
@@ -231,7 +237,8 @@ export function OutlineStoryBlockSection({
         <LayoutList className="w-3.5 h-3.5 text-accent/60" />
         <AcknowledgedTextField input label="故事块标题"
           value={block.title}
-          onCommit={(value, expected) => onUpdateNode(block.id!, { title: value }, { expected: { title: expected as string } })}
+          localSave={savedText('title')}
+          onCommit={(value, expected, confirmation) => onUpdateNode(block.id!, { title: value }, { expected: { title: expected as string }, ...(confirmation ? { confirmation } : {}) })}
           className="flex-1 bg-transparent text-text-primary text-sm font-medium outline-none"
         />
         <span className="text-[10px] text-text-muted">{chapters.length} 章</span>
@@ -244,7 +251,8 @@ export function OutlineStoryBlockSection({
       </div>
       <AcknowledgedTextField input label="故事块摘要"
         value={block.summary}
-        onCommit={(value, expected) => onUpdateNode(block.id!, { summary: value }, { expected: { summary: expected as string } })}
+        localSave={savedText('summary')}
+          onCommit={(value, expected, confirmation) => onUpdateNode(block.id!, { summary: value }, { expected: { summary: expected as string }, ...(confirmation ? { confirmation } : {}) })}
         placeholder="故事块描述..."
         className="w-full px-3 py-1.5 bg-bg-surface text-text-muted text-xs border-b border-border focus:outline-none"
       />
