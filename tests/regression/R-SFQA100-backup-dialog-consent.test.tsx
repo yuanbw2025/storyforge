@@ -108,10 +108,13 @@ describe('SFQA-100 real safety dialog and public destructive consumers', () => {
   it('backup must finish before the public deletion continues', async () => {
     const created = await workspace(); await mount()
     let finish!: () => void
-    saveFile.mockImplementationOnce(() => new Promise<void>(resolve => { finish = resolve }))
+    let started!: () => void
+    const backupStarted = new Promise<void>(resolve => { started = resolve })
+    saveFile.mockImplementationOnce(() => new Promise<void>(resolve => { finish = resolve; started() }))
     const deletion = await beginDeletion(created.scope.projectId); await chooseBackup(); await click('立即备份')
     try {
-      await vi.waitFor(() => expect(saveFile).toHaveBeenCalledTimes(1))
+      await backupStarted
+      expect(saveFile).toHaveBeenCalledTimes(1)
       const [blob, filename] = saveFile.mock.calls[0]!
       expect(blob.size).toBeGreaterThan(0); expect(filename).toMatch(/backup-before-删除项目-.*\.json$/)
       expect(deletion.settled()).toBe(false); expect(await db.projects.get(created.scope.projectId)).toBeTruthy()
