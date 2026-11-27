@@ -1,16 +1,20 @@
 import { inputAreaLayoutV1 } from '../../lib/input-area-layout'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, useRef, useContext } from 'react'
 import { GitBranch, Plus, Trash2 } from 'lucide-react'
 import type { Project } from '../../lib/types'
 import {
   cultivationStageTiers,
-  parseCultivationStages,
   stringifyCultivationStages,
   validateCultivationStages,
   type CultivationStage,
   type CultivationSystem,
 } from '../../lib/types/cultivation'
-import { useCultivationStore } from '../../stores/cultivation'
+import { useCultivationStore, type CultivationSaveOptionsV1 } from '../../stores/cultivation'
+import { decodePowerStagesStrictV1 } from '../../lib/cultivation/power-authoring-contract'
+import type { LocalSaveAckV1, LocalSaveIntentV1 } from '../../lib/authoring/local-save-evidence'
+import { AuthorRecordSaveScopeV1, useAuthorRecordSavesV1 } from '../shared/AuthorRecordSaveScope'
+import { flushPendingEditsV1 } from '../../lib/authoring/pending-edit-coordinator'
+import ScopedWorldAuthoringBoundary from '../world-group/ScopedWorldAuthoringBoundary'
 import { useWorldGroupStore } from '../../stores/world-group'
 import { useDialog } from '../shared/Dialog'
 import { useToast } from '../shared/Toast'
@@ -25,33 +29,42 @@ function nextStageId(): string {
   return `stage-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`
 }
 
-export default function CultivationSystemsPanel({
-  project,
-  initialSystemId,
-  resizableInputs = false,
-}: {
-  project: Project
-  resizableInputs?: boolean
-  initialSystemId?: number | null
-}) {
+interface Props { project: Project; resizableInputs?: boolean; initialSystemId?: number | null }
+export default function CultivationSystemsPanel(props: Props) {
+  const activeGroupId = useWorldGroupStore(state => state.activeGroupId)
+  const admitted = useContext(AuthorRecordSaveScopeV1) !== null
+  return <ScopedWorldAuthoringBoundary project={props.project} activeGroupId={activeGroupId}>
+    {view => <AuthorRecordSaveScopeV1.Provider value={admitted ? { projectId: view.project.id!, worldId: view.project.activeWorldId!, workId: view.project.activeWorkId! } : null}>
+      <ScopedCultivationSystemsPanel {...props} {...view} />
+    </AuthorRecordSaveScopeV1.Provider>}
+  </ScopedWorldAuthoringBoundary>
+}
+function inspectStages(raw: string) {
+  try { return { stages: decodePowerStagesStrictV1(raw), error: '' } }
+  catch (cause) { return { stages: [] as CultivationStage[], error: cause instanceof Error ? cause.message : String(cause) } }
+}
+function ScopedCultivationSystemsPanel({ project, initialSystemId, resizableInputs = false, activeGroupId }: Props & { activeGroupId: number | null }) {
   const dialog = useDialog()
   const toast = useToast()
-  const { systems, loadAll, addSystem, updateSystem, deleteSystem } = useCultivationStore()
-  const activeGroupId = useWorldGroupStore(state => state.activeGroupId)
+  const { systems, loadAll, addSystem, updateSystem, deleteSystem, loading, loadError, loadedScope } = useCultivationStore()
+  const scope = useMemo(() => ({ projectId: project.id!, worldId: project.activeWorldId!, workId: project.activeWorkId! }), [project.id, project.activeWorldId, project.activeWorkId])
+  const ready = !loading && !loadError && loadedScope?.projectId === scope.projectId && loadedScope.worldId === scope.worldId && loadedScope.workId === scope.workId
   const groups = useWorldGroupStore(state => state.groups)
   const [selectedId, setSelectedId] = useState<number | null>(null)
 
-  useEffect(() => { loadAll(project.id!) }, [loadAll, project.id])
+  useEffect(() => { void loadAll(scope).catch(() => undefined) }, [loadAll, scope])
 
   const activeBelongsToProject = groups.some(group =>
     group.projectId === project.id && group.id === activeGroupId)
   const worldGroupId = project.enableMultiWorld
     ? (activeBelongsToProject ? activeGroupId! : undefined)
     : null
-  const scoped = useMemo(() => worldGroupId === undefined
-    ? []
-    : systems.filter(system => (system.worldGroupId ?? null) === worldGroupId),
-  [systems, worldGroupId])
+  // Preloads can move the shared store before the boundary receives its new
+  // props. Keep the original disabled editor mounted until its draft flushes.
+  const retained = useRef<CultivationSystem[]>([])
+  if (ready) retained.current = systems
+  const displaySystems = ready ? systems : retained.current
+  const scoped = useMemo(() => worldGroupId === undefined ? [] : displaySystems.filter(system => (system.worldGroupId ?? null) === worldGroupId), [displaySystems, worldGroupId])
   const selected = scoped.find(system => system.id === selectedId) ?? scoped[0] ?? null
 
   useEffect(() => {
@@ -62,6 +75,10 @@ export default function CultivationSystemsPanel({
   }, [initialSystemId, scoped])
   useInitialRecordTarget(initialSystemId, selected?.id === initialSystemId)
 
+  const guarded = async (action: () => void | Promise<void>) => {
+    try { await flushPendingEditsV1(); await action() }
+    catch (cause) { toast.error(cause instanceof Error ? cause.message : String(cause)) }
+  }
   const handleAdd = async () => {
     if (worldGroupId === undefined) {
       toast.error('世界数据尚未加载完成，请稍后再试。')
@@ -78,7 +95,7 @@ export default function CultivationSystemsPanel({
       name,
       description: '',
       stages: '[]',
-    })
+    }, scope)
     setSelectedId(id)
   }
 
@@ -89,11 +106,11 @@ export default function CultivationSystemsPanel({
       confirmText: '删除',
       tone: 'danger',
     })) return
-    await deleteSystem(system.id!)
+    await deleteSystem(system.id!, scope)
   }
 
   return (
-    <section className="mt-8 border-t border-border pt-6">
+    <section aria-label="修炼体系编辑" className="mt-8 border-t border-border pt-6">
       <div className="flex items-start justify-between gap-4 mb-4">
         <div>
           <h2 className="text-lg font-bold text-text-primary flex items-center gap-2">
@@ -104,14 +121,16 @@ export default function CultivationSystemsPanel({
           </p>
         </div>
         <button
-          onClick={handleAdd}
-          disabled={worldGroupId === undefined}
+          onClick={() => { void guarded(handleAdd) }}
+          disabled={!ready || worldGroupId === undefined}
           className="px-3 py-1.5 text-xs rounded-md bg-accent text-white disabled:opacity-40 inline-flex items-center gap-1"
         >
           <Plus className="w-3.5 h-3.5" /> 新增体系
         </button>
       </div>
 
+      {loadError && <p role="alert" className="mb-3 text-sm text-error">{loadError}<button type="button" className="ml-3 underline" onClick={() => { void loadAll(scope).catch(() => undefined) }}>重新读取修炼体系</button></p>}
+      <fieldset disabled={!ready} inert={!ready} className="contents" aria-label="修炼体系读取保护">
       {scoped.length === 0 ? (
         <div className="border border-dashed border-border rounded-xl py-10 text-center text-sm text-text-muted">
           当前世界还没有修炼体系。可创建武夫、术士、剑修等多套独立路径。
@@ -123,7 +142,7 @@ export default function CultivationSystemsPanel({
               <button
                 key={system.id}
                 {...initialRecordTargetAttributes(system.id === initialSystemId, system.id)}
-                onClick={() => setSelectedId(system.id!)}
+                onClick={() => { void guarded(() => setSelectedId(system.id!)) }}
                 className={`w-full px-3 py-2 rounded-lg text-left text-sm border ${
                   selected?.id === system.id
                     ? 'border-accent/40 bg-accent/10 text-accent'
@@ -132,7 +151,7 @@ export default function CultivationSystemsPanel({
               >
                 <span className="block truncate">{system.name}</span>
                 <span className="text-[10px] text-text-muted">
-                  {parseCultivationStages(system.stages).length} 个境界
+                  {inspectStages(system.stages).error ? '阶段数据待修复' : `${inspectStages(system.stages).stages.length} 个境界`}
                 </span>
               </button>
             ))}
@@ -142,12 +161,13 @@ export default function CultivationSystemsPanel({
               resizableInputs={resizableInputs}
               key={selected.id}
               system={selected}
-              onUpdate={patch => updateSystem(selected.id!, patch)}
+              onUpdate={(patch, options) => updateSystem(selected.id!, patch, { ...options, scope })}
               onDelete={() => handleDelete(selected)}
             />
           )}
         </div>
       )}
+      </fieldset>
     </section>
   )
 }
@@ -160,47 +180,44 @@ function CultivationSystemEditor({
 }: {
   system: CultivationSystem
   resizableInputs?: boolean
-  onUpdate: (patch: Partial<CultivationSystem>) => Promise<void>
-  onDelete: () => void
+  onUpdate: (patch: Partial<CultivationSystem>, options?: Omit<CultivationSaveOptionsV1, 'scope'>) => Promise<void | LocalSaveAckV1>
+  onDelete: () => Promise<void>
 }) {
   const toast = useToast()
   const [selectedStageId, setSelectedStageId] = useState<string | null>(null)
-  const stages = useMemo(() => parseCultivationStages(system.stages), [system.stages])
+  const localSave = useAuthorRecordSavesV1('cultivationSystems', system)
+  const graph = useMemo(() => inspectStages(system.stages), [system.stages])
+  const stages = graph.stages
   const tiers = useMemo(() => cultivationStageTiers(stages), [stages])
   const maxTier = Math.max(0, ...tiers.values())
   const selectedStage = stages.find(stage => stage.id === selectedStageId) ?? null
 
-  const saveStages = async (next: CultivationStage[]) => {
+  const guarded = async (action: () => void | Promise<unknown>) => {
+    try { await flushPendingEditsV1(); await action() }
+    catch (cause) { toast.error(cause instanceof Error ? cause.message : String(cause)) }
+  }
+  const latestGraph = () => {
+    const latest = useCultivationStore.getState().systems.find(row => row.id === system.id) ?? system
+    return { source: latest.stages, stages: decodePowerStagesStrictV1(latest.stages) }
+  }
+  const saveStages = async (next: CultivationStage[], expectedStages: string) => {
     const validation = validateCultivationStages(next)
-    if (!validation.valid) {
-      toast.error(validation.errors[0])
-      return false
-    }
-    await onUpdate({ stages: stringifyCultivationStages(next) })
-    return true
+    if (!validation.valid) throw new Error(validation.errors.join('；'))
+    await onUpdate({ stages: stringifyCultivationStages(next) }, { expectedStages })
   }
-  const patchStage = async (id: string, patch: Partial<CultivationStage>) => {
-    await saveStages(stages.map(stage => stage.id === id ? { ...stage, ...patch } : stage))
-  }
+  const patchStage = (stageId: string, patch: Partial<CultivationStage>, confirmation?: LocalSaveIntentV1) => onUpdate({}, {
+    stageEdit: { stageId, patch }, confirmation, ...(confirmation ? {} : { expectedStages: system.stages }),
+  })
   const addStage = async () => {
-    const id = nextStageId()
-    const deepest = [...stages].sort((left, right) =>
-      (tiers.get(right.id) ?? 0) - (tiers.get(left.id) ?? 0))[0]
-    const next: CultivationStage = {
-      id,
-      name: '新境界',
-      features: '',
-      breakthrough: '',
-      parentStageIds: deepest ? [deepest.id] : [],
-      branchLabel: '',
-    }
-    if (await saveStages([...stages, next])) setSelectedStageId(id)
+    const current = latestGraph(), ids = cultivationStageTiers(current.stages), id = nextStageId()
+    const deepest = [...current.stages].sort((left, right) => (ids.get(right.id) ?? 0) - (ids.get(left.id) ?? 0))[0]
+    const next: CultivationStage = { id, name: '新境界', features: '', breakthrough: '', parentStageIds: deepest ? [deepest.id] : [], branchLabel: '' }
+    await saveStages([...current.stages, next], current.source); setSelectedStageId(id)
   }
   const removeStage = async (id: string) => {
-    const next = stages
-      .filter(stage => stage.id !== id)
-      .map(stage => ({ ...stage, parentStageIds: stage.parentStageIds.filter(parentId => parentId !== id) }))
-    if (await saveStages(next)) setSelectedStageId(null)
+    const current = latestGraph()
+    const next = current.stages.filter(stage => stage.id !== id).map(stage => ({ ...stage, parentStageIds: stage.parentStageIds.filter(parent => parent !== id) }))
+    await saveStages(next, current.source); setSelectedStageId(null)
   }
 
   return (
@@ -209,30 +226,34 @@ function CultivationSystemEditor({
         <div className="flex-1 min-w-0">
           <InlineInput
             value={system.name}
-            onChange={name => onUpdate({ name: name.trim() || system.name })}
+            localSave={localSave('name')} onChange={(name, confirmation) => onUpdate({ name }, { confirmation })}
             className="text-lg font-semibold text-text-primary"
           />
           <InlineTextarea markdownRead
             inputAreaLayout={inputAreaLayoutV1(resizableInputs, 'cultivation.description')}
             value={system.description}
-            onChange={description => onUpdate({ description })}
+            localSave={localSave('description')} onChange={(description, confirmation) => onUpdate({ description }, { confirmation })}
             placeholder="点击说明这套体系的核心原理、适用者和代价…"
           />
         </div>
-        <button onClick={onDelete} aria-label="删除修炼体系" className="p-1.5 text-text-muted hover:text-error">
+        <button onClick={() => { void guarded(onDelete) }} aria-label="删除修炼体系" className="p-1.5 text-text-muted hover:text-error">
           <Trash2 className="w-4 h-4" />
         </button>
       </div>
 
       <div className="flex items-center justify-between mt-5 mb-2">
         <h3 className="text-sm font-medium text-text-secondary">境界 DAG</h3>
-        <button onClick={addStage} className="text-xs text-accent inline-flex items-center gap-1">
+        <button onClick={() => { void guarded(addStage) }} disabled={!!graph.error} className="text-xs text-accent inline-flex items-center gap-1">
           <Plus className="w-3.5 h-3.5" /> 添加后续境界
         </button>
       </div>
+      {graph.error && <div role="alert" className="mb-3 rounded border border-error/30 p-3 text-xs text-error">
+        阶段数据无法安全编辑，原始内容已保留。{graph.error}
+        <details><summary>查看原始阶段数据</summary><pre className="whitespace-pre-wrap break-all">{system.stages}</pre></details>
+      </div>}
       <div className="overflow-x-auto border border-border rounded-lg bg-bg-base/50 p-3">
         {stages.length === 0 ? (
-          <button onClick={addStage} className="w-full py-10 text-xs text-text-muted hover:text-accent">
+          <button onClick={() => { void guarded(addStage) }} disabled={!!graph.error} className="w-full py-10 text-xs text-text-muted hover:text-accent">
             添加第一个起始境界
           </button>
         ) : (
@@ -245,7 +266,7 @@ function CultivationSystemEditor({
                   .map(stage => (
                     <button
                       key={stage.id}
-                      onClick={() => setSelectedStageId(stage.id)}
+                      onClick={() => { void guarded(() => setSelectedStageId(stage.id)) }}
                       className={`w-full rounded-lg border p-2 text-left ${
                         selectedStageId === stage.id
                           ? 'border-accent bg-accent/10'
@@ -274,12 +295,12 @@ function CultivationSystemEditor({
               <label className="block text-[11px] text-text-muted mb-1">境界名称</label>
               <InlineInput
                 value={selectedStage.name}
-                onChange={name => patchStage(selectedStage.id, { name })}
+                localSave={localSave('stages.name', selectedStage.id)} onChange={(name, confirmation) => patchStage(selectedStage.id, { name }, confirmation)}
                 className="text-sm font-medium text-text-primary"
               />
             </div>
             <button
-              onClick={() => removeStage(selectedStage.id)}
+              onClick={() => { void guarded(() => removeStage(selectedStage.id)) }}
               aria-label="删除境界"
               className="p-1.5 text-text-muted hover:text-error"
             >
@@ -290,7 +311,7 @@ function CultivationSystemEditor({
             <label className="block text-[11px] text-text-muted mb-1">分支标签</label>
             <InlineInput
               value={selectedStage.branchLabel || ''}
-              onChange={branchLabel => patchStage(selectedStage.id, { branchLabel })}
+              localSave={localSave('stages.branchLabel', selectedStage.id)} onChange={(branchLabel, confirmation) => patchStage(selectedStage.id, { branchLabel }, confirmation)}
               placeholder="如：剑修 / 体修（可空）"
               className="text-sm text-text-primary"
             />
@@ -300,7 +321,7 @@ function CultivationSystemEditor({
             <InlineTextarea markdownRead
               inputAreaLayout={inputAreaLayoutV1(resizableInputs, 'power.stageFeatures')}
               value={selectedStage.features || ''}
-              onChange={features => patchStage(selectedStage.id, { features })}
+              localSave={localSave('stages.features', selectedStage.id)} onChange={(features, confirmation) => patchStage(selectedStage.id, { features }, confirmation)}
               placeholder="能做到什么、不能做到什么…"
             />
           </div>
@@ -309,7 +330,7 @@ function CultivationSystemEditor({
             <InlineTextarea markdownRead
               inputAreaLayout={inputAreaLayoutV1(resizableInputs, 'power.breakthrough')}
               value={selectedStage.breakthrough || ''}
-              onChange={breakthrough => patchStage(selectedStage.id, { breakthrough })}
+              localSave={localSave('stages.breakthrough', selectedStage.id)} onChange={(breakthrough, confirmation) => patchStage(selectedStage.id, { breakthrough }, confirmation)}
               placeholder="资源、领悟、仪式、代价…"
             />
           </div>
@@ -323,11 +344,11 @@ function CultivationSystemEditor({
                     checked={selectedStage.parentStageIds.includes(stage.id)}
                     onChange={() => {
                       const current = selectedStage.parentStageIds
-                      patchStage(selectedStage.id, {
+                      void guarded(() => patchStage(selectedStage.id, {
                         parentStageIds: current.includes(stage.id)
                           ? current.filter(id => id !== stage.id)
                           : [...current, stage.id],
-                      })
+                      }))
                     }}
                   />
                   {stage.name}

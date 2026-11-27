@@ -1,6 +1,8 @@
+import type { Transaction } from 'dexie'
 import { db } from '../db/schema'
 import { remapNarrativeDomainReferencesV1 } from '../narrative-domain/lifecycle'
 import {
+  cultivationLifecycleTableV1,
   detachCultivationProgressSystems,
   refreshCultivationProgressStageSources,
 } from './progress-lifecycle'
@@ -57,22 +59,25 @@ export async function clearRemovedCultivationStageReferences(
   projectId: number,
   systemId: number,
   removedStageIds: ReadonlySet<string>,
+  transaction?: Transaction,
 ): Promise<void> {
   if (removedStageIds.size === 0) return
+  const characterTable = cultivationLifecycleTableV1(db.characters, transaction), entryTable = cultivationLifecycleTableV1(db.codexEntries, transaction)
+  const updateCharacter = db.characters.update.bind(characterTable), updateEntry = db.codexEntries.update.bind(entryTable)
   const [characters, entries] = await Promise.all([
-    db.characters.where('projectId').equals(projectId).toArray(),
-    db.codexEntries.where('projectId').equals(projectId).toArray(),
+    characterTable.where('projectId').equals(projectId).toArray(),
+    entryTable.where('projectId').equals(projectId).toArray(),
   ])
   for (const character of characters) {
     if (character.id != null && character.cultivationSystemId === systemId
       && character.cultivationStageId && removedStageIds.has(character.cultivationStageId)) {
-      await db.characters.update(character.id, { cultivationStageId: null, updatedAt: Date.now() })
+      await updateCharacter(character.id, { cultivationStageId: null, updatedAt: Date.now() })
     }
   }
   for (const entry of entries) {
     if (entry.id != null && entry.cultivationSystemId === systemId
       && entry.cultivationStageId && removedStageIds.has(entry.cultivationStageId)) {
-      await db.codexEntries.update(entry.id, { cultivationStageId: null, updatedAt: Date.now() })
+      await updateEntry(entry.id, { cultivationStageId: null, updatedAt: Date.now() })
     }
   }
 }

@@ -7,6 +7,7 @@ import { resolveHistoryWorkAuthorScopeV1 } from '../workspace/ownership'
 import type { Project, Work, WorkspaceScope } from '../types'
 import type { LocalSaveAckV1, LocalSaveIntentV1, LocalSaveRecordIdentityV1, LocalSaveWitnessV1 } from './local-save-evidence'
 import { DETAILED_SCENE_TASK_FIELDS, normalizeDetailedScenes } from '../types/detailed-outline'
+import { decodePowerStagesStrictV1 } from '../cultivation/power-authoring-contract'
 import { parseAuthorStoryStagesV1 } from '../types/story-arc'
 
 export type RecordTextTableV1 = LocalSaveRecordIdentityV1['table']
@@ -14,22 +15,25 @@ export interface RecordTextRowV1 {
   id?: number; projectId: number; worldId?: number; workId?: number; worldGroupId?: number | null
   ragDocumentId?: string; updatedAt: number
 }
-const prefix = { characters: 'character', outlineNodes: 'outline-node', detailedOutlines: 'detailed-outline', storyArcs: 'story-arc', references: 'reference', foreshadows: 'foreshadow', powerSystems: 'power-system' } as const
+const prefix = { characters: 'character', outlineNodes: 'outline-node', detailedOutlines: 'detailed-outline', storyArcs: 'story-arc', references: 'reference', foreshadows: 'foreshadow', powerSystems: 'power-system', cultivationSystems: 'cultivation-system' } as const
 const sceneTexts = ['title', 'summary', 'location', 'conflict', 'notes', ...DETAILED_SCENE_TASK_FIELDS.map(({ key }) => key)]
 const stageTexts = ['title', 'description', 'turningPoint']
+const cultivationTexts = ['name', 'features', 'breakthrough', 'branchLabel']
 export const recordTextWitnessKeyV1 = (field: string, entryId?: string) => entryId === undefined ? field : JSON.stringify([field, entryId])
 function validAddress(identity: LocalSaveRecordIdentityV1) {
   if (identity.entryId === undefined) return recordAuthorTextFieldsV1(identity.table).includes(identity.field)
   if (typeof identity.entryId !== 'string' || !identity.entryId.trim()) return false
   return identity.table === 'detailedOutlines' ? sceneTexts.some(field => identity.field === `scenes.${field}`)
-    : identity.table === 'storyArcs' && stageTexts.some(field => identity.field === `stages.${field}`)
+    : identity.table === 'storyArcs' ? stageTexts.some(field => identity.field === `stages.${field}`)
+      : identity.table === 'cultivationSystems' && cultivationTexts.some(field => identity.field === `stages.${field}`)
 }
 function addressedValue(row: RecordTextRowV1, identity: LocalSaveRecordIdentityV1): { value: unknown; present: boolean } {
   let target: object = row, field = identity.field
   if (identity.entryId !== undefined) {
     const entries = identity.table === 'detailedOutlines'
       ? normalizeDetailedScenes(Reflect.get(row, 'scenes')).map(scene => ({ id: scene.sceneId, item: scene }))
-      : parseAuthorStoryStagesV1(Reflect.get(row, 'stages')).map(stage => ({ id: stage.id, item: stage }))
+      : identity.table === 'storyArcs' ? parseAuthorStoryStagesV1(Reflect.get(row, 'stages')).map(stage => ({ id: stage.id, item: stage }))
+        : decodePowerStagesStrictV1(Reflect.get(row, 'stages')).map(stage => ({ id: stage.id, item: stage }))
     const entry = entries.find(item => item.id === identity.entryId)
     if (!entry) throw new Error('原场景或阶段已删除，输入已保留。')
     target = entry.item; field = identity.field.slice(identity.field.indexOf('.') + 1)
@@ -54,7 +58,7 @@ export function recordTextSaveRequestV1(table: RecordTextTableV1, id: number, pa
 async function buildWitness(row: RecordTextRowV1 | undefined, identity: LocalSaveRecordIdentityV1,
   source: LocalSaveWitnessV1['source'], selected?: object): Promise<LocalSaveWitnessV1> {
   if (!row || row.id !== identity.recordId || row.projectId !== identity.projectId
-    || (['characters', 'powerSystems'].includes(identity.table) ? row.worldId !== identity.worldId : row.workId !== identity.workId)
+    || (['characters', 'powerSystems', 'cultivationSystems'].includes(identity.table) ? row.worldId !== identity.worldId : row.workId !== identity.workId)
     || (identity.table !== 'characters' && (row.worldGroupId ?? null) !== identity.worldGroupId)
     || !validAddress(identity) || !isPortableResourceUidV1(row.ragDocumentId, prefix[identity.table]))
     throw new Error('文字记录已删除、归属或身份变化，不能确认本机保存。')
@@ -91,6 +95,7 @@ export async function readRecordTextWitnessesV1(table: RecordTextTableV1, id: nu
   const addresses: { field: string; entryId?: string; selected?: object }[] = recordAuthorTextFieldsV1(table).map(field => ({ field }))
   try {
     if (row && table === 'detailedOutlines') addresses.push(...normalizeDetailedScenes(Reflect.get(row, 'scenes')).flatMap(scene => sceneTexts.map(field => ({ field: `scenes.${field}`, entryId: scene.sceneId, selected: scene }))))
+    if (row && table === 'cultivationSystems') addresses.push(...decodePowerStagesStrictV1(Reflect.get(row, 'stages')).flatMap(stage => cultivationTexts.map(field => ({ field: `stages.${field}`, entryId: stage.id, selected: stage }))))
     if (row && table === 'storyArcs') addresses.push(...parseAuthorStoryStagesV1(Reflect.get(row, 'stages')).flatMap(stage => stageTexts.map(field => ({ field: `stages.${field}`, entryId: stage.id, selected: stage }))))
   } catch { /* Damaged nested data stays unconfirmed, without hiding valid scalar fields. */ }
   for (const { selected, ...address } of addresses) {
