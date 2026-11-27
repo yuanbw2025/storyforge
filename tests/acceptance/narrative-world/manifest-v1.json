@@ -21,7 +21,7 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261127-inspiration059-input-v2.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261127-feedback541-context-loading-v2.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
       {
@@ -1482,6 +1482,14 @@
         "path": "tests/acceptance/narrative-world/baseline-20261120-client-release409-v1.json",
         "workPackage": "release-4.0.9-feedback541",
         "note": "Preserve the independent release4.0.9 input measurement and its complete dated receipt before the renewed repair-foundation input measurement. Corpus, observations and earlier lineage remain preserved."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261127-inspiration059-input-v2.json",
+        "note": "Preserved before deferred consistency-impact loading changed the registered context-source input; the new version is actually measured and all observed outcomes are compared without changing corpus or gold."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261127-feedback541-context-loading-v1.json",
+        "note": "Actual intermediate measurement retained; behavior matched previous evidence, before the existing domain receipt drift was discovered by strict combined readback. Not final full-source validation."
       }
     ],
     "comparison": "NW-2E checkpoint of the unchanged legacy v3 120-query comparator. Typed v4 query, exact product plans, current impact diagnostics and scale failures have separate receipts; no model or human quality acceptance is inferred."
