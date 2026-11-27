@@ -325,7 +325,7 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 | `projects` | `enableMultiWorld` `name` |
 | `referenceAnalysisRuns` | `activatedAt` `analysisSummary` `completedAt` `completedChunks` `depth` `error` `expectedChunks` `fileHash` `mergedCharacters` `progress` `referenceId` `rightsConfirmed` `rightsDeclaredAt` `rightsNote` `sourceFilename` `sourceKind` `status` `totalChars` `usageScope` `version` |
 | `referenceChunkAnalysis` | `analysisRunId` `characterCraft` `chunkIndex` `climaxDesign` `conflictEscalation` `dailyLife` `dialogueTechnique` `emotionalBeats` `endOffset` `foreshadowing` `historicalContext` `label` `languageCustoms` `materialCulture` `narrativeStyle` `openingTechnique` `otherTechniques` `pacingControl` `plotStructure` `proseStyle` `rawExcerpt` `referenceId` `socialInstitutions` `startOffset` `worldBuilding` |
-| `references` | `analysisDepth` `analysisError` `analysisProgress` `analysisStatus` `analysisSummary` `fileHash` `genre` `importSessionId` `mergedCharacters` `totalChars` |
+| `references` | `analysisDepth` `analysisError` `analysisProgress` `analysisStatus` `analysisSummary` `fileHash` `genre` `importSessionId` `mergedCharacters` `note` `totalChars` |
 | `screenplayBeats` | `causalFactKeys` `conflict` `decisionKeys` `episodeNumber` `estimatedSeconds` `objective` `order` `outcome` `scope` `sectionKey` `sectionTitle` `sourceUnitKeys` `turn` |
 | `screenplayReviewIssues` | `blockId` `category` `evidence` `problem` `sceneKey` `severity` `sourceUnitKeys` `suggestion` |
 | `screenplaySceneCards` | `beatKey` `conflict` `entryState` `episodeNumber` `estimatedSeconds` `exitState` `informationReveal` `order` `purpose` `sceneNumber` `sourceUnitKeys` `visibleAction` |
@@ -602,4 +602,4 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 
 ---
 
-生成时间基准:commit `499739483`
+生成时间基准:commit `cb6ea14f9`
