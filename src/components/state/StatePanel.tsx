@@ -4,13 +4,17 @@
  * 不改 DB schema：以 characters 为主卡，聚合 stateCards、章节、物品流水、
  * 角色基础地点与势力词条。旧的非角色状态卡保留在库中，但不再作为正式 UI 展示。
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, useContext } from 'react'
 import { liveQuery } from 'dexie'
+import { db } from '../../lib/db/schema'
+import { isPortableResourceUidV1 } from '../../lib/context-gateway/resource-uid'
+import { AuthorRecordSaveScopeV1 } from '../shared/AuthorRecordSaveScope'
+import { LocalSaveStatus } from '../shared/InlineEdit'
 import {
   ArrowRight, BookOpenCheck, Download, Edit3, MapPin, Package, Save, Shield, Sparkles, UserRound, X,
 } from 'lucide-react'
 import type { Character, Project, StateCard, StateField, WorkspaceScope } from '../../lib/types'
-import { readOwnedRows } from '../../lib/workspace/scope'
+import { assertRecordInScope, readOwnedRows } from '../../lib/workspace/scope'
 import { inspectStateFields, stringifyFields, STATE_CATEGORY_LABELS } from '../../lib/types/state-card'
 import { useStateCardStore } from '../../stores/state-card'
 import { useCharacterStore } from '../../stores/character'
@@ -39,6 +43,28 @@ interface Props {
 const LOCATION_KEYS = ['位置', '地点', '所在地', '当前地点', 'location']
 const FACTION_KEYS = ['势力', '所属势力', '归属', '阵营', 'faction']
 const ITEM_KEYS = ['持有物', '物品', '装备', '随身物品', 'item']
+
+/** Verify only the existing Work-owned row; cached props cannot certify a save. */
+function useStateCardLocalSave(card: StateCard | null) {
+  const scope = useContext(AuthorRecordSaveScopeV1)
+  const projectId = scope?.projectId, worldId = scope?.worldId, workId = scope?.workId
+  const key = scope && card?.id != null ? JSON.stringify([projectId, worldId, workId, card.id, Reflect.get(card, 'ragDocumentId'), card.fields, card.updatedAt]) : null
+  const [confirmed, setConfirmed] = useState<string | null>(null)
+  const id = card?.id, expected = card?.fields, expectedUid = card ? Reflect.get(card, 'ragDocumentId') : undefined
+  useEffect(() => {
+    if (!key || !scope || id == null) return
+    let active = true
+    const target = { ...scope }
+    void db.stateCards.get(id).then(async actual => {
+      if (!actual || Reflect.get(actual, 'ragDocumentId') !== expectedUid || !isPortableResourceUidV1(Reflect.get(actual, 'ragDocumentId'), 'state-card')
+        || !await assertRecordInScope(target, 'stateCards', actual, { owner: 'work' }) || actual.fields !== expected
+        || !inspectStateFields(actual.fields).ok) throw new Error('状态本机保存尚未确认。')
+      if (active) setConfirmed(key)
+    }).catch(() => { if (active) setConfirmed(null) })
+    return () => { active = false }
+  }, [key, projectId, worldId, workId, scope, id, expected, expectedUid])
+  return scope ? key !== null && confirmed === key : undefined
+}
 
 function findField(fields: StateField[], keys: string[]): string {
   const normalized = keys.map(key => key.toLocaleLowerCase())
@@ -248,8 +274,9 @@ function Summary({ label, value, accent }: { label: string; value: number; accen
 type SaveStateFields = (fields: StateField[], expectedFields: unknown) => Promise<void>
 
 /** One edit session owns its original record/writer until saved or explicitly discarded. */
-function StateFieldsEditor({ rawFields, sourceKey, onSave, onClose }: {
+function StateFieldsEditor({ rawFields, sourceKey, onSave, onClose, confirmed }: {
   rawFields: string
+  confirmed?: boolean
   sourceKey: string
   onSave: SaveStateFields
   onClose: () => void
@@ -359,7 +386,9 @@ function StateFieldsEditor({ rawFields, sourceKey, onSave, onClose }: {
         <button type="button" className="underline"
           onClick={() => { void saveDraft(true, rawFields).then(onClose).catch(() => undefined) }}>用本地输入替换已查看版本</button>
       </div>}
-      {error && <p role="alert" className="text-xs text-error">{error}</p>}
+      {confirmed !== undefined ? <LocalSaveStatus status={error ? 'failed' : saving ? 'saving' : dirty.current || composing ? 'dirty' : confirmed ? 'saved' : 'unconfirmed'}
+        error={error} retryLabel="重试保存状态" retry={() => { void saveDraft(true).then(onClose).catch(() => undefined) }} />
+        : error && <p role="alert" className="text-xs text-error">{error}</p>}
       <div className="flex items-center justify-between">
         <button type="button" className="text-xs text-accent" onClick={() => changeDraft([...draftRef.current, { key: '', value: '' }])}>+ 添加字段</button>
         <div className="flex items-center gap-3">
@@ -387,6 +416,7 @@ function StandaloneStateTargetCard({
   ownerKey: string
   onSave: SaveStateFields
 }) {
+  const confirmed = useStateCardLocalSave(card)
   const result = useMemo(() => inspectStateFields(card.fields), [card.fields])
   const fields = useMemo(() => result.ok ? result.fields : [], [result])
   const [editing, setEditing] = useState(false)
@@ -419,7 +449,7 @@ function StandaloneStateTargetCard({
       </div>
 
       {editing ? (
-        <StateFieldsEditor rawFields={card.fields} sourceKey={`${ownerKey}:card:${card.id}`} onSave={onSave} onClose={() => setEditing(false)} />
+        <StateFieldsEditor rawFields={card.fields} sourceKey={`${ownerKey}:card:${card.id}`} onSave={onSave} onClose={() => setEditing(false)} confirmed={confirmed} />
       ) : fields.length ? (
         <div className="mt-3 flex flex-wrap gap-1.5">
           {fields.map((field, index) => (
@@ -431,6 +461,7 @@ function StandaloneStateTargetCard({
       ) : (
         <p className="mt-3 text-xs text-text-muted">暂无状态字段。</p>
       )}
+      {!editing && confirmed !== undefined && <LocalSaveStatus status={confirmed ? 'saved' : 'unconfirmed'} error="" retry={() => undefined} />}
     </article>
   )
 }
@@ -453,6 +484,7 @@ function CharacterStateCard({
   onClose: () => void
   onSave: SaveStateFields
 }) {
+  const confirmed = useStateCardLocalSave(card)
   const cardFields = card ? card.fields : '[]'
   const result = useMemo(() => inspectStateFields(cardFields), [cardFields])
   const fields = useMemo(() => result.ok ? result.fields : [], [result])
@@ -493,7 +525,7 @@ function CharacterStateCard({
       </div>
 
       {editing ? (
-        <StateFieldsEditor rawFields={cardFields} sourceKey={`${ownerKey}:card:${card?.id ?? `new:${character.id}`}`} onSave={onSave} onClose={onClose} />
+        <StateFieldsEditor rawFields={cardFields} sourceKey={`${ownerKey}:card:${card?.id ?? `new:${character.id}`}`} onSave={onSave} onClose={onClose} confirmed={confirmed} />
       ) : (
         <>
           <div className="grid grid-cols-2 gap-2 mt-4">
@@ -524,6 +556,7 @@ function CharacterStateCard({
           </div>
         </>
       )}
+      {!editing && card && confirmed !== undefined && <LocalSaveStatus status={confirmed ? 'saved' : 'unconfirmed'} error="" retry={() => undefined} />}
     </article>
   )
 }
