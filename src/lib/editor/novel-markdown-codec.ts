@@ -120,6 +120,10 @@ export function compileNovelMarkdownV1(state: EditorState, reuse?: (from: number
   }
   const syntaxSignature = (node: SyntaxNode, from: number, to: number): string => {
     const visit = (parent: SyntaxNode): unknown[] => {
+      // Inline delimiter leaves have no descendant signature. Dense chapters
+      // contain tens of thousands: do not allocate an index/key for every leaf
+      // on each keystroke. Container/range signatures remain unchanged.
+      if (!parent.firstChild) return []
       const parts: unknown[] = []
       for (const child of childrenInRange(parent, from, to)) {
         if (child.to <= from) continue
