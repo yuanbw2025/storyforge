@@ -11,16 +11,18 @@
 
 import { create } from 'zustand'
 import Dexie, { type Table, type Transaction, type UpdateSpec } from 'dexie'
-import type { History, WorkspaceScope, WorldOwnerScope } from '../lib/types'
+import type { CreativeRules, History, WorkspaceScope, WorldOwnerScope } from '../lib/types'
 import {
   copyHistoryAuthorOriginV1, copyHistoryAuthorSelectionV1, copyHistoryTextPatchV1,
   historyAuthorRecordV1, HISTORY_TEXT_DEFAULTS_V1,
   type HistoryAuthorOriginV1, type HistoryAuthorPartitionV1, type HistoryAuthorSelectionV1, type HistoryTextPatchV1,
 } from '../lib/types/history'
 import { db } from '../lib/db/schema'
-import { assertRecordInScope, getTableSpec, readOwnedRows, readOwnedRowsInTransactionV1, resolveScopeLike, stampNewRecord, type WorkspaceScopeLike } from '../lib/workspace/scope'
+import { assertRecordInScope, getTableSpec, readOwnedRows, readOwnedRowsInTransactionV1, resolveScopeLike, scopeTransactionTables, stampNewRecord, type WorkspaceScopeLike } from '../lib/workspace/scope'
 import { resolveHistoryWorkAuthorScopeV1, resolveWorldAuthoringOwnershipV1 } from '../lib/workspace/ownership'
 import { coordinatePendingEditV1 } from '../lib/authoring/pending-edit-coordinator'
+import type { LocalSaveAckV1, LocalSaveIntentV1 } from '../lib/authoring/local-save-evidence'
+import { assertCreativeRuleSaveExpectedV1, creativeRuleSaveRequestV1, creativeRuleTextWitnessV1 } from '../lib/authoring/creative-rules-local-save-evidence'
 
 const now = () => Date.now()
 
@@ -45,6 +47,10 @@ type DbTableKey = {
  * - `K` 是暴露给 UI 的字段名（例如 `'geography'`）
  * - `T` 是记录类型（例如 `Geography`）
  */
+interface SingletonSave<T> {
+  (data: Partial<T>, scope?: WorkspaceScopeLike): Promise<void>
+  (data: Partial<T>, scope: WorkspaceScope, confirmation: LocalSaveIntentV1): Promise<LocalSaveAckV1>
+}
 export type ProjectSingletonStore<K extends string, T extends ProjectScopedRecord> = {
   loading: boolean
   loadError: string | null
@@ -52,7 +58,7 @@ export type ProjectSingletonStore<K extends string, T extends ProjectScopedRecor
   /** 当前加载的世界组（null = 单世界 / 未指定，Phase 25.4） */
   activeWorldGroupId: number | null
   loadAll: (scope: WorkspaceScopeLike, worldGroupId?: number | null) => Promise<void>
-  save: (data: Partial<T>, scope?: WorkspaceScopeLike) => Promise<void>
+  save: SingletonSave<T>
 } & { [P in K]: T | null }
 
 export interface HistoryAuthorSingletonStateV1 {
@@ -133,6 +139,7 @@ export function createProjectSingletonStore<K extends string, T extends ProjectS
 
   return create<State>((set, get) => {
     let loadRequest = 0
+    let loadingScope: WorkspaceScope | null = null
     let historyView: { request: number; origin: HistoryAuthorOriginV1; selection: HistoryAuthorSelectionV1 } | null = null
     const historyAdmissions = new Map<number, Promise<void>>()
     // Reserve registration order at API invocation, before a legacy numeric
@@ -308,11 +315,13 @@ export function createProjectSingletonStore<K extends string, T extends ProjectS
 
       loadAll: async (scopeInput: WorkspaceScopeLike, worldGroupId: number | null = null) => {
         const request = ++loadRequest
+        loadingScope = null
         historyView = null
         set({ loading: true, loadError: null, loadedScope: null, activeWorldGroupId: worldGroupId,
           ...(historyAuthoring ? { loadedHistoryAuthorOrigin: null, loadedHistoryAuthorSelection: null } : {}) } as Partial<State> as State)
         try {
           const scope = await resolveScopeLike(scopeInput)
+          if (request === loadRequest) loadingScope = scope
           const owner = getTableSpec(String(table)).domainOwner?.defaultOwner
           const scopedRows = await readOwnedRows<T>(scope, String(table), {
             owner: owner === 'world' || owner === 'work' ? owner : undefined,
@@ -325,12 +334,17 @@ export function createProjectSingletonStore<K extends string, T extends ProjectS
           if (request === loadRequest) set({ loadError: cause instanceof Error ? cause.message : String(cause) } as Partial<State> as State)
           throw cause
         } finally {
-          if (request === loadRequest) set({ loading: false } as Partial<State> as State)
+          if (request === loadRequest) { loadingScope = null; set({ loading: false } as Partial<State> as State) }
         }
       },
 
-      save: async (input: Partial<T>, targetScope?: WorkspaceScopeLike) => {
+      save: (async (input: Partial<T>, targetScope?: WorkspaceScopeLike, confirmation?: LocalSaveIntentV1) => {
         const data = { ...input }
+        const proof = confirmation ? structuredClone(confirmation) : undefined
+        if (proof && (table !== 'creativeRules' || typeof targetScope !== 'object')) throw new Error('本机保存字段或作用域凭据无效。')
+        if (proof && Dexie.currentTransaction) throw new Error('本机保存确认需要独立提交事务。')
+        const proofRequest = proof ? creativeRuleSaveRequestV1(data as Record<string, unknown>, targetScope as WorkspaceScope, proof) : undefined
+        let completedAck: LocalSaveAckV1 | undefined
         const state = get()
         const memoryCurrent = (state as unknown as Record<string, T | null>)[key]
         const spec = getTableSpec(String(table))
@@ -356,56 +370,88 @@ export function createProjectSingletonStore<K extends string, T extends ProjectS
             }
             const publish = (record: T) => {
               const current = get()
+              if (proof && historyView === null && (sameScope(current.loadedScope, scope) || sameScope(loadingScope, scope))) {
+                // A fresh committed record supersedes any older same-owner read.
+                loadRequest++; loadingScope = null
+                set({ [key]: record, loadedScope: scope, loading: false, loadError: null } as unknown as Partial<State> as State)
+                return
+              }
               if (request === loadRequest && historyView === null && !current.loading && sameScope(current.loadedScope, scope)
                 && (current.activeWorldGroupId === groupId
                   || (current.activeWorldGroupId == null && memoryCurrent?.id === record.id))) {
                 set({ [key]: record } as unknown as Partial<State> as State)
               }
             }
-            // 缓存只能供界面展示；每次写入都从指定 owner 作用域定位真实单例。
-            const all = await readOwnedRows<T>(scope, String(table), {
-              owner: owner === 'world' || owner === 'work' ? owner : undefined,
-            })
-            const current = (groupId == null
-              ? (all.find(r => ((r as { worldGroupId?: number | null }).worldGroupId ?? null) === null) ?? all[0])
-              : all.find(r => (r as { worldGroupId?: number | null }).worldGroupId === groupId)) ?? null
-            if (data.id != null && data.id !== current?.id) {
-              throw new Error('单例保存记录不属于指定作用域')
-            }
-            if (ownerField !== 'projectId') {
-              const supplied = (data as Record<string, unknown>)[ownerField]
-              if (supplied != null && supplied !== scope[ownerField]) {
-                throw new Error('单例保存不能更改数据 owner')
+            const write = async (transaction?: Transaction): Promise<T | undefined> => {
+              const writeTable = transaction ? transaction.table<T, number>(String(table)) : getTable()
+              // 缓存只能供界面展示；每次写入都从指定 owner 作用域定位真实单例。
+              // Admit the registered reader in the root transaction's zone,
+              // before native awaits; subsequent I/O uses its captured table.
+              const reading = readOwnedRows<T>(scope, String(table), {
+                owner: owner === 'world' || owner === 'work' ? owner : undefined,
+              })
+              void reading.catch(() => undefined)
+              if (proof) await resolveHistoryWorkAuthorScopeV1(scope, transaction)
+              const all = await reading
+              const current = (groupId == null
+                ? (all.find(r => ((r as { worldGroupId?: number | null }).worldGroupId ?? null) === null) ?? all[0])
+                : all.find(r => (r as { worldGroupId?: number | null }).worldGroupId === groupId)) ?? null
+              if (proof) {
+                if (all.length > 1) throw new Error('创作规则记录不唯一，已保留草稿。')
+                await assertCreativeRuleSaveExpectedV1((current ?? undefined) as unknown as CreativeRules | undefined, scope, proof, transaction!)
+                if (!current && proofRequest!.raw === '') throw new Error('尚未填写：空字段未创建记录，不能确认已保存。')
+              }
+              if (data.id != null && data.id !== current?.id) {
+                throw new Error('单例保存记录不属于指定作用域')
+              }
+              if (ownerField !== 'projectId') {
+                const supplied = (data as Record<string, unknown>)[ownerField]
+                if (supplied != null && supplied !== scope[ownerField]) {
+                  throw new Error('单例保存不能更改数据 owner')
+                }
+              }
+
+              if (current?.id) {
+                const ts = now()
+                const written = await writeTable.update(
+                  current.id,
+                  { ...data, updatedAt: ts } as UpdateSpec<T>,
+                )
+                if (!written) throw new Error('单例保存目标已不存在，请重新读取')
+                return proof ? await writeTable.get(current.id) : { ...current, ...data, updatedAt: ts }
+              }
+
+              if (data.projectId) {
+                const ts = now()
+                const toInsert = stampNewRecord(scope, String(table), {
+                  ...(defaults as object),
+                  projectId: data.projectId,
+                  // 多世界模式下盖章当前世界组（单世界时为 null，不影响）
+                  ...(groupId != null ? { worldGroupId: groupId } : {}),
+                  createdAt: ts,
+                  updatedAt: ts,
+                  ...data,
+                } as T, {
+                  owner: owner === 'world' ? 'world' : 'work',
+                })
+                const id = (await writeTable.add(toInsert)) as number
+                return proof ? await writeTable.get(id) : { ...toInsert, id }
               }
             }
-
-            if (current?.id) {
-              const ts = now()
-              const written = await getTable().update(
-                current.id,
-                { ...data, updatedAt: ts } as UpdateSpec<T>,
-              )
-              if (!written) throw new Error('单例保存目标已不存在，请重新读取')
-              publish({ ...current, ...data, updatedAt: ts })
-              return
-            }
-
-            if (data.projectId) {
-              const ts = now()
-              const toInsert = stampNewRecord(scope, String(table), {
-                ...(defaults as object),
-                projectId: data.projectId,
-                // 多世界模式下盖章当前世界组（单世界时为 null，不影响）
-                ...(groupId != null ? { worldGroupId: groupId } : {}),
-                createdAt: ts,
-                updatedAt: ts,
-                ...data,
-              } as T, {
-                owner: owner === 'world' ? 'world' : 'work',
-              })
-              const id = (await getTable().add(toInsert)) as number
-              publish({ ...toInsert, id })
-            }
+            const written = proof ? await db.transaction('rw', scopeTransactionTables(getTable()), () => Dexie.waitFor(write(Dexie.currentTransaction!).then(record => {
+              if (!record || (record as unknown as Record<string, unknown>)[proofRequest!.field] !== proofRequest!.raw) throw new Error('事务内精确保存校验失败。')
+              return creativeRuleTextWitnessV1(record as unknown as CreativeRules, scope, proofRequest!.field, 'committed-write').then(() => record)
+            }))) : await write()
+            if (!written) return
+            if (proof) {
+              await resolveScopeLike(scope)
+              const rows = await readOwnedRows<CreativeRules>(scope, 'creativeRules', { owner: 'work' }), row = rows[0]
+              if (rows.length !== 1 || row.id !== written.id || row.ragDocumentId !== (written as unknown as CreativeRules).ragDocumentId
+                || row[proofRequest!.field] !== proofRequest!.raw) throw new Error('提交后字段已变化，未确认保存；已保留草稿。')
+              completedAck = { kind: 'natural-field-local-save-ack-v1', session: proof.session, generation: proof.generation,
+                witness: await creativeRuleTextWitnessV1(row, scope, proofRequest!.field, 'committed-write') }
+              publish(row as unknown as T)
+            } else publish(written)
           },
         })
         // Admit in call order even when a numeric project must first read its active pointers.
@@ -417,7 +463,8 @@ export function createProjectSingletonStore<K extends string, T extends ProjectS
           persist: () => historyAdmission ?? register(),
         })
         await admitted.write
-      },
+        return completedAck
+      }) as SingletonSave<T>,
       ...(historyAuthoring ? authorActions : {}),
     } as State
   })

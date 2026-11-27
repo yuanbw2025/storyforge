@@ -33,6 +33,42 @@ async function flush(page: Page) {
   })
 }
 const pane = (page: Page) => page.locator('.lf-world-field:visible').first()
+test('050 CreativeRules native original writer confirms three text fields and quota retry after reload', async ({ page }) => {
+  const scope = await seed(page); await page.goto(`./workspace/${scope.projectId}?module=rules`)
+  const box = (label: string) => page.locator('.mb-6').filter({ has: page.locator('label').filter({ hasText: new RegExp(`^${label}$`) }) })
+  const enter = async (label: string) => {
+    const field = box(label)
+    await expect(field.locator('[data-local-save-status]')).toBeVisible()
+    await field.getByRole('button', { name: '编辑源码', exact: true }).or(field.locator('div.cursor-text')).first().click()
+    return field.locator('textarea')
+  }
+  const style = await enter('写作风格'); await style.fill('# 作者风格\n\n原文与尾空白🌊。  ')
+  const styleRaw = await style.inputValue(); await flush(page)
+  await expect(box('写作风格').locator('[data-local-save-status]')).toHaveAttribute('data-local-save-status', 'saved')
+  await page.evaluate(async () => {
+    const { db } = await (new Function('return import("/storyforge/src/lib/db/schema.ts")'))()
+    const fault = () => { throw new DOMException('isolated rules quota failure', 'QuotaExceededError') }
+    db.creativeRules.hook('updating', fault)
+    Object.assign(window, { clearRules050Fault: () => db.creativeRules.hook('updating').unsubscribe(fault) })
+  })
+  const atmosphere = await enter('基调和氛围'); await atmosphere.fill('失败时仍保留的氛围原文。  ')
+  await expect(flush(page)).rejects.toThrow('isolated rules quota failure')
+  await expect(box('基调和氛围').locator('[data-local-save-status]')).toHaveAttribute('data-local-save-status', 'failed')
+  await expect(atmosphere).toHaveValue('失败时仍保留的氛围原文。  ')
+  await page.evaluate(() => (window as unknown as { clearRules050Fault: () => void }).clearRules050Fault())
+  await box('基调和氛围').getByRole('button', { name: '重试', exact: true }).click()
+  await expect(box('基调和氛围').locator('[data-local-save-status]')).toHaveAttribute('data-local-save-status', 'saved')
+  const special = await enter('特殊创作要求'); await special.fill('特殊要求完整保存。  '); await flush(page)
+  await expect(box('特殊创作要求').locator('[data-local-save-status]')).toHaveAttribute('data-local-save-status', 'saved')
+  await page.reload(); await expect(box('写作风格').locator('[data-local-save-status]')).toHaveAttribute('data-local-save-status', 'saved')
+  const rows = await page.evaluate(async scope => {
+    const { readOwnedRows } = await (new Function('return import("/storyforge/src/lib/workspace/scope.ts")'))()
+    return readOwnedRows(scope, 'creativeRules', { owner: 'work' })
+  }, scope)
+  expect(rows).toHaveLength(1)
+  expect(rows[0]).toMatchObject({ workId: scope.workId, writingStyle: styleRaw, atmosphere: '失败时仍保留的氛围原文。  ',
+    specialRequirements: '特殊要求完整保存。  ', narrativePOV: 'third-limited', prohibitions: '[]' })
+})
 test('050 StoryCore native first-create and failed retry confirm exact registered Work fields after reload', async ({ page }) => {
   const scope = await seed(page); await page.goto(`./workspace/${scope.projectId}?module=story-design`)
   const state = page.locator('[data-local-save-status]:visible')
