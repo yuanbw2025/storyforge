@@ -42,6 +42,13 @@ async function focusCm(page: Page) {
   await page.locator('.cm-content').click()
 }
 
+async function redoCm(page: Page) {
+  // Use historyKeymap's primary platform binding, rather than assuming the
+  // macOS Shift-Z alias is the portable redo shortcut.
+  const mac = await page.evaluate(() => /Mac/.test(navigator.platform))
+  await page.keyboard.press(mac ? 'Meta+Shift+z' : 'Control+y')
+}
+
 async function saveChapter(page: Page) {
   await page.getByRole('button', { name: '保存', exact: true }).click()
   await expect(page.getByRole('button', { name: '已保存', exact: true })).toBeVisible({ timeout: 20_000 })
@@ -98,9 +105,9 @@ test('生产路径：空章默认实时预览，键盘输入/撤销/源码切换
   await page.keyboard.press('ControlOrMeta+z')
   const undoneText = await page.locator('.cm-content').innerText()
   expect(undoneText).not.toBe(typedText)
-  await page.keyboard.press('ControlOrMeta+Shift+z')
-  await page.keyboard.press('ControlOrMeta+Shift+z')
-  await page.keyboard.press('ControlOrMeta+Shift+z')
+  await redoCm(page)
+  await redoCm(page)
+  await redoCm(page)
   await expect.poll(async () => page.locator('.cm-content').innerText()).toBe(typedText)
 
   // 源码 ↔ 实时预览切换：0 章节写入（先等既有自动保存落定，排除 autosave 干扰）
@@ -122,7 +129,7 @@ test('生产路径：空章默认实时预览，键盘输入/撤销/源码切换
   const textAtSwitch = await page.locator('.cm-content').innerText()
   await page.keyboard.press('ControlOrMeta+z')
   await expect.poll(async () => page.locator('.cm-content').innerText()).not.toBe(textAtSwitch)
-  await page.keyboard.press('ControlOrMeta+Shift+z')
+  await redoCm(page)
   await expect.poll(async () => page.locator('.cm-content').innerText()).toBe(textAtSwitch)
 
   expect(net.counters.model).toBe(0)
