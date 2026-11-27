@@ -160,7 +160,11 @@ describe('R-HARNESS1 · 只读 Runner durable adapter', () => {
     const fetchMock = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
       expect(String(url)).toBe('https://example.invalid/v1/chat/completions')
       expect(init?.method).toBe('POST')
-      expect(JSON.parse(String(init?.body))).toMatchObject({ model: config.model, max_tokens: 1024, stream: false })
+      const body = JSON.parse(String(init?.body))
+      expect(body).toMatchObject({ model: config.model, stream: false })
+      // This service fixture declares a context window, not a verified output cap.
+      // The legacy application setting must not become a physical wire limit.
+      expect(body).not.toHaveProperty('max_tokens')
       return new Response(JSON.stringify({
         choices: [{ message: { content: '{"type":"final","answer":"客户端检查完成"}' } }],
         usage: { prompt_tokens: 120, completion_tokens: 20, total_tokens: 140 },

@@ -1,4 +1,4 @@
-import { expect, test, type BrowserContext, type Page } from '@playwright/test'
+import { expect, test, type BrowserContext, type Locator, type Page } from '@playwright/test'
 
 // External proposal only. Root must review and assign a browser window before execution.
 // Browser fixture writes use actual public APIs against a fresh isolated IndexedDB.
@@ -128,6 +128,13 @@ async function openCodex(page: Page, url: string) {
   await lookup.getByText(ROOT_NAME, { exact: true }).click()
   await lookup.getByText(KNOWN_NAME, { exact: true }).click()
   return lookup
+}
+
+async function expectDescriptionEditor(lookup: Locator, description: string) {
+  const reading = lookup.locator('[data-markdown-read-view]').filter({ hasText: '完整作者词条：' })
+  await expect(reading.locator('[data-markdown-body]')).toContainText('完整作者词条：')
+  await reading.getByRole('button', { name: '编辑源码', exact: true }).click()
+  await expect(lookup.getByPlaceholder('详细描述', { exact: true })).toHaveValue(description)
 }
 
 async function databaseSnapshot(page: Page): Promise<Record<string, string>> {
@@ -261,7 +268,7 @@ function expectedAfterSystemBootstrap049(before: Record<string, string>, after: 
 test('049 actual delete confirmation includes late uncached native descendants and preserves other owners and historical Release values', async ({ page }, info) => {
   const f = await seed(page, false)
   const lookup = await openCodex(page, f.url)
-  await expect(lookup.getByPlaceholder('详细描述', { exact: true })).toHaveValue(f.description)
+  await expectDescriptionEditor(lookup, f.description)
   const dialog = await openDelete(page)
   // Keep the real confirmation pending while a second native writer adopts.
   const late = await page.evaluate(async ({ scope, parentId }) => {
@@ -323,7 +330,7 @@ test('049 actual delete confirmation includes late uncached native descendants a
 test('049 real IndexedDB delete failure exposes an alert and rolls back categories entries references and all other native values', async ({ page }, info) => {
   const f = await seed(page, true)
   const lookup = await openCodex(page, f.url)
-  await expect(lookup.getByPlaceholder('详细描述', { exact: true })).toHaveValue(f.description)
+  await expectDescriptionEditor(lookup, f.description)
   const dialog = await openDelete(page)
   const before = await databaseSnapshot(page)
   await page.evaluate(async ({ rootId, keptEntryId, characterId, message }) => {
@@ -361,7 +368,7 @@ test('049 real IndexedDB delete failure exposes an alert and rolls back categori
     await expect(dialog).toHaveCount(0)
     await expect(lookup.getByRole('alert').filter({ hasText: FAILURE })).toBeVisible()
     await expect(lookup.getByText(ROOT_NAME, { exact: true }).locator('..')).toHaveClass(/bg-accent\/10/)
-    await expect(lookup.getByPlaceholder('详细描述', { exact: true })).toHaveValue(f.description)
+    await expectDescriptionEditor(lookup, f.description)
     const observations = await page.evaluate(() => (window as unknown as { __codex049Failure: {
       observations: { table: string; key: unknown; modifications?: unknown; transactionId?: number; mode: string; stores: string[] }[];
     } }).__codex049Failure.observations)
@@ -383,7 +390,7 @@ test('049 real IndexedDB delete failure exposes an alert and rolls back categori
   const bootstrapSeeds = await bootstrapSeedNames049(page)
   const bootstrapStart = await page.evaluate(() => Date.now())
   const refreshed = await openCodex(page, f.url)
-  await expect(refreshed.getByPlaceholder('详细描述', { exact: true })).toHaveValue(f.description)
+  await expectDescriptionEditor(refreshed, f.description)
   const reloaded = await databaseSnapshot(page)
   const bootstrapEnd = await page.evaluate(() => Date.now())
   expect(reloaded).toEqual(expectedAfterSystemBootstrap049(before, reloaded, bootstrapSeeds, { start: bootstrapStart, end: bootstrapEnd }))
