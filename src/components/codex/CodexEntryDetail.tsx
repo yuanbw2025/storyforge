@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronRight, Star } from 'lucide-react'
-import { CInput, CTextarea } from '../shared/CompositionInput'
+import { CInput } from '../shared/CompositionInput'
+import { InlineTextarea } from '../shared/InlineEdit'
 import {
   codexEntryInWorld,
   codexCategoryFormatIssueV1,
@@ -127,11 +128,12 @@ export default function CodexEntryDetail({
         placeholder="标签（用顿号或逗号分隔）"
         className="w-full px-3 py-2 rounded-lg bg-bg-elevated border border-border text-sm"
       />
-      <CTextarea
+      <InlineTextarea markdownRead
+        key={`description:${canonicalEntry.id}`}
         value={entry.description}
-        onChange={event => onChange({ description: event.target.value })}
+        onChange={value => { onChange({ description: value }); return flush() }}
         placeholder="详细描述"
-        rows={3}
+        minRows={3}
         className="w-full px-3 py-2 rounded-lg bg-bg-elevated border border-border text-sm resize-y"
       />
 
@@ -154,6 +156,7 @@ export default function CodexEntryDetail({
           currentEntryId={entry.id!}
           worldGroupId={entry.worldGroupId ?? null}
           onValue={value => setField(definition.key, value)}
+          onCommit={flush}
           onRef={ids => setRef(definition.key, ids)}
         />
       ))}
@@ -269,6 +272,7 @@ function CodexFieldRow({
   currentEntryId,
   worldGroupId,
   onValue,
+  onCommit,
   onRef,
 }: {
   definition: CodexFieldDef
@@ -279,6 +283,7 @@ function CodexFieldRow({
   currentEntryId: number
   worldGroupId: number | null
   onValue: (value: string) => void
+  onCommit: () => Promise<void>
   onRef: (ids: number[]) => void
 }) {
   return (
@@ -286,7 +291,8 @@ function CodexFieldRow({
       <label className="text-xs text-text-muted pt-2 text-right">{definition.label}</label>
       <div className="min-w-0">
         {definition.type === 'longtext' && (
-          <CTextarea value={value} onChange={event => onValue(event.target.value)} placeholder={definition.placeholder} rows={2}
+          <InlineTextarea markdownRead key={`${currentEntryId}:${definition.key}`} value={value}
+            onChange={text => { onValue(text); return onCommit() }} placeholder={definition.placeholder} minRows={2}
             className="w-full px-3 py-1.5 rounded-lg bg-bg-elevated border border-border text-sm resize-y" />
         )}
         {definition.type === 'select' && (
