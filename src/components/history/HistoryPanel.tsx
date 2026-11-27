@@ -10,6 +10,7 @@ import { useWorldGroupStore } from '../../stores/world-group'
 import { useAIConfigStore } from '../../stores/ai-config'
 import type { Project, HistoricalTimelineEvent, HistoricalEra, HistoricalKeyword, HistoricalKeywordCategory } from '../../lib/types'
 import { HISTORICAL_ERA_LABELS, KEYWORD_CATEGORY_LABELS } from '../../lib/types/history'
+import type { HistoryAuthorOriginV1, HistoryAuthorSelectionV1 } from '../../lib/types/history'
 import { useDialog } from '../shared/Dialog'
 import { useToast } from '../shared/Toast'
 import { KeywordHistoryHelp, TimelineHistoryHelp } from './HistoryHelpPanels'
@@ -18,6 +19,7 @@ import HistoryKeywordCard from './HistoryKeywordCard'
 import HistoryTimelineEventCard from './HistoryTimelineEventCard'
 import { useHistoryAI } from './useHistoryAI'
 import { useWorldSettingsLayout, WorldSettingsToolbar } from '../longform/WorldSettingsLayout'
+import { flushPendingEditsV1 } from '../../lib/authoring/pending-edit-coordinator'
 
 interface Props {
   resizableInputs?: boolean
@@ -30,6 +32,11 @@ export default function HistoryPanel({ project, resizableInputs = false }: Props
   const compact = useWorldSettingsLayout()
   const dialog = useDialog()
   const toast = useToast()
+  const readError = useRef(toast.error)
+  readError.current = toast.error
+  const afterSaved = (action: () => void) => {
+    void flushPendingEditsV1().then(action).catch(error => toast.error(error instanceof Error ? error.message : '历史编辑尚未保存，输入已保留。'))
+  }
   const [activeTab, setActiveTab] = useState<TabKey>('timeline')
 
   // ── 多世界：世界标签 ──
@@ -50,9 +57,16 @@ export default function HistoryPanel({ project, resizableInputs = false }: Props
   const canEdit = !isMW || worldTab !== 'all'
 
   // ── 历史总述 Store ──
-  const { history, loadAll: loadHistory, save: saveHistory } = useHistoryStore()
-  const [overview, setOverview] = useState('')
-  const [eraSystem, setEraSystem] = useState('')
+  const { history, loading: loadingHistory, loadError: historyLoadError, loadedHistoryAuthorOrigin, loadedHistoryAuthorSelection,
+    loadForHistoryAuthorV1: loadHistory, saveForHistoryAuthorV1: saveHistory } = useHistoryStore()
+  const historyOrigin = useMemo<HistoryAuthorOriginV1>(() => project.workspacePurpose === 'world-engine'
+    ? { version: 1, kind: 'world', scope: { projectId: project.id!, worldId: project.activeWorldId! } }
+    : { version: 1, kind: 'work', scope: { projectId: project.id!, worldId: project.activeWorldId!, workId: project.activeWorkId! } },
+  [project.id, project.workspacePurpose, project.activeWorldId, project.activeWorkId])
+  const historySelection = useMemo<HistoryAuthorSelectionV1>(() => canEdit
+    ? { kind: 'partition', worldGroupId: scopeGroupId } : { kind: 'all' }, [canEdit, scopeGroupId])
+  const historyViewKey = JSON.stringify([historyOrigin, historySelection])
+  const historyReady = historyViewKey === JSON.stringify([loadedHistoryAuthorOrigin, loadedHistoryAuthorSelection])
 
   // ── 历史时间线与关键词 Store ──
   const {
@@ -112,15 +126,18 @@ export default function HistoryPanel({ project, resizableInputs = false }: Props
 
   // 事件/关键词/章节按项目整体加载（一次），在组件内按世界过滤
   useEffect(() => {
-    loadEvents(project.id!)
-    loadKeywords(project.id!)
-    loadChapters(project.id!)
-  }, [project.id, loadEvents, loadKeywords, loadChapters])
+    const world = { projectId: project.id!, worldId: project.activeWorldId! }
+    void loadEvents(world)
+    void loadKeywords(world)
+    if (project.activeWorkId != null) {
+      void loadChapters({ ...world, workId: project.activeWorkId }).catch(error => readError.current(error instanceof Error ? error.message : '章节读取失败'))
+    }
+  }, [project.id, project.activeWorldId, project.activeWorkId, loadEvents, loadKeywords, loadChapters])
 
   // 历史概述单例：随当前世界标签加载（一览/单世界为 null）
   useEffect(() => {
-    loadHistory(project.id!, scopeGroupId)
-  }, [project.id, scopeGroupId, loadHistory])
+    void loadHistory({ origin: historyOrigin, selection: historySelection }).catch(() => undefined)
+  }, [historyOrigin, historySelection, loadHistory])
 
   // 按当前世界标签过滤事件/关键词（一览或单世界 = 全部）
   const scopedEvents = useMemo(() => (
@@ -130,22 +147,10 @@ export default function HistoryPanel({ project, resizableInputs = false }: Props
     (!isMW || worldTab === 'all') ? keywords : keywords.filter(k => k.worldGroupId === worldTab)
   ), [keywords, isMW, worldTab])
 
-  useEffect(() => {
-    setOverview(history?.overview || '')
-    setEraSystem(history?.eraSystem || '')
-  }, [history])
-
-  const handleSaveOverview = async () => {
-    await saveHistory({ projectId: project.id!, overview })
-  }
-
-  const handleSaveEraSystem = async () => {
-    await saveHistory({ projectId: project.id!, eraSystem })
-  }
-
   // ── 时间线操作 ──
   const handleAddEvent = async () => {
     if (!canEdit) return
+    await flushPendingEditsV1()
     const newId = await addEvent({
       projectId: project.id!,
       era: 'custom',
@@ -162,6 +167,7 @@ export default function HistoryPanel({ project, resizableInputs = false }: Props
   // ── 关键词操作 ──
   const handleAddKeyword = async () => {
     if (!canEdit) return
+    await flushPendingEditsV1()
     const newId = await addKeyword({
       projectId: project.id!,
       keyword: '新历史关键词',
@@ -225,7 +231,7 @@ export default function HistoryPanel({ project, resizableInputs = false }: Props
           {groups.map(g => (
             <button
               key={g.id}
-              onClick={() => setWorldTab(g.id!)}
+              onClick={() => afterSaved(() => setWorldTab(g.id!))}
               className={`flex items-center gap-1 px-2.5 py-1 text-xs rounded-full border transition-colors ${
                 worldTab === g.id
                   ? 'bg-accent text-white border-accent'
@@ -236,7 +242,7 @@ export default function HistoryPanel({ project, resizableInputs = false }: Props
             </button>
           ))}
           <button
-            onClick={() => setWorldTab('all')}
+            onClick={() => afterSaved(() => setWorldTab('all'))}
             className={`px-2.5 py-1 text-xs rounded-full border transition-colors ${
               worldTab === 'all'
                 ? 'bg-accent text-white border-accent'
@@ -252,7 +258,7 @@ export default function HistoryPanel({ project, resizableInputs = false }: Props
       {/* Tabs */}
       <nav className={`flex items-center gap-1 border-b border-border ${compact ? 'lf-world-history-tabs' : 'mb-6'}`}>
         <button
-          onClick={() => setActiveTab('timeline')}
+          onClick={() => afterSaved(() => setActiveTab('timeline'))}
           className={`inline-flex items-center gap-1.5 px-4 py-2 text-sm border-b-2 -mb-px transition-colors ${
             activeTab === 'timeline'
               ? 'border-accent text-accent font-medium'
@@ -263,7 +269,7 @@ export default function HistoryPanel({ project, resizableInputs = false }: Props
           历史时间轴
         </button>
         <button
-          onClick={() => setActiveTab('keywords')}
+          onClick={() => afterSaved(() => setActiveTab('keywords'))}
           className={`inline-flex items-center gap-1.5 px-4 py-2 text-sm border-b-2 -mb-px transition-colors ${
             activeTab === 'keywords'
               ? 'border-accent text-accent font-medium'
@@ -274,7 +280,7 @@ export default function HistoryPanel({ project, resizableInputs = false }: Props
           历史细节风暴
         </button>
         <button
-          onClick={() => setActiveTab('overview')}
+          onClick={() => afterSaved(() => setActiveTab('overview'))}
           className={`inline-flex items-center gap-1.5 px-4 py-2 text-sm border-b-2 -mb-px transition-colors ${
             activeTab === 'overview'
               ? 'border-accent text-accent font-medium'
@@ -321,14 +327,16 @@ export default function HistoryPanel({ project, resizableInputs = false }: Props
 
       {/* Tab 内容：历史总述 */}
       {activeTab === 'overview' && (
-        <HistoryOverviewTab
+        !canEdit ? <p className="text-sm text-text-muted">请切换到具体世界查看和编辑历史总述与纪年体系。</p>
+        : historyLoadError ? <p role="alert" className="text-sm text-error">历史读取失败：{historyLoadError}</p>
+        : loadingHistory || !historyReady ? <p role="status" className="text-sm text-text-muted">正在读取历史…</p>
+        : <HistoryOverviewTab
+          key={historyViewKey}
           resizableInputs={resizableInputs}
-          overview={overview}
-          eraSystem={eraSystem}
-          onOverviewChange={setOverview}
-          onEraSystemChange={setEraSystem}
-          onSaveOverview={() => { void handleSaveOverview() }}
-          onSaveEraSystem={() => { void handleSaveEraSystem() }}
+          overview={history?.overview ?? ''}
+          eraSystem={history?.eraSystem ?? ''}
+          onSaveOverview={overview => saveHistory({ origin: historyOrigin, selection: { kind: 'partition', worldGroupId: scopeGroupId }, patch: { overview } })}
+          onSaveEraSystem={eraSystem => saveHistory({ origin: historyOrigin, selection: { kind: 'partition', worldGroupId: scopeGroupId }, patch: { eraSystem } })}
         />
       )}
 
@@ -386,7 +394,7 @@ export default function HistoryPanel({ project, resizableInputs = false }: Props
                       resizableInputs={resizableInputs}
                       key={event.id}
                       event={event}
-                      chapters={chapters}
+                      chapters={project.activeWorkId == null ? [] : chapters}
                       expanded={expanded}
                       canEdit={canEdit}
                       worldBadge={worldBadge}
@@ -394,9 +402,10 @@ export default function HistoryPanel({ project, resizableInputs = false }: Props
                       stormActive={stormEventId === event.id}
                       consultAI={historyAI.consult}
                       stormAI={historyAI.storm}
-                      onToggle={() => setExpandedId(expanded ? null : event.id || null)}
+                      onToggle={() => afterSaved(() => setExpandedId(expanded ? null : event.id || null))}
                       onChange={patch => {
-                        if (event.id) void updateEvent(event.id, patch)
+                        if (!event.id) return Promise.reject(new Error('历史事件尚未就绪'))
+                        return updateEvent(event.id, patch, { projectId: project.id!, worldId: project.activeWorldId! })
                       }}
                       onConsult={() => handleAIConsult(event)}
                       onStorm={() => handleAIStorm(event)}
@@ -494,16 +503,17 @@ export default function HistoryPanel({ project, resizableInputs = false }: Props
                       resizableInputs={resizableInputs}
                       key={keyword.id}
                       keyword={keyword}
-                      chapters={chapters}
+                      chapters={project.activeWorkId == null ? [] : chapters}
                       expanded={expanded}
                       canEdit={canEdit}
                       consultActive={consultKeywordId === keyword.id}
                       stormActive={stormKeywordId === keyword.id}
                       consultAI={historyAI.consult}
                       stormAI={historyAI.storm}
-                      onToggle={() => setExpandedKeywordId(expanded ? null : keyword.id || null)}
+                      onToggle={() => afterSaved(() => setExpandedKeywordId(expanded ? null : keyword.id || null))}
                       onChange={patch => {
-                        if (keyword.id) void updateKeyword(keyword.id, patch)
+                        if (!keyword.id) return Promise.reject(new Error('历史关键词尚未就绪'))
+                        return updateKeyword(keyword.id, patch, { projectId: project.id!, worldId: project.activeWorldId! })
                       }}
                       onConsult={() => handleAIKeywordConsult(keyword)}
                       onStorm={() => handleAIKeywordStorm(keyword)}

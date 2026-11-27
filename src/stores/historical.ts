@@ -8,12 +8,10 @@ import {
   assertRecordInScope,
   getTableSpec,
   readOwnedRows,
-  resolveReadScopeLike,
   resolveWorldOwnerScopeLike,
   resolveScopeLike,
   scopeTransactionTables,
   stampNewRecord,
-  type WorkspaceScopeLike,
   type WorldOwnerScopeLike,
 } from '../lib/workspace/scope'
 
@@ -30,17 +28,17 @@ interface HistoricalStore {
   /** 添加历史事件 */
   addEvent: (event: Omit<HistoricalTimelineEvent, 'createdAt' | 'updatedAt'>, scope?: WorldOwnerScopeLike) => Promise<number>
   /** 更新历史事件 */
-  updateEvent: (id: number, patch: Partial<HistoricalTimelineEvent>) => Promise<void>
+  updateEvent: (id: number, patch: Partial<HistoricalTimelineEvent>, scope?: WorldOwnerScopeLike) => Promise<void>
   /** 删除历史事件 */
   deleteEvent: (id: number) => Promise<void>
 
   // ── 历史关键词与细节 ──
   /** 加载某个项目的所有历史关键词 */
-  loadKeywords: (scope: WorkspaceScopeLike) => Promise<void>
+  loadKeywords: (scope: WorldOwnerScopeLike) => Promise<void>
   /** 添加历史关键词 */
   addKeyword: (keyword: Omit<HistoricalKeyword, 'createdAt' | 'updatedAt'>) => Promise<number>
   /** 更新历史关键词 */
-  updateKeyword: (id: number, patch: Partial<HistoricalKeyword>) => Promise<void>
+  updateKeyword: (id: number, patch: Partial<HistoricalKeyword>, scope?: WorldOwnerScopeLike) => Promise<void>
   /** 删除历史关键词 */
   deleteKeyword: (id: number) => Promise<void>
 }
@@ -135,16 +133,23 @@ export const useHistoricalStore = create<HistoricalStore>((set, get) => ({
     return id
   },
 
-  updateEvent: async (id, patch) => {
+  updateEvent: async (id, patch, scopeInput) => {
+    const selectedScope = typeof scopeInput === 'object' ? { ...scopeInput } : scopeInput
     const shown = get().events.find(event => event.id === id)
     const scope = await db.transaction('rw', scopeTransactionTables(db.historicalTimelineEvents), async () => {
       const event = await db.historicalTimelineEvents.get(id)
-      if (!event) return
-      const owner = await resolveWorldOwnerScopeLike(shown?.projectId ?? event.projectId)
-      if (!await assertRecordInScope(owner, 'historicalTimelineEvents', event, { owner: 'world' })) return
+      if (!event) {
+        if (selectedScope != null) throw new Error('历史事件已不存在，输入已保留')
+        return
+      }
+      const owner = await resolveWorldOwnerScopeLike(selectedScope ?? shown?.projectId ?? event.projectId)
+      if (!await assertRecordInScope(owner, 'historicalTimelineEvents', event, { owner: 'world' })) {
+        if (selectedScope != null) throw new Error('历史事件不属于打开编辑时的世界，输入已保留')
+        return
+      }
       const changes = { ...patch, updatedAt: Date.now() }
       assertEventIdentityUnchanged(event, changes)
-      await db.historicalTimelineEvents.update(id, changes)
+      if (await db.historicalTimelineEvents.update(id, changes) !== 1) throw new Error('历史事件保存未完成，输入已保留')
       return owner
     })
     if (scope) await refreshEvents(scope, get, set)
@@ -168,7 +173,7 @@ export const useHistoricalStore = create<HistoricalStore>((set, get) => ({
   loadKeywords: async (scopeInput) => {
     set({ loadingKeywords: true })
     try {
-      const scope = await resolveReadScopeLike(scopeInput)
+      const scope = await resolveWorldOwnerScopeLike(scopeInput)
       const keywords = (await readOwnedRows<HistoricalKeyword>(
         scope,
         'historicalKeywords',
@@ -194,7 +199,31 @@ export const useHistoricalStore = create<HistoricalStore>((set, get) => ({
     return id
   },
 
-  updateKeyword: async (id, patch) => {
+  updateKeyword: async (id, patch, scopeInput) => {
+    // Existing callers keep their lookup API. Text editors supply their frozen
+    // World owner so a late save cannot follow a newly selected active World.
+    const selectedScope = typeof scopeInput === 'object' ? { ...scopeInput } : scopeInput
+    if (selectedScope != null) {
+      const next = await db.transaction('rw', scopeTransactionTables(db.historicalKeywords), async () => {
+        const scope = await resolveWorldOwnerScopeLike(selectedScope)
+        const current = await db.historicalKeywords.get(id)
+        if (!current) throw new Error('历史关键词已不存在，输入已保留')
+        if (!await assertRecordInScope(scope, 'historicalKeywords', current, { owner: 'world' })) {
+          throw new Error('历史关键词不属于打开编辑时的世界，输入已保留')
+        }
+        const immutable = new Set(['id', 'projectId', 'worldId', 'workId', 'createdAt', getTableSpec('historicalKeywords').resourceIdentity?.field])
+        for (const [key, value] of Object.entries(patch)) {
+          if (immutable.has(key.split('.')[0]) && (key.includes('.') || value !== Reflect.get(current, key))) {
+            throw new Error('历史关键词的身份与归属不可通过编辑更改')
+          }
+        }
+        const changes = { ...patch, updatedAt: Date.now() }
+        if (await db.historicalKeywords.update(id, changes) !== 1) throw new Error('历史关键词保存未完成，输入已保留')
+        return changes
+      })
+      set({ keywords: get().keywords.map(row => row.id === id ? { ...row, ...next } : row).sort((a, b) => b.updatedAt - a.updatedAt) })
+      return
+    }
     const existingRecord = get().keywords.find(keyword => keyword.id === id)
       ?? await db.historicalKeywords.get(id)
     if (!existingRecord) return

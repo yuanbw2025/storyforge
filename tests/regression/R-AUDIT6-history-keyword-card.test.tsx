@@ -135,12 +135,15 @@ describe('AUDIT-6 · 历史关键词卡', () => {
     const nameInput = host.querySelector('input')!
     const category = host.querySelector<HTMLSelectElement>('select[aria-label="关键词分类"]')!
     const era = host.querySelector<HTMLSelectElement>('select[aria-label="适用历史时期"]')!
+    const view = [...host.querySelectorAll('[data-markdown-read-view]')].find(view => view.textContent?.includes('唐代汇兑凭证'))!
+    await act(async () => [...view.querySelectorAll('button')].find(button => button.textContent === '编辑源码')!.click())
     const description = host.querySelector('textarea')!
 
     await changeValue(nameInput, '交子')
     await changeValue(category, 'technology')
     await changeValue(era, 'song-yuan')
     await changeValue(description, '宋代纸币')
+    await act(async () => description.dispatchEvent(new FocusEvent('focusout', { bubbles: true })))
     await act(async () => button(host, '第二章').click())
 
     expect(props.onChange).toHaveBeenCalledWith({ keyword: '交子' })
