@@ -1506,15 +1506,15 @@ for (const decideInChat of [false, true]) test(`故事核心面板通过主 Agen
     await expect(candidate).toHaveValue(edited.value)
   } finally { await page.mouse.up() }
   await expect.poll(formal).toEqual({ logline: edited.value, adoptions: 1 })
-  await expect(page.getByRole('main').getByText(edited.value, { exact: true })).toBeVisible()
   await expect(candidatePane.locator('[data-candidate-local-save-status]')).toHaveCount(0)
+  await expect(page.getByRole('main').getByText(edited.value, { exact: true })).toBeVisible()
   expect(generationCalls).toBe(1)
 
   await page.reload()
   await openSidebarLeaf(page, '设定库', '故事设计')
   await showCandidatePane()
-  await expect(page.getByRole('main').getByText(edited.value, { exact: true })).toBeVisible()
   await expect(candidatePane.locator('[data-candidate-local-save-status]')).toHaveCount(0)
+  await expect(page.getByRole('main').getByText(edited.value, { exact: true })).toBeVisible()
 })
 
 test('创作规则建议通过固定 Skill 刷新恢复，拒绝重生后编辑确认并写入规范字段', async ({ page }) => {
