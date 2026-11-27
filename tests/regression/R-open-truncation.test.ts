@@ -29,7 +29,8 @@ describe('R-open-truncation · 放开内部截断', () => {
       provider: 'deepseek',
       model: 'deepseek-v4-pro',
       modelConfig: await finiteServiceConfigFixtureV1(128000, 8192),
-      sourceKeys: [],
+      sourceKeys: ['manualText'],
+      manualSourceText: '完整原文'.repeat(100),
     } as any)
     expect(r.inputBudget).toBeGreaterThan(48000)
   })
@@ -41,10 +42,12 @@ describe('R-open-truncation · 放开内部截断', () => {
       provider: 'deepseek',
       model: 'deepseek-v4-pro',
       inputBudgetTokens: 60,
-      sourceKeys: [],
+      sourceKeys: ['manualText'],
+      manualSourceText: '完整原文'.repeat(100),
     } as any)
     expect(r.inputBudget).toBe(r.totalInputTokens)
     expect(r.inputBudget).toBeGreaterThan(60)
     expect(r.trimmed).toEqual([])
+    expect(r.text).toContain('完整原文'.repeat(100))
   })
 })
