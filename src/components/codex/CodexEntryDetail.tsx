@@ -21,6 +21,8 @@ import { parseCultivationStages } from '../../lib/types/cultivation'
 import { useCultivationStore } from '../../stores/cultivation'
 import { useLocationStore } from '../../stores/location'
 import { useCodexEntryDraft, type SaveCodexDraft } from './useCodexEntryDraft'
+import type { CodexLocalSaveContractV1 } from '../../lib/authoring/codex-local-save-evidence'
+import { flushPendingEditsV1 } from '../../lib/authoring/pending-edit-coordinator'
 
 interface Props {
   entry: CodexEntry
@@ -29,6 +31,7 @@ interface Props {
   allEntries: CodexEntry[]
   nameDuplicate?: boolean
   onChange: SaveCodexDraft
+  localSave?: CodexLocalSaveContractV1
 }
 
 export default function CodexEntryDetail({
@@ -38,11 +41,18 @@ export default function CodexEntryDetail({
   allEntries,
   nameDuplicate,
   onChange: save,
+  localSave,
 }: Props) {
-  const { draft: entry, change: onChange, saving, error, flush, composition } = useCodexEntryDraft(canonicalEntry, save)
+  const { draft: entry, change: onChange, saving, error, flush, composition, localSaveStatus } = useCodexEntryDraft(canonicalEntry, save, localSave)
+  const sourceIdentity = `${canonicalEntry.projectId}:${canonicalEntry.id}:${canonicalEntry.ragDocumentId}`
+  const [sourceDrafts, setSourceDrafts] = useState<{ identity: string; values: Record<string, string> }>({ identity: sourceIdentity, values: {} })
   const schema = useMemo(() => parseFieldSchema(category.fieldSchema), [category.fieldSchema])
   const fields = useMemo(() => parseEntryFields(entry.fields), [entry.fields])
   const refs = useMemo(() => parseEntryRefs(entry.refs), [entry.refs])
+  const sourceDirty = sourceDrafts.identity === sourceIdentity && Object.entries(sourceDrafts.values).some(([key, value]) =>
+    key === 'description' ? value !== entry.description
+      : schema.some(definition => definition.type === 'longtext' && `field:${definition.key}` === key) && value !== (fields[key.slice(6)] ?? ''))
+  const saveStatus = localSaveStatus === 'failed' || localSaveStatus === 'saving' ? localSaveStatus : sourceDirty ? 'dirty' : localSaveStatus
   const tags = useMemo(() => {
     try {
       const parsed = JSON.parse(entry.tags || '[]')
@@ -75,10 +85,36 @@ export default function CodexEntryDetail({
   }
 
   return (
-    <div className="p-4 space-y-3 max-w-2xl" {...composition}>
-      {saving && <p role="status" className="text-xs text-text-muted">正在保存词条…</p>}
+    <div className="p-4 space-y-3 max-w-2xl" {...composition}
+      onInputCapture={event => {
+        const target = event.target
+        if (!(target instanceof HTMLTextAreaElement)) return
+        const key = target.closest('[data-codex-source-field]')?.getAttribute('data-codex-source-field')
+        if (key) {
+          const raw = target.value
+          setSourceDrafts(current => ({ identity: sourceIdentity, values: { ...(current.identity === sourceIdentity ? current.values : {}), [key]: raw } }))
+        }
+      }}
+      onKeyDownCapture={event => {
+        const target = event.target
+        if (event.key !== 'Escape' || event.nativeEvent.isComposing || !(target instanceof HTMLTextAreaElement)) return
+        const key = target.closest('[data-codex-source-field]')?.getAttribute('data-codex-source-field')
+        // Only a successfully closed source editor cancels this UI draft.
+        // Failed/in-flight saves keep their textarea and remain visibly dirty.
+        if (key) setTimeout(() => {
+          if (!target.isConnected) setSourceDrafts(current => {
+            if (current.identity !== sourceIdentity) return current
+            const { [key]: _discarded, ...retained } = current.values
+            return { identity: sourceIdentity, values: retained }
+          })
+        }, 0)
+      }}>
+      {localSave ? <p role="status" data-codex-local-save-status={saveStatus} className="min-h-5 text-xs text-text-muted"
+        title="已保存到本机表示原记录已通过数据库确认；同一浏览器、同一站点重开可保留。云同步与外部备份需分别完成。">
+        {saveStatus === 'saved' ? '已保存到本机' : saveStatus === 'saving' ? '正在保存词条…' : saveStatus === 'failed' ? '保存失败' : saveStatus === 'dirty' ? '未保存' : '未确认'}
+      </p> : saving && <p role="status" className="text-xs text-text-muted">正在保存词条…</p>}
       {error && <div role="alert" className="text-xs text-red-400">{error}；输入已保留。
-        <button type="button" onClick={() => { void flush().catch(() => undefined) }} className="ml-2 underline">重试保存词条</button>
+        <button type="button" onClick={() => { void flushPendingEditsV1().catch(() => undefined) }} className="ml-2 underline">重试保存词条</button>
       </div>}
       <div className="flex items-center gap-2">
         <CInput
@@ -128,14 +164,14 @@ export default function CodexEntryDetail({
         placeholder="标签（用顿号或逗号分隔）"
         className="w-full px-3 py-2 rounded-lg bg-bg-elevated border border-border text-sm"
       />
-      <InlineTextarea markdownRead
+      <div data-codex-source-field="description"><InlineTextarea markdownRead
         key={`description:${canonicalEntry.id}`}
         value={entry.description}
         onChange={value => { onChange({ description: value }); return flush() }}
         placeholder="详细描述"
         minRows={3}
         className="w-full px-3 py-2 rounded-lg bg-bg-elevated border border-border text-sm resize-y"
-      />
+      /></div>
 
       {category.builtInKey === 'beast' && (
         <CodexCultivationLink entry={entry} onChange={saveLinkedPatch} />
@@ -287,7 +323,7 @@ function CodexFieldRow({
   onRef: (ids: number[]) => void
 }) {
   return (
-    <div className="grid grid-cols-[5rem_1fr] gap-2 items-start">
+    <div className="grid grid-cols-[5rem_1fr] gap-2 items-start" data-codex-source-field={definition.type === 'longtext' ? `field:${definition.key}` : undefined}>
       <label className="text-xs text-text-muted pt-2 text-right">{definition.label}</label>
       <div className="min-w-0">
         {definition.type === 'longtext' && (

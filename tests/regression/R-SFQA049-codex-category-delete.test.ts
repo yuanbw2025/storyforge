@@ -446,16 +446,10 @@ describe('SFQA049 · native Codex category deletion and parent ownership', () =>
       await wait(() => { expect(host.textContent).toContain('已有词条') })
       const item = [...host.querySelectorAll<HTMLElement>('div.group')].find(row => row.textContent?.includes('已有词条'))!
       await act(async () => { item.click() })
-      // The full Markdown description opens in reading mode. Enter the real
-      // source editor explicitly before checking draft preservation on deletion.
-      const enterDescriptionEditor = async () => {
-        await wait(() => { expect(host.textContent).toContain('完整作者词条：已有词条。') })
-        const edit = [...host.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent === '编辑源码')
-        expect(edit).toBeDefined()
-        await act(async () => { edit!.click() })
-        await wait(() => { expect([...host.querySelectorAll('textarea')].some(row => row.value.replace(/\r\n/g, '\n') === original.description.replace(/\r\n/g, '\n'))).toBe(true) })
-      }
-      await enterDescriptionEditor()
+      await wait(() => { expect([...host.querySelectorAll('button')].some(button => button.textContent === '编辑源码')).toBe(true) })
+      const description = host.querySelector<HTMLElement>('[data-codex-source-field="description"]')!
+      await act(async () => { [...description.querySelectorAll('button')].find(button => button.textContent === '编辑源码')!.click() })
+      await wait(() => { expect([...host.querySelectorAll('textarea')].some(row => row.value.replace(/\r\n/g, '\n') === original.description.replace(/\r\n/g, '\n'))).toBe(true) })
       const before = await rawDatabase()
       await act(async () => { card.querySelector<HTMLButtonElement>('button[title="删除自定义分类"]')!.click() })
       await wait(() => { expect(document.querySelector('[role="dialog"]')).not.toBeNull() })
@@ -466,8 +460,8 @@ describe('SFQA049 · native Codex category deletion and parent ownership', () =>
         await wait(() => { expect(host.querySelector('[role="alert"]')?.textContent).toContain(expectedError) })
         expect(await rawDatabase()).toEqual(before)
         expect(await db.codexEntries.get(f.known)).toEqual(original)
-        // The confirmation blurs the editor and returns it to reading mode.
-        await enterDescriptionEditor()
+        await act(async () => { [...description.querySelectorAll('button')].find(button => button.textContent === '查看源码')!.click() })
+        expect(description.querySelector('[data-markdown-source]')?.textContent).toBe(original.description)
       } else {
         await wait(() => { expect(host.textContent).not.toContain('作者选择删除的分类') })
         expect(await db.codexCategories.get(f.parent)).toBeUndefined()

@@ -293,3 +293,51 @@ test('nested divine and resource fields confirm native leaf writes, retain sibli
   expect(row.divineDesign).toEqual({ hasDivinity: true, divineRank: '原阶序', divineNames: expectedName, divineRules: '不可夜航' })
   expect(row.naturalResources).toEqual({ rareCreatures: '原兽', herbs: expectedHerbs, minerals: '原矿', others: '原产' })
 })
+
+test('embedded Codex confirms real record saves, retains failed Markdown drafts and reopens the committed source', async ({ page, context }) => {
+  const scope = await seed(page)
+  const id = await page.evaluate(async scope => {
+    const load = new Function('path', 'return import(path)') as <T>(path: string) => Promise<T>
+    const { useCodexStore } = await load<typeof import('../../src/stores/codex')>('/storyforge/src/stores/codex.ts')
+    await useCodexStore.getState().loadAll(scope)
+    const category = useCodexStore.getState().categories.find(row => row.builtInKey === 'race')!
+    return useCodexStore.getState().addEntry({ projectId: scope.projectId, categoryId: category.id!, name: '保存验收种族',
+      summary: '原简介', description: '# 旧描述\r\n\r\n军税17枚。  ', fields: '{}', refs: '{}', tags: '[]', order: 0 })
+  }, scope)
+  await page.goto(`./workspace/${scope.projectId}?module=worldview-humanity`)
+  await page.locator('div.group:visible').filter({ hasText: '保存验收种族' }).last().click()
+  const status = page.locator('[data-codex-local-save-status]:visible')
+  await expect(status).toHaveAttribute('data-codex-local-save-status', 'saved')
+  const source = page.locator('[data-codex-source-field="description"]:visible')
+  await source.getByRole('button', { name: '编辑源码', exact: true }).click()
+  const area = source.locator('textarea'); await area.fill('  # 新描述\r\n\r\n军税仍为17枚，不可夜航。　 ')
+  const expected = await area.inputValue()
+  await expect(status).toHaveAttribute('data-codex-local-save-status', 'dirty')
+  await page.evaluate(async () => {
+    const load = new Function('path', 'return import(path)') as <T>(path: string) => Promise<T>
+    const { db } = await load<typeof import('../../src/lib/db/schema')>('/storyforge/src/lib/db/schema.ts')
+    const holder = window as typeof window & { __sf050CodexFault?: () => never }
+    holder.__sf050CodexFault = () => { throw new DOMException('native codex quota', 'QuotaExceededError') }
+    db.codexEntries.hook('updating', holder.__sf050CodexFault)
+  })
+  await expect(flush(page)).rejects.toThrow('native codex quota')
+  await expect(status).toHaveAttribute('data-codex-local-save-status', 'failed')
+  await expect(area).toHaveValue(expected)
+  await page.evaluate(async () => {
+    const load = new Function('path', 'return import(path)') as <T>(path: string) => Promise<T>
+    const { db } = await load<typeof import('../../src/lib/db/schema')>('/storyforge/src/lib/db/schema.ts')
+    const holder = window as typeof window & { __sf050CodexFault?: () => never }
+    db.codexEntries.hook('updating').unsubscribe(holder.__sf050CodexFault!); delete holder.__sf050CodexFault
+  })
+  await page.getByRole('button', { name: '重试保存词条', exact: true }).click()
+  await expect(status).toHaveAttribute('data-codex-local-save-status', 'saved')
+  await expect(source.locator('textarea')).toHaveCount(0)
+  const url = page.url(); await page.close(); const reopened = await context.newPage(); await reopened.goto(url)
+  await reopened.locator('div.group:visible').filter({ hasText: '保存验收种族' }).last().click()
+  await expect(reopened.locator('[data-codex-local-save-status]:visible')).toHaveAttribute('data-codex-local-save-status', 'saved')
+  const actual = await reopened.evaluate(async id => {
+    const load = new Function('path', 'return import(path)') as <T>(path: string) => Promise<T>
+    return (await load<typeof import('../../src/lib/db/schema')>('/storyforge/src/lib/db/schema.ts')).db.codexEntries.get(id)
+  }, id)
+  expect(actual?.description).toBe(expected); expect(actual?.name).toBe('保存验收种族'); expect(actual?.summary).toBe('原简介')
+})
