@@ -11,7 +11,7 @@ const parse = (value: unknown) => {
   return { field: row.field, value: row.value }
 }
 describe('structured output V2 shares the existing parser and repair evidence', () => {
-  it.each([false, true])('retains the author example tail only with explicit content policy (full=%s), preserving old defaults', full => {
+  it.each([false, true])('retains every author example with either content policy (full=%s)', full => {
     const example = (id: number) => ({ id: String(id), text: `作者样例${id}完整尾部`, source: 'user-marked' as const, createdAt: 1 })
     const template: PromptTemplate = { id: 101, scope: 'user', moduleKey: 'worldview.dimension', promptType: 'generate',
       name: '共享完整样例', description: '', systemPrompt: '作者原系统', userPromptTemplate: '作者原要求',
@@ -23,8 +23,7 @@ describe('structured output V2 shares the existing parser and repair evidence', 
     const user = result.messages.find(message => message.role === 'user')!.content
     expect(user).toContain('作者原要求')
     for (const id of [1, 2, 3, 5, 6]) expect(user).toContain(`作者样例${id}完整尾部`)
-    if (full) for (const id of [4, 7]) expect(user).toContain(`作者样例${id}完整尾部`)
-    else for (const id of [4, 7]) expect(user).not.toContain(`作者样例${id}完整尾部`)
+    for (const id of [4, 7]) expect(user).toContain(`作者样例${id}完整尾部`)
     expect(template).toEqual(before)
   })
 
@@ -36,9 +35,9 @@ describe('structured output V2 shares the existing parser and repair evidence', 
     expect(readStructuredOutputEvidenceV1(result)?.originalText).toBe(raw)
     expect(readStructuredOutputEvidenceV1(result)?.contractShape).toEqual({ root: 'object', allowedRootFields: ['field', 'value'], requiredRootFields: ['field', 'value'] })
   })
-  it('retains old V1 forward admission and old legal evidence field shapes', () => {
+  it('removes the V1 text ceiling while retaining its exact evidence field shapes', () => {
     const legacy: StructuredOutputContractV1 = { version: 1, schemaId: 'worldview-field.text.v1', target: 'worldviews.races', root: 'object', maxChars: 100, allowedRootFields: ['field', 'value'], requiredRootFields: ['field', 'value'] }
-    expect(() => parseStructuredOutputV1({ raw: JSON.stringify({ field: 'races', value: '字'.repeat(101) }), contract: legacy, parse })).toThrow('超过')
+    expect(parseStructuredOutputV1({ raw: JSON.stringify({ field: 'races', value: '字'.repeat(101) }), contract: legacy, parse })).toEqual({field: 'races', value: '字'.repeat(101)})
     const raw = JSON.stringify({ field: 'races', value: '潮民' })
     const evidence = evaluateStructuredOutputV1({ raw, contract: legacy, parse }).evidence
     expect(evidence).toEqual({ version: 1, schemaId: legacy.schemaId, target: legacy.target,

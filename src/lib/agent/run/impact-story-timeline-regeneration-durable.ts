@@ -626,8 +626,7 @@ export async function generateImpactStoryTimelineRegenerationCandidateV1(input: 
   const requestMeta = {
     category: 'story.timeline' as const,
     projectId: input.scope.projectId,
-    configOverrides: { maxTokens: requireFixedBudgetValueV1(
-      getAgentSkillV1(IMPACT_STORY_TIMELINE_REGENERATION_SKILL_ID_V1, 'prose').maxOutputTokens) },
+    configOverrides: { maxTokens: 0 },
     contextOverflowPolicy: 'reject' as const,
   }
   if (!input.runAI) {
@@ -691,8 +690,7 @@ export async function generateImpactStoryTimelineRegenerationCandidateV1(input: 
       : chat(prepared.messages, input.aiConfig!, {
           category: 'story.timeline',
           projectId: input.scope.projectId,
-          configOverrides: { maxTokens: requireFixedBudgetValueV1(
-            getAgentSkillV1(IMPACT_STORY_TIMELINE_REGENERATION_SKILL_ID_V1, 'prose').maxOutputTokens) },
+          configOverrides: { maxTokens: 0 },
           contextOverflowPolicy: 'reject',
         }, undefined, resultMeta))
   } catch (error) {

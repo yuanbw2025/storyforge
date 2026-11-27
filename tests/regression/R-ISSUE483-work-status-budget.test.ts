@@ -1,3 +1,4 @@
+import { finiteServiceConfigFixtureV1 } from '../helpers/model-capacity-fixture'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { stampNewRecord } from '../../src/lib/workspace/scope'
@@ -20,7 +21,7 @@ describe('Issue483: saved chapter status remains admissible under its source bud
     await db.outlineNodes.bulkAdd(rows)
     const before = await db.outlineNodes.toArray()
     const assembled = await assembleContext({ projectId: scope.projectId, scope,
-      worldGroupId: null, sourceKeys: ['workStatus'], inputBudgetMaxTokens: 12_000 })
+      worldGroupId: null, sourceKeys: ['workStatus'], modelConfig: await finiteServiceConfigFixtureV1(2000), inputBudgetMaxTokens: 12_000 })
     const status = assembled.sourceEvidence?.find(source => source.key === 'workStatus')
     if (!status) throw new Error('Expected registered workStatus evidence from the real context assembler')
     expect(status).toMatchObject({ delivery: 'truncated', compression: {

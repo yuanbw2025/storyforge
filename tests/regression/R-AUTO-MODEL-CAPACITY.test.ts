@@ -1,7 +1,7 @@
 import { CONTEXT_SOURCE_BY_KEY } from '../../src/lib/registry/context-sources'
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest'
 import type { AIConfig } from '../../src/lib/types'
-import { discoverModelCapacityV1, freezeModelCapacityV1, getModelCapacityV1, inheritModelCapacityV1, invalidateModelCapacityV1, modelInputBudgetV1, prepareModelCapacityV1, resetModelCapacityForTestsV1 } from '../../src/lib/ai/model-capacity'
+import { discoverModelCapacityV1, freezeModelCapacityV1, getModelCapacityV1, inheritModelCapacityV1, invalidateModelCapacityV1, modelInputBudgetV1, prepareModelCapacityV1, resetModelCapacityForTestsV1, serviceInputBudgetV1 } from '../../src/lib/ai/model-capacity'
 import { resolveAIConfigForTask } from '../../src/lib/ai/task-routing'
 import { chat } from '../../src/lib/ai/client'
 import { useAIConfigStore } from '../../src/stores/ai-config'
@@ -107,19 +107,19 @@ describe('010 automatic capacity decisions', () => {
     vi.spyOn(source,'read').mockImplementation(input=>{expect(input.modelConfig).toBeUndefined();return read(input)})
     const assembled=await assembleContext({projectId:scope.projectId,scope,sourceKeys:['manualText'],manualSourceText:'字'.repeat(16000),modelConfig:cfg})
     const capacity=getModelCapacityV1(cfg)
-    expect(assembled.inputBudget).toBe(modelInputBudgetV1(capacity,cfg.maxTokens).inputBudget-1024)
+    expect(assembled.inputBudget).toBe(serviceInputBudgetV1(capacity,cfg.maxTokens))
     expect(assembled.totalInputTokens).toBeLessThanOrEqual(assembled.inputBudget)
     const narrowed=await assembleContext({projectId:scope.projectId,scope,sourceKeys:['manualText'],manualSourceText:'作者选材',modelConfig:cfg,inputBudgetTokens:1024})
-    expect(narrowed.inputBudget).toBe(1024)
+    expect(narrowed.inputBudget).toBe(assembled.inputBudget)
     expect(await chat([{role:'user',content:assembled.text}],cfg,{contextOverflowPolicy:'reject'})).toBe('合成结果')
-    expect(output).toBe(1024);expect(sends).toBe(1)
+    expect(output).toBeGreaterThan(1000);expect(output).toBeLessThanOrEqual(1024);expect(sends).toBe(1)
     await expect(chat([{role:'user',content:assembled.text}],cfg,{contextOverflowPolicy:'reject'},undefined,undefined,{tools:[{type:'function',function:{name:'big',description:'字'.repeat(16000),parameters:{type:'object'}}}]})).rejects.toThrow('拒绝静默裁剪')
     expect(sends).toBe(1)
     db.close()
   })
 })
 
-it.each(['missing-metadata', 'small-allocation'] as const)('rejects an oversized formal request before POST under %s despite a large legacy preference', async mode => {
+it.each(['missing-metadata', 'small-allocation'] as const)('only an evidenced small window rejects before POST (%s); unknown capacity preserves service errors', async mode => {
   const cfg = config({ maxTokens: 1024, contextWindow: 1_000_000 })
   const metadata = vi.fn(async () => mode === 'small-allocation' ? lm(4096) : Response.json({}, { status: 503 }))
   let posts = 0
@@ -130,11 +130,12 @@ it.each(['missing-metadata', 'small-allocation'] as const)('rejects an oversized
   }))
   const result: import('../../src/lib/ai/client').ChatResult = {}
   const request = () => chat([{role: 'user', content: '完整原文不允许静默裁剪。'.repeat(600)}], cfg, {contextOverflowPolicy: 'reject'}, undefined, result)
-  await expect(request()).rejects.toThrow('拒绝静默裁剪')
-  expect(result.requestLifecycle).toEqual({phase: 'pre-dispatch', responseStatus: null})
+  await expect(request()).rejects.toThrow(mode === 'small-allocation' ? '拒绝静默裁剪' : '401')
+  expect(result.requestLifecycle).toEqual(mode === 'small-allocation'
+    ? {phase: 'pre-dispatch', responseStatus: null} : {phase: 'response-observed', responseStatus: 401})
   expect(getModelCapacityV1(cfg)).toMatchObject({totalWindow: 4096, confidence: mode === 'small-allocation' ? 'service' : 'fallback'})
-  await expect(request()).rejects.toThrow('拒绝静默裁剪')
+  await expect(request()).rejects.toThrow(mode === 'small-allocation' ? '拒绝静默裁剪' : '401')
   expect(metadata).toHaveBeenCalledTimes(1)
-  expect(posts).toBe(0)
+  expect(posts).toBe(mode === 'small-allocation' ? 0 : 2)
   expect(cfg.maxTokens).toBe(1024)
 })

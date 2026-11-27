@@ -157,7 +157,7 @@ export async function createDocumentImportChunkCandidateV1(input: ChunkInput & {
   const config = structuredClone(useAIConfigStore.getState().config)
   const skill = getAgentSkillV1(SKILL, 'inspiration')
   const metadata = { category: 'import.parse-chunk', projectId: input.projectId, contextOverflowPolicy: 'reject' as const,
-    configOverrides: { maxTokens: requireFixedBudgetValueV1(skill.maxOutputTokens) } }
+    configOverrides: { maxTokens: 0 } }
   const routed = resolveRequestConfig(config, metadata)
   if (!isAIConfigReady(routed.config)) fail(getAIConfigRequiredMessage(routed.config))
   const resolved = { ...routed, config: await prepareModelCapacityV1(routed.config) }

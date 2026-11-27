@@ -105,12 +105,7 @@ const FIELD_LABELS: Record<CreativeRulesField, string> = {
   systemFictionElements: '系统文元素',
 }
 
-const FIELD_MAX_CHARS: Record<CreativeRulesField, number> = {
-  writingStyle: 12_000,
-  atmosphere: 8_000,
-  specialRequirements: 20_000,
-  systemFictionElements: 40_000,
-}
+
 
 export class CreativeRulesCopilotStaleError extends Error {
   constructor() {
@@ -163,7 +158,7 @@ async function readSnapshot(
 function assertAuthorRequest(value: string): string {
   const request = value.trim()
   if (request.length < 2) throw new Error('请至少输入 2 个字符的创作规则要求。')
-  if (request.length > 1_000) throw new Error('单次创作规则要求不能超过 1000 个字符。')
+
   return request
 }
 
@@ -210,9 +205,7 @@ export function parseCreativeRulesCandidateDraftV1(
         throw new Error(`创作规则候选 ${field}.value 至少需要 2 个字符。`)
       }
       const fieldValue = source.value.trim()
-      if (fieldValue.length > FIELD_MAX_CHARS[field]) {
-        throw new Error(`创作规则候选 ${field}.value 超过 ${FIELD_MAX_CHARS[field]} 字符。`)
-      }
+
       return { field, value: fieldValue }
     },
   })

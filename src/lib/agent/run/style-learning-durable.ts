@@ -453,7 +453,7 @@ export async function generateStyleLearningCandidateV1(input: {
   const requestMeta = {
     category: 'style.learn' as const,
     projectId: input.scope.projectId,
-    configOverrides: { maxTokens: requireFixedBudgetValueV1(getAgentSkillV1(STYLE_LEARNING_SKILL_ID_V1).maxOutputTokens) },
+    configOverrides: { maxTokens: 0 },
     contextOverflowPolicy: 'reject' as const,
   }
   if (!input.runAI) {
@@ -494,7 +494,7 @@ export async function generateStyleLearningCandidateV1(input: {
       : chat(prepared.messages, input.aiConfig!, {
           category: 'style.learn',
           projectId: input.scope.projectId,
-          configOverrides: { maxTokens: requireFixedBudgetValueV1(getAgentSkillV1(STYLE_LEARNING_SKILL_ID_V1).maxOutputTokens) },
+          configOverrides: { maxTokens: 0 },
           contextOverflowPolicy: 'reject',
         }))
   } catch (error) {

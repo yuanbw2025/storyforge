@@ -1,3 +1,4 @@
+import { finiteServiceConfigFixtureV1 } from '../helpers/model-capacity-fixture'
 import { syntheticFrozenAllocationV1 } from '../helpers/model-capacity-fixture'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
@@ -109,14 +110,7 @@ describe('R-AGENT1 · 严格只读 AgentRunner', () => {
   it('协议型客户端在物理窗口不足时拒绝静默裁掉目标或工具证据', async () => {
     const fetchMock = vi.fn()
     vi.stubGlobal('fetch', fetchMock)
-    const config = syntheticFrozenAllocationV1({
-      provider: 'custom' as const,
-      apiKey: '',
-      model: 'tiny-agent-test',
-      baseUrl: 'https://example.invalid/v1',
-      temperature: 0,
-      maxTokens: 64,
-    }, 256, 128)
+    const config = await finiteServiceConfigFixtureV1(256, 64)
 
     await expect(chat(
       [

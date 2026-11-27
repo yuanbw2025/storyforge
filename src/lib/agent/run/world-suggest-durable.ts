@@ -623,7 +623,7 @@ export async function generateWorldSuggestCandidateV1(input: {
       : chat(prompt.messages, input.aiConfig!, {
           category: 'world-group.suggest',
           projectId: input.scope.projectId,
-          configOverrides: { maxTokens: requireFixedBudgetValueV1(getAgentSkillV1('world-origin.world-suggest').maxOutputTokens) },
+          configOverrides: { maxTokens: 0 },
           contextOverflowPolicy: 'reject',
         }))
   } catch (error) {

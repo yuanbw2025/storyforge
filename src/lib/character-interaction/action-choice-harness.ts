@@ -13,7 +13,7 @@ import {boundedChatOutputTokensV1} from './action-output-contract'
 import {chatActionChoiceVersionForContractV1} from './action-choice-budget'
 import {assertChatActionChoiceInputBudgetV1} from './action-choice-input-budget'
 import {buildChatActionChoiceMessagesV1, chatActionChoiceRequestOptionsV1, parseChatActionChoiceV1,
-  CHAT_ACTION_CHOICE_INPUT_TOKENS_V1, CHAT_ACTION_CHOICE_OUTPUT_TOKENS_V1, CHAT_ACTION_CHOICE_STEP_V1} from './action-choice-contract'
+  CHAT_ACTION_CHOICE_OUTPUT_TOKENS_V1, CHAT_ACTION_CHOICE_STEP_V1} from './action-choice-contract'
 import {formatInteractionRuntimeContextV1} from './context-format'
 import {chatActionContextVersionsV1} from './context-selection'
 import {buildInteractionContextWindow} from './runtime'
@@ -56,7 +56,6 @@ export async function chooseRuntimeChatActionV1(input: {
   const manifest = await createContextManifestFromAssemblyV1({runId: snapshot.run.id, stepId, attempt: 1,
     projectId: input.scope.projectId, worldGroupId: snapshot.run.worldGroupId ?? null, declaredSourceKeys: ['interactionRuntime'],
     assembled: input.assembled, readerVersion: versions.readerVersion})
-  if (manifest.totalInputTokens > CHAT_ACTION_CHOICE_INPUT_TOKENS_V1) fail('选择步骤输入预算不足')
   const messages = buildChatActionChoiceMessagesV1(input.actorMessages, binding.promptVersion)
   const artifactEvents = (kind: string) => snapshot.events.filter(event => event.type === 'evidence.artifact.recorded'
     && event.payload.stepId === stepId && event.payload.attempt === 1 && event.payload.artifactKind === kind)

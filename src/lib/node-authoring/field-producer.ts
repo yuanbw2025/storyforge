@@ -1,4 +1,3 @@
-import { requireFixedBudgetValueV1 } from '../agent/finite-budget'
 import Dexie from 'dexie'
 import {
   chat, resolveRequestConfig, describeResolvedAIRequestSettingsV1,
@@ -196,9 +195,7 @@ export function createNodeFieldProducerV1(input: FieldProducerInput) {
       || requestMeta.projectId !== fixed.scope.projectId || !fixed.gateway
       || !Number.isInteger(fixed.variantIndex) || fixed.variantIndex < 0 || fixed.variantIndex >= 8
       || !Number.isFinite(frozenResolution.config.maxTokens)
-      || frozenResolution.config.maxTokens < 0
-      || (fixed.family === 'worldview' && (frozenResolution.config.maxTokens === 0
-        || frozenResolution.config.maxTokens > requireFixedBudgetValueV1(skill.maxOutputTokens)))) {
+      || frozenResolution.config.maxTokens < 0) {
       throw new Error('节点生产的字段、请求、Gateway、候选槽位或输出设置不匹配。')
     }
     const { nodeRun, flow } = await assertNodeExecutionCurrent()
@@ -223,10 +220,9 @@ export function createNodeFieldProducerV1(input: FieldProducerInput) {
         scope: { projectId: fixed.scope.projectId, worldGroupId: fixed.worldGroupId }, runtimeBindingHash,
         permissions: { contextSourceKeys: binding.contextSourceKeys, writeTargets: binding.writeTargets },
         executionBindings: [{ stepId, ...binding, formalEntry }],
-        budget: { ...(fixed.family === 'story-core' ? { serviceCapacityOnly: true as const } : {}),
+        budget: { serviceCapacityOnly: true,
           maxModelCalls: 1, maxToolCalls: 0, maxInputTokens: fixed.assembled.inputBudget,
-          maxOutputTokens: fixed.family === 'story-core' ? frozenResolution.config.maxTokens
-            : requireFixedBudgetValueV1(skill.maxOutputTokens), maxAttemptsPerStep: 1, maxProtocolErrors: 0 },
+          maxOutputTokens: frozenResolution.config.maxTokens, maxAttemptsPerStep: 1, maxProtocolErrors: 0 },
         acceptance: [
           { id: 'node-field.candidate', kind: 'output-present', required: true },
           { id: 'node-field.author', kind: 'author-confirmed', required: true },

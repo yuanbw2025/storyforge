@@ -3,7 +3,7 @@ import { usePromptStore } from '../../stores/prompt'
 import { renderPrompt } from '../ai/prompt-engine'
 import { worldviewContentTemplateVariablesV1 } from '../creation/worldview-content-skill'
 import { supportsVerifiedJsonObjectResponseForModelV1 } from '../ai/provider-capabilities'
-import { getModelCapacityLimitsV1 } from '../ai/model-capacity'
+import { getModelCapacityV1 } from '../ai/model-capacity'
 import { resolveFieldGenerationRequestModeV1 } from './field-generation-request-mode'
 import { useAIConfigStore } from '../../stores/ai-config'
 import { chat, resolveRequestConfig, type ChatResult } from '../ai/client'
@@ -88,7 +88,7 @@ export interface WorldviewFieldOutputBudgetV1 {
   authorConfigCapTokens: number
   schemaCapTokens: number
   skillCapTokens: number
-  longOutputMode: 'disabled'
+  longOutputMode: 'disabled' | 'service-capacity'
 }
 
 export type WorldviewFieldCopilotCandidate =
@@ -283,7 +283,6 @@ async function readSnapshot(
 function assertAuthorRequest(value: string): string {
   const request = value.trim()
   if (request.length < 2) throw new Error('请至少输入 2 个字符的世界基座要求。')
-  if (request.length > 8_000) throw new Error('单次世界基座要求不能超过 8000 个字符。')
   return request
 }
 
@@ -332,43 +331,20 @@ export function resolveWorldviewFieldOutputBudgetV1(input: {
   skillMaxOutputTokens: number
   requestedMaxTokens?: number
 }): WorldviewFieldOutputBudgetV1 {
-  const modelCapTokens = getModelCapacityLimitsV1(input.config).maxOutput
-  const authorConfigCapTokens = input.config.maxTokens > 0
-    ? input.config.maxTokens
-    : modelCapTokens
   const capability = WORLDVIEW_AGENT_FIELD_CAPABILITIES.get(input.targetField)
   if (!capability) throw new Error(`世界基座字段 ${input.targetField} 缺少可生成能力声明。`)
-  const fieldMaxChars = capability.maxChars
-  // Conservative CJK upper bound plus a small JSON envelope allowance.
-  const schemaCapTokens = Math.max(1, Math.floor(fieldMaxChars * 1.5) + 256)
-  const effectiveCapTokens = Math.min(
-    modelCapTokens,
-    authorConfigCapTokens,
-    schemaCapTokens,
-    input.skillMaxOutputTokens,
-  )
-  const source = input.requestedMaxTokens == null ? 'default' : 'author-custom'
-  const requestedTokens = input.requestedMaxTokens ?? WORLDVIEW_FIELD_DEFAULT_OUTPUT_TOKENS_V1
-  if (!Number.isSafeInteger(requestedTokens) || requestedTokens < 1) {
-    throw new Error('世界基座输出长度必须是正整数 token。')
-  }
-  if (source === 'author-custom' && requestedTokens > effectiveCapTokens) {
-    throw new Error(
-      `作者请求 ${requestedTokens.toLocaleString()} output tokens，超过当前单次 effective cap ${effectiveCapTokens.toLocaleString()}；LONGOUT-1 尚未启用，已在模型调用前明确拒绝，没有截断、降长或额外调用。`,
-    )
-  }
-  return {
-    version: 1,
-    source,
-    requestedTokens,
-    effectiveMaxTokens: Math.min(requestedTokens, effectiveCapTokens),
-    effectiveCapTokens,
-    modelCapTokens,
-    authorConfigCapTokens,
-    schemaCapTokens,
-    skillCapTokens: input.skillMaxOutputTokens,
-    longOutputMode: 'disabled',
-  }
+  const capacity = getModelCapacityV1(input.config)
+  const modelCapTokens = capacity.confidence !== 'fallback' && capacity.outputLimitSource !== 'policy' ? capacity.outputLimit : 0
+  const authorConfigCapTokens = Math.max(0, input.config.maxTokens)
+  const requestedTokens = input.requestedMaxTokens ?? authorConfigCapTokens
+  if (!Number.isSafeInteger(requestedTokens) || requestedTokens < 0) throw new Error('世界基座输出长度必须是非负整数 token；0 表示自动。')
+  const knownCaps = [modelCapTokens, authorConfigCapTokens].filter(value => value > 0)
+  const effectiveCapTokens = knownCaps.length ? Math.min(...knownCaps) : 0
+  return { version: 1, source: input.requestedMaxTokens == null ? 'default' : 'author-custom', requestedTokens,
+    effectiveMaxTokens: requestedTokens > 0 ? Math.min(requestedTokens, effectiveCapTokens || Infinity) : effectiveCapTokens,
+    effectiveCapTokens, modelCapTokens, authorConfigCapTokens,
+    schemaCapTokens: 0, skillCapTokens: 0, longOutputMode: 'service-capacity' }
+
 }
 
 export function parseWorldviewFieldOutputBudgetV1(value: unknown): WorldviewFieldOutputBudgetV1 {
@@ -384,13 +360,22 @@ export function parseWorldviewFieldOutputBudgetV1(value: unknown): WorldviewFiel
   exactKeys(source, keys, '世界基座输出预算')
   if (source.version !== 1
     || !['default', 'author-custom'].includes(String(source.source))
-    || source.longOutputMode !== 'disabled') {
+    || !['disabled', 'service-capacity'].includes(String(source.longOutputMode))) {
     throw new Error('世界基座输出预算版本、来源或长输出模式无效。')
   }
+  const serviceOnly = source.longOutputMode === 'service-capacity'
   for (const key of keys.slice(2, 9)) {
-    if (!Number.isSafeInteger(source[key]) || (source[key] as number) < 1) {
+    if (!Number.isSafeInteger(source[key]) || (source[key] as number) < (serviceOnly ? 0 : 1)) {
       throw new Error(`世界基座输出预算 ${key} 必须是正整数。`)
     }
+  }
+  if (serviceOnly) {
+    const caps = [source.modelCapTokens as number, source.authorConfigCapTokens as number].filter(value => value > 0)
+    const cap = caps.length ? Math.min(...caps) : 0
+    const requested = source.requestedTokens as number
+    if (source.schemaCapTokens !== 0 || source.skillCapTokens !== 0 || source.effectiveCapTokens !== cap
+      || source.effectiveMaxTokens !== (requested > 0 ? Math.min(requested, cap || Infinity) : cap)) throw new Error('世界基座服务容量证据不一致。')
+    return source as unknown as WorldviewFieldOutputBudgetV1
   }
   const cap = Math.min(
     source.modelCapTokens as number,
@@ -470,8 +455,8 @@ export function parseWorldviewFieldCandidateDraft(draft: string): WorldviewField
         const divineNames = divine.divineNames
         const divineRules = divine.divineRules
         for (const [key, candidate] of Object.entries({ divineRank, divineNames, divineRules })) {
-          if (typeof candidate !== 'string' || candidate.length > 20_000) {
-            throw new Error(`神明与信仰 ${key} 必须是 0-20000 字符的文本。`)
+          if (typeof candidate !== 'string') {
+            throw new Error(`神明与信仰 ${key} 必须是文本。`)
           }
         }
         if (typeof divineRank !== 'string' || typeof divineNames !== 'string' || typeof divineRules !== 'string') {
@@ -495,8 +480,8 @@ export function parseWorldviewFieldCandidateDraft(draft: string): WorldviewField
         const resources = source.value as Record<string, unknown>
         exactKeys(resources, ['rareCreatures', 'herbs', 'minerals', 'others'], '自然资源明细候选 value')
         for (const [key, candidate] of Object.entries(resources)) {
-          if (typeof candidate !== 'string' || candidate.length > 20_000) {
-            throw new Error(`自然资源明细 ${key} 必须是 0-20000 字符的文本。`)
+          if (typeof candidate !== 'string') {
+            throw new Error(`自然资源明细 ${key} 必须是文本。`)
           }
         }
         return {
@@ -514,9 +499,6 @@ export function parseWorldviewFieldCandidateDraft(draft: string): WorldviewField
         throw new Error(`世界基座候选 ${field}.value 至少需要 2 个字符。`)
       }
       const fieldValue = source.value.trim()
-      if (fieldValue.length > capability.maxChars) {
-        throw new Error(`世界基座候选 ${field}.value 超过 ${capability.maxChars} 字符。`)
-      }
       return {
         field,
         value: fieldValue,
@@ -1049,8 +1031,7 @@ export function createWorldviewFieldCopilotNode(
         baseUrl: input.config.baseUrl,
         model: input.config.model,
         modelCapacity: input.config.modelCapacity,
-        maxTokens: input.outputBudget?.effectiveMaxTokens
-          ?? WORLDVIEW_FIELD_DEFAULT_OUTPUT_TOKENS_V1,
+        maxTokens: input.outputBudget?.effectiveMaxTokens ?? input.generationOverrides?.maxTokens ?? 0,
         temperature: input.generationOverrides?.temperature ?? 0.5,
       },
       contextOverflowPolicy: 'reject' as const,
@@ -1110,9 +1091,6 @@ export function formatWorldviewFieldGenerationRequestV1(input: {
   const hint = (input.hint ?? '').trim()
   if (hint) parts.push(`作者要求：${hint}`)
   const request = parts.join('\n')
-  if (request.length > 8_000) {
-    throw new Error('世界基座作者要求超过 8000 字符；没有截断，已在模型调用前阻止。')
-  }
   return request
 }
 

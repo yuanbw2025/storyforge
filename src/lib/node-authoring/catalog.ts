@@ -32,7 +32,6 @@ const contextInput = (): AuthoringPortDefinition => ({
   required: false,
   multiple: true,
   priority: 50,
-  maxTokens: 12_000,
 })
 
 const optionalControl = (
@@ -579,7 +578,7 @@ const CONTROL_TEMPLATES: AuthoringNodeTemplate[] = [
   controlTemplate({ id: 'control.ai-profile', label: 'AI 配置档案', description: '引用一个现有 AI preset，不保存 API Key。', semantic: 'control.ai-profile', parameter: { key: 'presetId', label: '配置档案', type: 'select', options: [], defaultValue: '' } }),
   controlTemplate({ id: 'control.prompt', label: 'Prompt 模板', description: '引用现有 Prompt 模板和本次补充说明。', semantic: 'control.prompt', parameter: { key: 'templateId', label: 'Prompt 模板', type: 'text', defaultValue: '' } }),
   controlTemplate({ id: 'control.temperature', label: '温度', description: '控制生成随机性，最终范围由 provider 归一。', semantic: 'control.temperature', parameter: { key: 'value', label: '温度', type: 'number', min: 0, max: 2, step: 0.1, defaultValue: 0.7 } }),
-  controlTemplate({ id: 'control.max-tokens', label: '最大输出 Tokens', description: '限制模型单次最大输出。', semantic: 'control.max-tokens', parameter: { key: 'value', label: 'Tokens', type: 'number', min: 100, max: 128_000, step: 100, defaultValue: 6000 } }),
+  controlTemplate({ id: 'control.max-tokens', label: '最大输出 Tokens', description: '作者指定最大输出，0 表示按模型实际容量自动处理。', semantic: 'control.max-tokens', parameter: { key: 'value', label: 'Tokens', type: 'number', min: 0, step: 100, defaultValue: 0 } }),
   controlTemplate({ id: 'control.word-count', label: '期望字数', description: '创作目标字数，不冒充精确 token 换算。', semantic: 'control.word-count', parameter: { key: 'value', label: '字数', type: 'number', min: 100, max: 100_000, step: 100, defaultValue: 3000 } }),
   controlTemplate({ id: 'control.context-budget', label: '上下文预算', description: '限制节点总输入预算。', semantic: 'control.context-budget', parameter: { key: 'value', label: 'Tokens', type: 'number', min: 1000, max: 256_000, step: 1000, defaultValue: 16_000 } }),
   controlTemplate({ id: 'control.candidate-count', label: '候选数量', description: '生成多个候选供作者比较。', semantic: 'control.count', parameter: { key: 'value', label: '数量', type: 'number', min: 1, max: 8, step: 1, defaultValue: 1 } }),

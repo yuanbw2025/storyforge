@@ -1,3 +1,4 @@
+import { finiteServiceConfigFixtureV1 } from '../helpers/model-capacity-fixture'
 import { describe, expect, it, vi } from 'vitest'
 import {
   createAgentContextCompressionSessionV1,
@@ -365,6 +366,7 @@ describe('R-HARNESS16 · 语义压缩、锚点保真与单来源回退', () => {
       sourceKeys: ['manualText'],
       manualSourceText: content,
       inputBudgetTokens,
+      modelConfig: await finiteServiceConfigFixtureV1(inputBudgetTokens),
       sourceTransformer: compression.sourceTransformer,
     })
     expect(assembled.sourceEvidence?.[0]).toMatchObject({
@@ -384,6 +386,7 @@ describe('R-HARNESS16 · 语义压缩、锚点保真与单来源回退', () => {
       sourceKeys: ['manualText'],
       manualSourceText: content,
       inputBudgetTokens,
+      modelConfig: await finiteServiceConfigFixtureV1(inputBudgetTokens),
       sourceTransformer: async source => {
         const result = await forged.sourceTransformer(source)
         return result ? {

@@ -1,7 +1,6 @@
 import { db } from '../db/schema'
 import { assembleContext } from '../registry/assemble-context'
 import { normalizeChapterText, hashChapterText, sha256Text } from '../ai/chapter-memory/text-normalization'
-import { estimateTokens } from '../ai/context-budget'
 import {
   buildConsistencyAuditPrompt,
   consistencyAuditEvidenceOffsetV1,
@@ -373,11 +372,8 @@ export async function runConsistencyAgent(input: {
     cognitionCatalog: formatCognitionCatalog(cognition.catalog),
     lifecycleCatalog: formatLifecycleCatalog(lifecycle.catalog),
   })
-  // The audit budget includes the full chapter and catalogs, not just registered sources.
-  const requestTokens = messages.reduce((total, message) => total + estimateTokens(message.content), 0)
-  if (requestTokens > CONSISTENCY_AGENT_INPUT_BUDGET_V1[input.mode]) {
-    throw new Error(`本章全文与审计资料超出${input.mode === 'fast' ? ' Fast Guard' : ' Deep Audit'} 输入预算；未发送模型请求。${input.mode === 'fast' ? '可选择 Deep Audit 进行更大范围审计。' : ''}`)
-  }
+  // The shared client checks the complete request against the selected service;
+  // the historical Fast/Deep forecast is not an additional text ceiling.
   await input.trace?.contextAssembled?.({ assembled: evidence, messages, sourceTextHash, citationIndex, citationIndexHash })
   await input.trace?.modelRequested?.({ messages })
   const reservation = input.budget.reserveCall({

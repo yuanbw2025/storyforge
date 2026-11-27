@@ -134,7 +134,7 @@ describe('R-PRODUCTPROD-1C · bounded parallel production plan', () => {
     }
     expect(productProductionProviderOutputLimitV1({
       skillId: 'text-adventure.scene-script.v1', budgetReservation,
-    })).toBe(24_000)
+    })).toBe(32_000)
     expect(productProductionProviderOutputLimitV1({
       skillId: null, budgetReservation,
     })).toBe(32_000)
@@ -143,7 +143,7 @@ describe('R-PRODUCTPROD-1C · bounded parallel production plan', () => {
     })).toBe(32_000)
     expect(productProductionProviderOutputLimitV1({
       skillId: 'text-adventure.dialogue-pass.v1', budgetReservation,
-    }, '{"schema":"storyforge.text-adventure-repair-feedback","version":1}')).toBe(16_000)
+    }, '{"schema":"storyforge.text-adventure-repair-feedback","version":1}')).toBe(32_000)
   })
 
   it('把内容、美术和音频拆成有界 DAG，并在集成节点汇合', async () => {

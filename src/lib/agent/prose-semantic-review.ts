@@ -140,9 +140,9 @@ function exactKeys(record: Record<string, unknown>, keys: readonly string[], lab
   }
 }
 
-function nonEmptyString(value: unknown, label: string, max: number): string {
-  if (typeof value !== 'string' || !value.trim() || value.trim().length > max) {
-    throw new Error(`${label} 必须是 1-${max} 字符的非空文本。`)
+function nonEmptyString(value: unknown, label: string, _max: number): string {
+  if (typeof value !== 'string' || !value.trim()) {
+    throw new Error(`${label} 必须是非空文本。`)
   }
   return value.trim()
 }
@@ -167,7 +167,6 @@ function parseIssues(input: {
   segments: readonly ReviewSegmentV1[]
 }): ProseSemanticReviewIssueV1[] {
   if (!Array.isArray(input.value)) throw new Error('语义评审 issues 必须是数组。')
-  if (input.value.length > 12) throw new Error('语义评审 issues 超过 12 条上限。')
   const segmentByKey = new Map(input.segments.map(segment => [segment.key, segment.content]))
   const issues = input.value.map((raw, index): ProseSemanticReviewIssueV1 => {
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
@@ -191,8 +190,8 @@ function parseIssues(input: {
     if (!input.candidateText.includes(candidateQuote)) {
       throw new Error(`语义评审 issues[${index}] candidateQuote 不是候选逐字引文。`)
     }
-    if (!Array.isArray(record.evidence) || record.evidence.length > 8) {
-      throw new Error(`语义评审 issues[${index}].evidence 必须是至多 8 条的数组。`)
+    if (!Array.isArray(record.evidence)) {
+      throw new Error(`语义评审 issues[${index}].evidence 必须是数组。`)
     }
     const evidence = record.evidence.map((entry, evidenceIndex): ProseSemanticReviewEvidenceV1 => {
       if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {

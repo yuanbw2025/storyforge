@@ -571,16 +571,6 @@ function evaluateStructuredOutput<T>(input: {
       },
     })
   }
-  if (contract.version === 1 && originalText.length > contract.maxChars) {
-    fail({
-      contract, originalText, normalizedText, steps, status: 'blocked',
-      issue: {
-        code: 'structured-output-too-large', category: 'length', path: '$',
-        message: `结构化输出超过 ${contract.maxChars} 字符，已阻止自动处理。`, repairable: false,
-      },
-    })
-  }
-
   const fence = normalizedText.match(/^```(?:json)?\s*\n?([\s\S]*?)\n?```$/i)
   if (fence) {
     normalizedText = fence[1].trim()

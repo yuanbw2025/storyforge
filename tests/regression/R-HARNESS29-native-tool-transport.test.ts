@@ -1,5 +1,5 @@
-import { syntheticFrozenAllocationV1, seedModelAllocationFixtureV1 } from '../helpers/model-capacity-fixture'
-import { resetModelCapacityForTestsV1 } from '../../src/lib/ai/model-capacity'
+import { seedModelAllocationFixtureV1 } from '../helpers/model-capacity-fixture'
+import { getModelCapacityV1, parseModelCapacityV1, resetModelCapacityForTestsV1 } from '../../src/lib/ai/model-capacity'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   NATIVE_READ_TOOLS_STORAGE_KEY_V1,
@@ -213,12 +213,16 @@ describe('R-HARNESS29 · provider-native read tool transport', () => {
 
   it('counts native schemas against the physical context window before fetch', async () => {
     const fixture = await createWorkspace('原生工具窗口')
+    // Isolated service-fact input for the OpenAI native-tool contract; no live availability claim.
+    const config: AIConfig = {...OPENAI_CONFIG, maxTokens: 128}
+    config.modelCapacity = parseModelCapacityV1({...getModelCapacityV1(config), totalWindow: 512,
+      inputLimit: null, outputLimit: 128, confidence: 'service', outputLimitSource: 'service', source: 'https://lmstudio.ai/docs/developer/rest/list'})
     const fetchMock = vi.fn()
     vi.stubGlobal('fetch', fetchMock)
     const result = await runReadOnlyAgentWithClient({
       goal: '核查项目',
       context: { projectId: fixture.scope.projectId, scope: fixture.scope, worldGroupId: fixture.worldGroupId },
-      config: syntheticFrozenAllocationV1({ ...OPENAI_CONFIG, maxTokens: 128 }, 512, 128),
+      config,
       transport: 'native-tools-v1',
       allowedToolNames: ALL_READ_TOOL_NAMES,
     })

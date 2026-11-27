@@ -59,7 +59,7 @@ describe('AGENT-1 27.1-e · 领域上下文预算与输入证据', () => {
     expect(split.every(item => item.sourceBudgetScale === policy.sourceBudgetScale)).toBe(true)
   })
 
-  it('请求预算约束手工原文，源比例不能放大预算或恢复旧100k额度', async () => {
+  it('旧请求额度和来源比例不再裁剪手工原文，完整保存真实输入证据', async () => {
     const projectId = (await seedCurrentWorkspace('Context budget')).scope.projectId
     const text = '潮'.repeat(80_000)
     const compact = await assembleContext({
@@ -69,9 +69,9 @@ describe('AGENT-1 27.1-e · 领域上下文预算与输入证据', () => {
       inputBudgetMaxTokens: 12_000,
       sourceBudgetScale: 0.1,
     })
-    expect(compact.inputBudget).toBe(12_000)
-    expect(compact.totalInputTokens).toBeLessThanOrEqual(10_000)
-    expect(compact.text).toContain('该上下文源已按预算截断')
+    expect(compact.inputBudget).toBe(compact.totalInputTokens)
+    expect(compact.text).toContain(text)
+    expect(compact.trimmed).toEqual([])
 
     const clamped = await assembleContext({
       projectId,

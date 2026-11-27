@@ -117,13 +117,15 @@ describe.sequential('R-HARNESS67 · 世界组六字段扩写 durable 候选与�
     expect((await targetRow(fixture))?.worldOrigin).toBe('旧起源')
   })
 
-  it('硬规则被预算裁剪时在模型前拒绝，不能拿不完整规则生成', async () => {
+  it('长硬规则完整交付，不再受旧装配配额裁剪', async () => {
     const fixture = await seed('规则预算')
     const now = Date.now()
     await db.worldRulesProfiles.add({ projectId: fixture.projectId, worldId: fixture.worldId, worldGroupId: fixture.worldGroupId, entries: { custom: { historicalAnchors: '', fictionalAdaptations: '作者硬规则不可丢弃'.repeat(8000), priority: 'fictional' } }, customNodes: [], globalNote: '', createdAt: now, updatedAt: now } as any)
     const runAI = vi.fn(async () => response())
-    await expect(generateWorldviewExpandCandidateV1({ scope: fixture.scope, worldGroupId: fixture.worldGroupId, runAI })).rejects.toThrow('未完整进入上下文预算')
-    expect(runAI).not.toHaveBeenCalled()
+    const result = await generateWorldviewExpandCandidateV1({ scope: fixture.scope, worldGroupId: fixture.worldGroupId, runAI })
+    expect(runAI).toHaveBeenCalledOnce()
+    expect(JSON.stringify(runAI.mock.calls)).toContain('作者硬规则不可丢弃'.repeat(8000))
+    expect(result.candidate.kind).toBe('worldview-expand-candidate')
     expect((await targetRow(fixture))?.worldOrigin).toBe('旧起源')
   })
 

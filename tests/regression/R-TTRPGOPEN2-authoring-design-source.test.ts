@@ -1,3 +1,4 @@
+import { finiteServiceConfigFixtureV1 } from '../helpers/model-capacity-fixture'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { createFreshOpenDraftFixtureV1 } from '../helpers/open-ttrpg-fresh-authoring'
@@ -87,7 +88,7 @@ describe('R-TTRPGOPEN2 real saved S2 assisted-design source boundary', () => {
     expect(source.revision).toBe(draft.revision)
     expect(source.sourceSelection.resourceKeys.length).toBeGreaterThan(0)
     await assertTtrpgOpenAuthoringDesignSourceCurrentV1(source)
-    await expect(assembleContext({ ...input, inputBudgetTokens: 1 })).rejects.toThrow()
+    await expect(assembleContext({ ...input, modelConfig: await finiteServiceConfigFixtureV1(64), inputBudgetTokens: 1 })).rejects.toThrow()
     await expect(assembleContext({ ...input, ttrpgAuthoringDesignRevision: undefined })).resolves.toMatchObject({ included: [] })
     await expect(readTtrpgOpenAuthoringDesignContextV1({ ...input, ttrpgAuthoringDesignRevision: undefined })).rejects.toThrow('明确作品')
     await expect(assembleContext({ ...input, ttrpgAuthoringDesignRevision: draft.revision - 1 })).rejects.toThrow('草稿已变化')

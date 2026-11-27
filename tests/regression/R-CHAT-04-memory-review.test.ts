@@ -1,3 +1,4 @@
+import { finiteServiceConfigFixtureV1 } from '../helpers/model-capacity-fixture'
 import {afterEach, beforeEach, expect, it, vi} from 'vitest'
 import {db} from '../../src/lib/db/schema'
 import {generateInteractionRuntimeCandidateV1, adoptInteractionRuntimeCandidateV1, readInteractionRuntimeCandidateV1, resumeChatMemoryReviewV1} from '../../src/lib/character-interaction/harness'
@@ -147,7 +148,7 @@ it('rejects an oversized atomic memory evidence source without calling the revie
     onRunCreated: id => {runId = id}, onMemoryCandidateSaved: () => {throw new Error('saved')},
   })).rejects.toThrow('saved')
   await expect(assembleContext({projectId: f.scope.projectId, scope: f.scope, worldGroupId: null, productRuntimeSessionId: f.sessionId,
-    chatMemoryCandidateRunId: runId, sourceKeys: ['chatMemoryReview'], inputBudgetMaxTokens: 500, sourceBudgetScale: 0.1})).rejects.toThrow()
+    chatMemoryCandidateRunId: runId, sourceKeys: ['chatMemoryReview'], modelConfig: await finiteServiceConfigFixtureV1(500), inputBudgetMaxTokens: 500, sourceBudgetScale: 0.1})).rejects.toThrow()
   const saved = await readInstanceAgentRunV1(f.scope, runId)
   expect(saved.events.filter(e => e.type === 'model.requested')).toHaveLength(1)
 })

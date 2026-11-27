@@ -1,4 +1,4 @@
-import { syntheticFrozenAllocationV1 } from '../helpers/model-capacity-fixture'
+import { finiteServiceConfigFixtureV1 } from '../helpers/model-capacity-fixture'
 /**
  * R-open-truncation · 放开内部截断(社区反馈:核心设定被静默硬截、想生成更多不支持)
  *
@@ -28,24 +28,26 @@ describe('R-open-truncation · 放开内部截断', () => {
       projectId,
       provider: 'deepseek',
       model: 'deepseek-v4-pro',
-      modelConfig: syntheticFrozenAllocationV1({
-        provider: 'deepseek', model: 'deepseek-v4-pro', baseUrl: 'https://capacity-fixture.invalid/v1',
-        apiKey: 'synthetic', temperature: 0, maxTokens: 8192,
-      }, 128000, 16384),
-      sourceKeys: [],
+      modelConfig: await finiteServiceConfigFixtureV1(128000, 8192),
+      sourceKeys: ['manualText'],
+      manualSourceText: '完整原文'.repeat(100),
     } as any)
     expect(r.inputBudget).toBeGreaterThan(48000)
   })
 
-  it('显式传 inputBudgetTokens 时仍尊重该值(覆盖优先)', async () => {
+  it('旧 inputBudgetTokens 不再限制未确认模型窗口的完整输入', async () => {
     const projectId = (await seedCurrentWorkspace('Explicit context budget')).scope.projectId
     const r = await assembleContext({
       projectId,
       provider: 'deepseek',
       model: 'deepseek-v4-pro',
       inputBudgetTokens: 60,
-      sourceKeys: [],
+      sourceKeys: ['manualText'],
+      manualSourceText: '完整原文'.repeat(100),
     } as any)
-    expect(r.inputBudget).toBe(60)
+    expect(r.inputBudget).toBe(r.totalInputTokens)
+    expect(r.inputBudget).toBeGreaterThan(60)
+    expect(r.trimmed).toEqual([])
+    expect(r.text).toContain('完整原文'.repeat(100))
   })
 })

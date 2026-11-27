@@ -14,10 +14,10 @@ export function referenceServiceInputLimit(config: AIConfig): number | null {
   return capacity.confidence === 'fallback' ? null : capacity.inputLimit ?? capacity.totalWindow
 }
 
-export function referenceServiceOutputLimit(config: AIConfig, messages: ReadonlyArray<{ content: unknown }>): number | null {
+export function referenceServiceOutputLimit(config: AIConfig, messages: ReadonlyArray<{ content: unknown }>, reservedInputTokens = 0): number | null {
   const capacity = getModelCapacityV1(config)
   if (capacity.confidence === 'fallback') return null
-  const input = estimateTokens(JSON.stringify(messages))
+  const input = estimateTokens(JSON.stringify(messages)) + Math.max(0, reservedInputTokens)
   const inputLimit = capacity.inputLimit ?? capacity.totalWindow!
   if (input >= inputLimit) throw new ReferenceServiceWindowError(inputLimit)
   const available = capacity.totalWindow == null ? null : capacity.totalWindow - input

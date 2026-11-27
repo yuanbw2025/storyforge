@@ -513,7 +513,7 @@ export async function generateWorldviewExpandCandidateV1(input: {
       : chat(prompt.messages, input.aiConfig!, {
           category: 'world-group.expand',
           projectId: input.scope.projectId,
-          configOverrides: { maxTokens: requireFixedBudgetValueV1(getAgentSkillV1('world-origin.worldview-expand').maxOutputTokens) },
+          configOverrides: { maxTokens: 0 },
           contextOverflowPolicy: 'reject',
         }, undefined, undefined, { responseFormat: 'json_object' }))
   } catch (error) {

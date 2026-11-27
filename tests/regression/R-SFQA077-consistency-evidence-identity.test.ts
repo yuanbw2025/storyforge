@@ -1,4 +1,4 @@
-import { seedModelAllocationFixtureV1 } from '../helpers/model-capacity-fixture'
+import { finiteServiceConfigFixtureV1 } from '../helpers/model-capacity-fixture'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { useOutlineStore } from '../../src/stores/outline'
@@ -336,12 +336,25 @@ describe('077 · 一致性引文必须属于声明的原来源', () => {
     expect(await readLatestConsistencyAgentRun({ projectId: f.scope.projectId, chapterId: f.targetChapterId })).toBeNull()
   })
 
+  it('delivers a full Canon source beyond the old Deep Audit quota and admits its exact citation', async () => {
+    const f = await seedConsistencyProject(), text = '原始章程。' + '条例'.repeat(6000)
+    const id = await addConfirmedCanon(f.scope, '巨型资料', text)
+    const original = await db.temporalFacts.get(id), raw = modelReport({sourceType: 'canon', sourceId: id, quote: '原始章程。'})
+    let calls = 0
+    const result = await runDurableConsistencyAuditV1(runInput(f, async messages => {
+      calls++
+      expect(messages[1].content).toContain(text)
+      return raw
+    }, {modelConfig: await finiteServiceConfigFixtureV1(128_000), budget: new AgentTeamBudgetTracker('service-capacity')}))
+    expect(calls).toBe(1)
+    expect(result.candidate.type).toBe('consistency-agent')
+    const request = JSON.parse((await db.agentRunArtifacts.toArray()).find(row => row.artifactKind === 'rendered-request')!.content!)
+    expect(request.citationIndex.sources).toContainEqual(expect.objectContaining({sourceType: 'canon', sourceId: id}))
+    expect(await db.temporalFacts.get(id)).toEqual(original)
+  })
+
   it('keeps a clipped Canon source out of the eligible citation catalog', async () => {
-    // This injected-call layout boundary supplies only provider/model. Bind the
-    // existing synthetic metadata parser to that exact empty-endpoint identity.
-    const config = { provider: 'custom' as const, model: 'sfqa077-layout-fixture',
-      baseUrl: '', apiKey: '', temperature: 0, maxTokens: 0 }
-    await seedModelAllocationFixtureV1(config, 64_000)
+    const config = await finiteServiceConfigFixtureV1(16_000)
     const f = await seedConsistencyProject()
     const id = await addConfirmedCanon(f.scope, '巨型资料', '原始章程。' + '条例'.repeat(6000))
     const original = await db.temporalFacts.get(id)
@@ -351,14 +364,12 @@ describe('077 · 一致性引文必须属于声明的原来源', () => {
       calls++
       expect(messages[1].content).toContain('原始章程。')
       expect(messages[1].content).not.toContain('原始章程。' + '条例'.repeat(6000))
-      expect(messages[1].content).toContain('【可引用外部资料目录】observation')
       return raw
-    }, { provider: config.provider, model: config.model }))).rejects.toThrow('引文、证据无效')
+    }, { provider: config.provider, model: config.model, modelConfig: config }))).rejects.toThrow('引文、证据无效')
     expect(calls).toBe(1)
     const artifacts = await db.agentRunArtifacts.toArray()
     const request = JSON.parse(artifacts.find(row => row.artifactKind === 'rendered-request')!.content!)
     expect(request.citationIndex.sources).not.toContainEqual(expect.objectContaining({ sourceType: 'canon', sourceId: id }))
-    expect(request.citationIndex.sources).toContainEqual(expect.objectContaining({ sourceType: 'observation', sourceId: f.observationId }))
     expect(JSON.parse(artifacts.find(row => row.artifactKind === 'raw-response')!.content!).raw).toBe(raw)
     expect(await db.temporalFacts.get(id)).toEqual(original)
     expect(await readLatestConsistencyAgentRun({ projectId: f.scope.projectId, chapterId: f.targetChapterId })).toBeNull()

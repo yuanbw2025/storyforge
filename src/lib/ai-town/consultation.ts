@@ -45,7 +45,7 @@ export async function consultAiTownV1(input: {
   const binding = createAgentSkillExecutionBindingV1(skill);
   const resolved = input.config
     ? resolveRequestConfig(
-        { ...input.config, maxTokens: 8000 },
+        { ...input.config },
         {
           category: "authoring.ai-town-consult",
           projectId: input.scope.projectId,

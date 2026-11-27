@@ -1,4 +1,4 @@
-import { syntheticFrozenAllocationV1 } from '../helpers/model-capacity-fixture'
+import { finiteServiceConfigFixtureV1 } from '../helpers/model-capacity-fixture'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { seedCurrentWorkspace } from '../helpers/current-workspace'
@@ -105,7 +105,7 @@ describe('LFQ5 · 正文的完整实际资料与预算', () => {
     const f = await seed(); const result = await assembly(f)
     const messages = buildChapterContentPrompt('第一章', '章纲', result.text, '', '', '', undefined, { requiredGatewayContext: result.text })
     const fetchMock = vi.fn(); vi.stubGlobal('fetch', fetchMock)
-    await expect(chat(messages, syntheticFrozenAllocationV1({ ...useAIConfigStore.getState().config, provider: 'openai', model: 'window-test', apiKey: 'test-only', baseUrl: 'https://budget.invalid', maxTokens: 500 }, 1500, 500), { contextOverflowPolicy: 'reject' })).rejects.toThrow('上下文窗口不足')
+    await expect(chat(messages, await finiteServiceConfigFixtureV1(1500, 500), { contextOverflowPolicy: 'reject' })).rejects.toThrow(/实际上下文窗口|上下文窗口不足/)
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
@@ -117,7 +117,7 @@ describe('LFQ5 · 正文的完整实际资料与预算', () => {
     const result = await assembly(f)
     expect(result.text).toContain(notes)
     await db.detailedOutlines.update(f.detailId, { scenes: [{ ...detail.scenes[0], notes: notes.repeat(20) }] })
-    await expect(assembly(f)).rejects.toThrow('hard-sufficiency')
+    await expect(assembly(f, {config: await finiteServiceConfigFixtureV1(20_000)})).rejects.toThrow(/hard-sufficiency|模型输入预算/)
   })
 
   it('视角认知、已过期和孤立事实、未来正文不能被自动召回；章纲草稿没有正文 id 也守住章序', async () => {
