@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 import { createLongform } from './helpers/product-entry'
+import { enterMarkdownSourceEditorV1, expectMarkdownSourceValueV1, enterChapterSummaryEditorV1, expectChapterSummarySourceV1 } from './helpers/markdown-source'
 import { openLongformLeaf } from './helpers/longform-navigation'
 
 async function setup(page: Page) {
@@ -36,6 +37,8 @@ test('volume and chapter edits survive acknowledgement, clear, navigation and re
   const fields = ['卷标题', '卷情节摘要', '章节标题', '章节摘要']
   for (const label of fields) {
     const value = `${label}：先试绳结，再过断桥。`
+    if (label === '卷情节摘要') await enterMarkdownSourceEditorV1(page.getByText(label, { exact: true }).locator('..'), page.getByLabel(label, { exact: true }))
+    if (label === '章节摘要') await enterChapterSummaryEditorV1(page)
     await page.getByLabel(label, { exact: true }).fill(value)
     await page.getByLabel(label, { exact: true }).blur()
     await expect.poll(async () => {
@@ -44,15 +47,16 @@ test('volume and chapter edits survive acknowledgement, clear, navigation and re
       return row[label.endsWith('标题') ? 'title' : 'summary']
     }).toBe(value)
   }
+  await enterChapterSummaryEditorV1(page)
   await page.getByLabel('章节摘要', { exact: true }).fill('')
   await page.getByLabel('章节摘要', { exact: true }).blur()
   await expect.poll(async () => (await rows(page)).rows.find((node: { type: string }) => node.type === 'chapter').summary).toBe('')
   await openLongformLeaf(page, '细纲'); await openLongformLeaf(page, '大纲')
   await page.reload()
   await expect(page.getByLabel('卷标题', { exact: true })).toHaveValue('卷标题：先试绳结，再过断桥。')
-  await expect(page.getByLabel('卷情节摘要', { exact: true })).toHaveValue('卷情节摘要：先试绳结，再过断桥。')
+  await expectMarkdownSourceValueV1(page.getByText('卷情节摘要', { exact: true }).locator('..'), page.getByLabel('卷情节摘要', { exact: true }), '卷情节摘要：先试绳结，再过断桥。')
   await expect(page.getByLabel('章节标题', { exact: true })).toHaveValue('章节标题：先试绳结，再过断桥。')
-  await expect(page.getByLabel('章节摘要', { exact: true })).toHaveValue('')
+  await expectChapterSummarySourceV1(page, '')
   expect(errors).toEqual([])
 })
 
@@ -91,8 +95,9 @@ test('typing during a delayed write keeps the later text and acknowledges both s
   await field.fill('第二份输入，必须等上一笔确认后继续保存。')
   await expect(field).toHaveValue('第二份输入，必须等上一笔确认后继续保存。')
   await expect.poll(async () => (await rows(page)).rows.find((node: { type: string }) => node.type === 'volume').summary).toBe('第二份输入，必须等上一笔确认后继续保存。')
-  await field.blur(); await page.reload()
-  await expect(field).toHaveValue('第二份输入，必须等上一笔确认后继续保存。')
+  await expectMarkdownSourceValueV1(page.getByText('卷情节摘要', { exact: true }).locator('..'), field, '第二份输入，必须等上一笔确认后继续保存。')
+  await page.reload()
+  await expectMarkdownSourceValueV1(page.getByText('卷情节摘要', { exact: true }).locator('..'), field, '第二份输入，必须等上一笔确认后继续保存。')
 })
 
 test('a concurrent canonical edit is not overwritten by a stale outline draft', async ({ page }) => {
@@ -129,7 +134,7 @@ test('invalid stored outline text produces a recoverable read error without modi
     await db.outlineNodes.update(id, { summary: '从原始备份恢复的合法摘要' })
   }, volume.id)
   await page.getByRole('button', { name: '重试读取大纲', exact: true }).click()
-  await expect(page.getByLabel('卷情节摘要', { exact: true })).toHaveValue('从原始备份恢复的合法摘要')
+  await expectMarkdownSourceValueV1(page.getByText('卷情节摘要', { exact: true }).locator('..'), page.getByLabel('卷情节摘要', { exact: true }), '从原始备份恢复的合法摘要')
   expect(errors).toEqual([])
 })
 

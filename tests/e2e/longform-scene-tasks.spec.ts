@@ -1,6 +1,14 @@
+import { enterChapterSummaryEditorV1, expectMarkdownSourceValueV1 } from './helpers/markdown-source'
 import { installBrowserServiceCapacityFixtureV1 } from './helpers/browser-ai-config'
-import { expect, test } from '@playwright/test'
+import { expect, test, type Page } from '@playwright/test'
 import { createLongform } from './helpers/product-entry'
+
+function sceneTaskScope(page: Page, label: string) {
+  return page.getByRole('button', { name: '删除场景1', exact: true }).locator('xpath=ancestor::fieldset').locator('label').filter({ hasText: new RegExp(`^${label}`) })
+}
+function sceneNotesScope(page: Page) {
+  return page.getByRole('button', { name: '删除场景1', exact: true }).locator('xpath=ancestor::fieldset').locator(':scope > div.flex-1').last()
+}
 
 test('同一章从章纲到任务细纲到正文再返回；快速编辑先保存，刷新与窄屏保留任务和备注', async ({ page }) => {
   await createLongform(page, '细纲任务与章节交接')
@@ -30,15 +38,16 @@ test('同一章从章纲到任务细纲到正文再返回；快速编辑先保�
   await expect(page).toHaveURL(new RegExp(`module=detailed-outline&chapter=${chapterNode}&work=${workId}`))
   await expect(page.getByRole('button', { name: '第1章', exact: true })).toHaveAttribute('aria-description', '已保存细纲')
   await page.getByText('场景任务（可选，可留白）', { exact: true }).click()
-  await expect(page.getByLabel('场景1 · 本场目标', { exact: true })).toHaveValue('让两个人愿意分工')
-  await expect(page.getByPlaceholder('备注 / AI 建议...', { exact: true })).toHaveValue('保留缓冲场景，不增加敌人。')
+  await expectMarkdownSourceValueV1(sceneTaskScope(page, '本场目标'), page.getByLabel('场景1 · 本场目标', { exact: true }), '让两个人愿意分工')
+  await expectMarkdownSourceValueV1(sceneNotesScope(page), page.getByPlaceholder('备注 / AI 建议...', { exact: true }), '保留缓冲场景，不增加敌人。')
   await page.reload()
   await page.getByText('场景任务（可选，可留白）', { exact: true }).click()
-  await expect(page.getByLabel('场景1 · 退出状态', { exact: true })).toHaveValue('约定已达成，明天仍未开始干活')
+  await expectMarkdownSourceValueV1(sceneTaskScope(page, '退出状态'), page.getByLabel('场景1 · 退出状态', { exact: true }), '约定已达成，明天仍未开始干活')
   await page.setViewportSize({ width: 390, height: 844 })
   expect(await page.locator('main').evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true)
   await page.getByRole('button', { name: '查看本章章纲', exact: true }).click()
   await expect(page).toHaveURL(new RegExp(`module=outline&chapter=${chapterNode}&work=${workId}`))
+  await enterChapterSummaryEditorV1(page)
   await page.getByLabel('章节摘要', { exact: true }).fill('章纲调整为先核实库存，再安排分工。')
   await page.getByTitle('编辑本章细纲', { exact: true }).click()
   await expect(page.getByRole('button', { name: '第1章', exact: true })).toHaveAttribute('aria-description', '章纲变化待复核')
@@ -123,8 +132,8 @@ test('新任务字段走原细纲 Harness；候选在其它章节仍有标记，
   await page.getByRole('button', { name: '采纳', exact: true }).click()
   await expect(draft).toHaveCount(0)
   await page.getByText('场景任务（可选，可留白）', { exact: true }).click()
-  await expect(page.getByLabel('场景1 · 本场目标', { exact: true })).toHaveValue('作者确认的分工目标')
-  await expect(page.getByLabel('场景1 · 退出状态', { exact: true })).toHaveValue('约定未履行')
-  await expect(page.getByPlaceholder('备注 / AI 建议...', { exact: true })).toHaveValue('不要追加敌人')
+  await expectMarkdownSourceValueV1(sceneTaskScope(page, '本场目标'), page.getByLabel('场景1 · 本场目标', { exact: true }), '作者确认的分工目标')
+  await expectMarkdownSourceValueV1(sceneTaskScope(page, '退出状态'), page.getByLabel('场景1 · 退出状态', { exact: true }), '约定未履行')
+  await expectMarkdownSourceValueV1(sceneNotesScope(page), page.getByPlaceholder('备注 / AI 建议...', { exact: true }), '不要追加敌人')
   expect(calls).toBe(2)
 })

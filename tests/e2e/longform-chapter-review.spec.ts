@@ -1,3 +1,4 @@
+import { expectChapterSummarySourceV1 } from './helpers/markdown-source'
 import { installBrowserServiceCapacityFixtureV1 } from './helpers/browser-ai-config'
 import { expect, test, type Page } from '@playwright/test'
 import { createLongform } from './helpers/product-entry'
@@ -59,9 +60,9 @@ test('SFQA099: selected preview and persisted summary preserve all unselected te
   await page.getByRole('button', { name: '应用选中修改', exact: true }).click()
   await expect(page.getByText('已应用到：', { exact: false })).toBeVisible()
   await page.getByRole('button', { name: '关闭', exact: true }).click()
-  await expect(page.getByLabel('章节摘要', { exact: true })).toHaveValue(expected)
+  await expectChapterSummarySourceV1(page, expected)
   await page.reload()
-  await expect(page.getByLabel('章节摘要', { exact: true })).toHaveValue(expected)
+  await expectChapterSummarySourceV1(page, expected)
   expect(calls()).toBe(2)
 })
 
@@ -75,6 +76,6 @@ test('SFQA099: omitted model original is rejected visibly without changing the s
   await page.getByText('查看本次原始响应', { exact: true }).click()
   await expect(page.locator('pre').filter({ hasText: '伪造开头。' })).toHaveText(raw)
   await page.getByRole('button', { name: '关闭', exact: true }).click()
-  await expect(page.getByLabel('章节摘要', { exact: true })).toHaveValue(original)
+  await expectChapterSummarySourceV1(page, original)
   expect(calls()).toBe(2)
 })

@@ -1,3 +1,4 @@
+import { chapterSummaryScopeV1, enterChapterSummaryEditorV1, expectChapterSummarySourceV1 } from './helpers/markdown-source'
 import { installBrowserServiceCapacityFixtureV1 } from './helpers/browser-ai-config'
 import { expect, test, type Page } from '@playwright/test'
 import { createLongform } from './helpers/product-entry'
@@ -30,8 +31,9 @@ async function setup(page: Page, chapterCount = 2) {
   await page.getByRole('button', { name: '添加卷', exact: true }).click()
   for (let index = 0; index < chapterCount; index++) {
     await page.getByRole('button', { name: '添加章节', exact: true }).click()
-    await page.getByLabel('章节摘要', { exact: true }).nth(index).fill(`第${index + 1}章：先试绳再救人，代价是错过渡船。`)
-    await page.getByLabel('章节摘要', { exact: true }).nth(index).blur()
+    const summary = await enterChapterSummaryEditorV1(page, index)
+    await summary.fill(`第${index + 1}章：先试绳再救人，代价是错过渡船。`)
+    await summary.blur()
   }
   await openLongformLeaf(page, '细纲')
   await page.getByRole('button', { name: '第1章', exact: true }).click()
@@ -67,10 +69,11 @@ for (const changeSource of [true, false]) {
     const peer = await context.newPage()
     await peer.goto(page.url())
     await openLongformLeaf(peer, '大纲')
-    const source = peer.getByLabel('章节摘要', { exact: true }).first()
-    await expect(source).toHaveValue(chapter.summary || '')
+    const source = chapterSummaryScopeV1(peer).getByLabel('章节摘要', { exact: true })
+    await expectChapterSummarySourceV1(peer, chapter.summary || '')
     const nextSummary = '另一页面已保存的新章纲：先撤离旅客，再修复断桥，放弃追船。'
     if (changeSource) {
+      await enterChapterSummaryEditorV1(peer)
       await source.fill(nextSummary)
       await source.blur()
       await expect.poll(async () => (await snapshot(peer)).nodes.find(row => row.id === chapter.id)?.summary).toBe(nextSummary)

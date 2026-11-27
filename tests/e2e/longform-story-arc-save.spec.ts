@@ -1,3 +1,4 @@
+import { enterMarkdownSourceEditorV1, expectMarkdownSourceValueV1 } from './helpers/markdown-source'
 import { installBrowserServiceCapacityFixtureV1 } from './helpers/browser-ai-config'
 import { expect, test, type Page } from '@playwright/test'
 import { createLongform } from './helpers/product-entry'
@@ -37,6 +38,10 @@ async function restore(page: Page) {
   await page.evaluate(() => (window as unknown as { restoreStoryArcWrite: () => void }).restoreStoryArcWrite())
 }
 async function stage(page: Page, id: number) { return JSON.parse((await rows(page, id))[0].stages)[0] }
+
+function arcDescriptionScope(page: Page) { return page.getByLabel('故事线名称', { exact: true }).locator('..').locator('..').locator('..') }
+function stageDescriptionScope(page: Page) { return page.getByLabel('故事阶段标题', { exact: true }).locator('..').locator('..') }
+
 async function addStage(page: Page) {
   await page.getByRole('button', { name: '添加阶段', exact: true }).click()
   await page.getByRole('button', { name: /阶段\s*1/ }).click()
@@ -61,7 +66,7 @@ test('story-arc failure retains the author draft, blocks switching and creation,
   await page.getByRole('button', { name: '重试保存故事线整体描述', exact: true }).click()
   await expect.poll(async () => (await rows(page, id))[0].description).toBe('保存失败后仍须保留：没有实测数据就不放行粮车。')
   await page.reload()
-  await expect(description).toHaveValue('保存失败后仍须保留：没有实测数据就不放行粮车。')
+  await expectMarkdownSourceValueV1(arcDescriptionScope(page), description, '保存失败后仍须保留：没有实测数据就不放行粮车。')
   expect(errors).toEqual([])
 })
 
@@ -69,6 +74,7 @@ test('stage fields and manual events save, reorder, clear, recover, and reach th
   const errors: string[] = []; page.on('pageerror', error => errors.push(error.message))
   const id = await setup(page); await addStage(page)
   for (const [label, value] of [['故事阶段标题', '确认路标'], ['故事阶段描述', '先试绳，再决定是否让粮队过桥。'], ['故事阶段转折点', '系统提示与实测相反']]) {
+    if (label === '故事阶段描述') await enterMarkdownSourceEditorV1(stageDescriptionScope(page), page.getByLabel(label, { exact: true }))
     await page.getByLabel(label, { exact: true }).fill(value); await page.getByLabel(label, { exact: true }).blur()
   }
   const event = page.getByPlaceholder('手动添加关键事件...', { exact: true })
@@ -90,6 +96,7 @@ test('stage fields and manual events save, reorder, clear, recover, and reach th
   await expect.poll(async () => (await stage(page, id)).keyEvents).toEqual(['首个路标核验', '故障时的新事件'])
   await injectFailure(page, true)
   const draft = page.getByLabel('故事阶段描述', { exact: true })
+  await enterMarkdownSourceEditorV1(stageDescriptionScope(page), draft)
   await draft.fill('零行写入也不得冒充保存成功。'); await draft.blur()
   await expect(page.getByRole('button', { name: '重试保存故事阶段描述', exact: true })).toBeVisible()
   await page.getByRole('button', { name: /确认路标/ }).click()
@@ -100,7 +107,7 @@ test('stage fields and manual events save, reorder, clear, recover, and reach th
   await page.getByLabel('故事阶段转折点', { exact: true }).fill(''); await page.getByLabel('故事阶段转折点', { exact: true }).blur()
   await expect.poll(async () => (await stage(page, id)).turningPoint).toBeUndefined()
   await page.reload(); await page.getByRole('button', { name: /确认路标/ }).click()
-  await expect(draft).toHaveValue('零行写入也不得冒充保存成功。')
+  await expectMarkdownSourceValueV1(stageDescriptionScope(page), draft, '零行写入也不得冒充保存成功。')
   await expect(page.getByText('故障时的新事件', { exact: true })).toBeVisible()
   const context = await page.evaluate(async projectId => {
     const { assembleContext } = await (new Function('return import("/storyforge/src/lib/registry/assemble-context.ts")'))()
@@ -193,7 +200,7 @@ test('stage deletion rolls back failed progress and retries; stale arc deletion 
   expect((await rows(page, id))[0].description).toBe('另一页刚保存的正式稿')
   await page.getByRole('button', { name: '取消本次操作', exact: true }).click()
   await page.reload()
-  await expect(page.getByLabel('故事线整体描述', { exact: true })).toHaveValue('另一页刚保存的正式稿')
+  await expectMarkdownSourceValueV1(arcDescriptionScope(page), page.getByLabel('故事线整体描述', { exact: true }), '另一页刚保存的正式稿')
   await page.getByTitle('删除故事线', { exact: true }).click()
   await page.getByRole('dialog').getByRole('button', { name: '删除', exact: true }).click()
   await expect.poll(() => rows(page, id)).toHaveLength(0)

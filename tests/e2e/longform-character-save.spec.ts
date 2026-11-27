@@ -3,6 +3,7 @@ import { expect, test, type Page } from '@playwright/test'
 import { createLongform } from './helpers/product-entry'
 import { openLongformLeaf } from './helpers/longform-navigation'
 import { CHARACTER_DIMENSIONS } from '../../src/lib/character/character-dimensions'
+import { enterMarkdownSourceEditorV1, expectMarkdownSourceValueV1 } from './helpers/markdown-source'
 
 async function createCharacter(page: Page, weight = '主要') {
   await page.addInitScript(() => localStorage.setItem('storyforge_guide_completed', 'e2e'))
@@ -97,7 +98,7 @@ for (const role of [
       if (role.weight === '主要') await page.getByText('新角色', { exact: true }).first().click()
       else if (role.weight === '次要') await page.getByRole('button', { name: '展开完整设定 ▾', exact: true }).click()
       else await page.getByRole('button', { name: '展开完整设定', exact: true }).click()
-      await expect(page.getByLabel('背景故事', { exact: true })).toBeVisible()
+      await expect(page.getByText('背景故事', { exact: true })).toBeVisible()
     }
     await open()
     const expected: Record<string, string> = {}
@@ -122,9 +123,11 @@ for (const role of [
     expect(saved.worldId).toBe(original.worldId)
     await page.reload(); await open()
     for (const dimension of CHARACTER_DIMENSIONS.filter(d => d.key !== 'shortDescription' || role.weight !== '主要')) {
-      await expect(page.getByLabel(dimension.label, { exact: true })).toHaveValue(expected[dimension.key])
+      await expectMarkdownSourceValueV1(page.getByText(dimension.label, { exact: true }).locator('..'),
+        page.getByLabel(dimension.label, { exact: true }), expected[dimension.key])
     }
     const background = page.getByLabel('背景故事', { exact: true })
+    await enterMarkdownSourceEditorV1(page.getByText('背景故事', { exact: true }).locator('..'), background)
     await background.fill(''); await background.blur()
     await expect.poll(async () => (await row(page, projectId)).background).toBe('')
     await refuse(page)

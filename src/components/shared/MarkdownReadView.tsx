@@ -97,7 +97,7 @@ export default function MarkdownReadView({ value, readOnly = false, onRequestEdi
   }
   return <section data-markdown-read-view style={{ minWidth: 0, maxWidth: '100%' }}>
     <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '.75em', fontSize: '.8em' }}>
-      <button type="button" aria-expanded={sourceVisible} onClick={() => { cancelClick(); setSourceVisible(current => !current) }}>{sourceVisible ? '返回阅读' : '查看源码'}</button>
+      <button type="button" aria-label={sourceVisible ? '返回阅读' : '查看源码'} aria-expanded={sourceVisible} onClick={() => { cancelClick(); setSourceVisible(current => !current) }}>{sourceVisible ? '返回阅读' : '查看源码'}</button>
       <button type="button" onClick={() => { cancelClick(); void copy() }}>复制源码</button>
       {!readOnly && onRequestEdit && <button type="button" onClick={() => { cancelClick(); onRequestEdit(value) }}>编辑源码</button>}
       <span role="status">{copyResult?.value === value ? copyResult.status : ''}</span>
