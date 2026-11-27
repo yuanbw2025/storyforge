@@ -105,7 +105,9 @@ test('stage fields and manual events save, reorder, clear, recover, and reach th
   await restore(page); await page.getByRole('button', { name: '重试保存故事阶段描述', exact: true }).click()
   await expect.poll(async () => (await stage(page, id)).description).toBe('零行写入也不得冒充保存成功。')
   await page.getByLabel('故事阶段转折点', { exact: true }).fill(''); await page.getByLabel('故事阶段转折点', { exact: true }).blur()
-  await expect.poll(async () => (await stage(page, id)).turningPoint).toBeUndefined()
+  // Confirmed author text stores an explicit empty string, never missing data.
+  await expect.poll(async () => (await stage(page, id)).turningPoint).toBe('')
+  expect(Object.prototype.hasOwnProperty.call(await stage(page, id), 'turningPoint')).toBe(true)
   await page.reload(); await page.getByRole('button', { name: /确认路标/ }).click()
   await expectMarkdownSourceValueV1(stageDescriptionScope(page), draft, '零行写入也不得冒充保存成功。')
   await expect(page.getByText('故障时的新事件', { exact: true })).toBeVisible()

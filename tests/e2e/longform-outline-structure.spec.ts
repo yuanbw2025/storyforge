@@ -37,14 +37,19 @@ async function seedLinkedDrafts(page: Page) {
 
 async function mouseDrag(page: Page, source: Locator, target: Locator) {
   await expect(page.getByTestId('outline-drag-scroll')).toHaveAttribute('aria-busy', 'false')
-  await source.scrollIntoViewIfNeeded(); await target.scrollIntoViewIfNeeded()
-  const from = await source.boundingBox(), to = await target.boundingBox()
-  if (!from || !to) throw new Error('Missing native drag geometry')
+  // Start on the actionable handle before scrolling the later target. Computing
+  // both endpoints after the target scroll can put the source behind the toolbar.
+  await expect(source).toHaveAttribute('draggable', 'true')
+  await source.hover()
+  const from = await source.boundingBox()
+  if (!from) throw new Error('Missing actionable native drag source')
   const start = { x: from.x + from.width / 2, y: from.y + from.height / 2 }
-  const finish = { x: to.x + 12, y: to.y + 12 }
   await page.mouse.move(start.x, start.y); await page.mouse.down()
   await page.mouse.move(start.x + 20, start.y + 10, { steps: 4 })
-  await page.mouse.move(finish.x, finish.y, { steps: 12 }); await page.mouse.up()
+  await target.scrollIntoViewIfNeeded()
+  const to = await target.boundingBox()
+  if (!to) throw new Error('Missing native drag target')
+  await page.mouse.move(to.x + 12, to.y + 12, { steps: 12 }); await page.mouse.up()
 }
 
 test('insert, reorder, cross-volume drag and delete cancellation preserve the actual node identities', async ({ page }) => {
@@ -67,11 +72,14 @@ test('insert, reorder, cross-volume drag and delete cancellation preserve the ac
     }, capture)
   })
   await mouseDrag(page, page.locator(`[data-outline-chapter-id="${original[0].id}"]`), page.locator(`[data-outline-chapter-row="${original[1].id}"]`))
-  const dragEvents = JSON.stringify(await page.evaluate(() => (window as unknown as { nativeOutlineDragEvents: unknown[] }).nativeOutlineDragEvents), null, 2)
+  const nativeEvents = await page.evaluate(() => (window as unknown as { nativeOutlineDragEvents: Array<{ type: string; source?: string; row?: string }> }).nativeOutlineDragEvents)
+  const dragEvents = JSON.stringify(nativeEvents, null, 2)
   const { writeFile } = await import('node:fs/promises')
   const eventPath = test.info().outputPath('native-drag-events.json')
   await writeFile(eventPath, dragEvents)
   await test.info().attach('native-drag-events', { path: eventPath, contentType: 'application/json' })
+  expect(nativeEvents.some(event => event.type === 'dragstart' && event.source === String(original[0].id))).toBe(true)
+  expect(nativeEvents.some(event => event.type === 'drop' && event.row === String(original[1].id))).toBe(true)
   await expect.poll(async () => (await data(page)).nodes.filter((node: { type: string }) => node.type === 'chapter').sort((a: { order: number }, b: { order: number }) => a.order - b.order).map((node: { id: number }) => node.id)).toEqual([inserted.id, original[1].id, original[0].id])
   await page.getByRole('button', { name: '添加卷', exact: true }).click()
   await expect(page.getByLabel('卷标题', { exact: true })).toHaveValue('第2卷')
