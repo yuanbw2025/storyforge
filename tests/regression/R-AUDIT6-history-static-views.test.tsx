@@ -26,34 +26,26 @@ afterEach(async () => {
 })
 
 describe('AUDIT-6 · 历史静态视图', () => {
-  it('总述与纪年输入继续转发草稿和失焦保存', async () => {
-    const onOverviewChange = vi.fn()
-    const onEraSystemChange = vi.fn()
-    const onSaveOverview = vi.fn()
-    const onSaveEraSystem = vi.fn()
+  it('总述与纪年阅读原文，进入源码后将最终文本交原保存回调', async () => {
+    const onSaveOverview = vi.fn(async () => undefined)
+    const onSaveEraSystem = vi.fn(async () => undefined)
     const host = await render(createElement(HistoryOverviewTab, {
-      overview: '旧总述',
-      eraSystem: '旧纪年',
-      onOverviewChange,
-      onEraSystemChange,
-      onSaveOverview,
-      onSaveEraSystem,
+      overview: '旧总述', eraSystem: '旧纪年', onSaveOverview, onSaveEraSystem,
     }))
-    const textareas = Array.from(host.querySelectorAll('textarea'))
-    expect(textareas).toHaveLength(2)
-    const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!
-    await act(async () => {
-      setValue.call(textareas[0], '新总述')
-      textareas[0].dispatchEvent(new Event('input', { bubbles: true }))
-      textareas[0].dispatchEvent(new FocusEvent('focusout', { bubbles: true }))
-      setValue.call(textareas[1], '新纪年')
-      textareas[1].dispatchEvent(new Event('input', { bubbles: true }))
-      textareas[1].dispatchEvent(new FocusEvent('focusout', { bubbles: true }))
-    })
-    expect(onOverviewChange).toHaveBeenCalledWith('新总述')
-    expect(onEraSystemChange).toHaveBeenCalledWith('新纪年')
-    expect(onSaveOverview).toHaveBeenCalledOnce()
-    expect(onSaveEraSystem).toHaveBeenCalledOnce()
+    expect(host.querySelectorAll('[data-markdown-read-view]')).toHaveLength(2)
+    const values = ['新总述', '新纪年']
+    for (let i = 0; i < values.length; i++) {
+      const view = host.querySelectorAll('[data-markdown-read-view]')[i]
+      await act(async () => [...view.querySelectorAll('button')].find(button => button.textContent === '编辑源码')!.click())
+      const area = host.querySelector('textarea')!
+      await act(async () => {
+        Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(area, values[i])
+        area.dispatchEvent(new Event('input', { bubbles: true }))
+        area.dispatchEvent(new FocusEvent('focusout', { bubbles: true }))
+      })
+    }
+    expect(onSaveOverview).toHaveBeenCalledWith('新总述')
+    expect(onSaveEraSystem).toHaveBeenCalledWith('新纪年')
   })
 
   it('时间线与关键词说明保留各自边界文案', async () => {

@@ -64,40 +64,58 @@ describe('047 actual consumers keep their content authority', () => {
     expect(inputAreaLayoutV1(true, worldviewInputAreaFieldV1('作者文本/作品-123'))).toEqual({ enabled: true })
     expect(inputAreaLayoutV1(true, worldviewInputAreaFieldV1('rareCreatures'))).toEqual({ enabled: true, preferenceKey: 'world.creatures/current' })
   })
-  it('history overview saves only on true leave, preserving its original change and blur callbacks', async () => {
-    const change = vi.fn(), save = vi.fn(), eraSave = vi.fn()
-    const ui = await mount(<HistoryOverviewTab resizableInputs overview="旧总述" eraSystem="纪年" onOverviewChange={change} onEraSystemChange={vi.fn()} onSaveOverview={save} onSaveEraSystem={eraSave} />)
+  it('history overview saves only on true leave after its Markdown source editor opens', async () => {
+    const save = vi.fn(), eraSave = vi.fn()
+    const ui = await mount(<HistoryOverviewTab resizableInputs overview="旧总述" eraSystem="纪年" onSaveOverview={save} onSaveEraSystem={eraSave} />)
+    const view = ui.host.querySelector('[data-markdown-read-view]')!
+    await act(async () => [...view.querySelectorAll('button')].find(button => button.textContent === '编辑源码')!.click())
     const area = ui.host.querySelector('textarea')!
     await edit(area, '作者总述')
-    expect(change).toHaveBeenCalledExactlyOnceWith('作者总述')
     await act(async () => area.focus())
     const { frame } = await resize(ui.host)
-    expect(save).not.toHaveBeenCalled(); expect(change).toHaveBeenCalledOnce()
+    expect(save).not.toHaveBeenCalled()
     await act(async () => frame.querySelectorAll<HTMLButtonElement>('button')[0].click())
     expect(save).not.toHaveBeenCalled()
     await act(async () => ui.host.querySelector<HTMLButtonElement>('[data-outside]')!.focus())
-    expect(save).toHaveBeenCalledOnce(); expect(eraSave).not.toHaveBeenCalled()
+    expect(save).toHaveBeenCalledExactlyOnceWith('作者总述'); expect(eraSave).not.toHaveBeenCalled()
   })
-  it('history 4 keyword and 5 timeline fields keep their exact callbacks and AI permissions', async () => {
-    const keyword = { projectId: 1, keyword: '盐路', era: 'custom', category: 'economy' as const, description: '定稿', createdAt: 1, updatedAt: 1 }
-    const event = { projectId: 1, title: '启航', era: 'custom', year: 1, date: '元年', description: '事件定稿', isHistorical: false, createdAt: 1, updatedAt: 1 }
-    const kp = cardProps(), ep = cardProps()
-    for (const [element, props, fields] of [
-      [<HistoryKeywordCard {...kp} keyword={keyword} resizableInputs />, kp, ['description', 'conceptNote', 'consultPrompt', 'stormPrompt']],
-      [<HistoryTimelineEventCard {...ep} event={event} resizableInputs />, ep, ['description', 'impact', 'conceptNote', 'consultPrompt', 'stormPrompt']],
+  it('history keyword and timeline source editors retain resizing, exact field callbacks and AI permissions', async () => {
+    const keyword = { projectId: 1, keyword: '盐路', era: 'custom', category: 'economy' as const, description: '关键词定稿', conceptNote: '关键词概念', createdAt: 1, updatedAt: 1 }
+    const event = { projectId: 1, title: '启航', era: 'custom', year: 1, date: '元年', description: '事件定稿', impact: '事件影响', conceptNote: '事件概念', isHistorical: false, createdAt: 1, updatedAt: 1 }
+    const kp = { ...cardProps(), canEdit: true }, ep = { ...cardProps(), canEdit: true }
+    for (const [element, props, row, prefix, fields] of [
+      [<HistoryKeywordCard {...kp} keyword={keyword} resizableInputs />, kp, keyword, 'keyword', ['description', 'conceptNote', 'consultPrompt', 'stormPrompt']],
+      [<HistoryTimelineEventCard {...ep} event={event} resizableInputs />, ep, event, 'timeline', ['description', 'impact', 'conceptNote', 'consultPrompt', 'stormPrompt']],
     ] as const) {
       const ui = await mount(element)
-      expect(ui.host.querySelectorAll('[data-input-area-layout]')).toHaveLength(fields.length)
-      await resize(ui.host)
-      expect(props.onChange).not.toHaveBeenCalled()
-      const areas = ui.host.querySelectorAll('textarea')
+      expect(ui.host.querySelectorAll('[data-input-area-layout]')).toHaveLength(2)
       for (let i = 0; i < fields.length; i++) {
-        await edit(areas[i], `内容-${i}`)
-        expect(props.onChange).toHaveBeenLastCalledWith({ [fields[i]]: `内容-${i}` })
+        const field = fields[i], markdown = field !== 'consultPrompt' && field !== 'stormPrompt'
+        if (markdown) {
+          const original = Reflect.get(row, field)
+          const view = [...ui.host.querySelectorAll('[data-markdown-read-view]')].find(view => view.textContent?.includes(original))!
+          await act(async () => [...view.querySelectorAll('button')].find(button => button.textContent === '编辑源码')!.click())
+          expect(ui.host.querySelectorAll('[data-input-area-layout]')).toHaveLength(3)
+          const previousCalls = props.onChange.mock.calls.length
+          await resize(ui.host)
+          expect(props.onChange.mock.calls.length).toBe(previousCalls)
+        }
+        const area = ui.host.querySelector<HTMLTextAreaElement>(`[data-input-area-layout="history.${prefix}.${field}/current"] textarea`)!
+        await edit(area, `内容-${i}`)
+        if (markdown) await act(async () => ui.host.querySelector<HTMLButtonElement>('[data-outside]')!.focus())
+        expect(props.onChange).toHaveBeenLastCalledWith({ [field]: `内容-${i}` })
       }
       const consult = [...ui.host.querySelectorAll('button')].find(button => button.textContent?.includes('AI 历史考据'))!
-      expect(consult.disabled).toBe(true); expect(props.onConsult).not.toHaveBeenCalled()
+      expect(consult.disabled).toBe(false); expect(props.onConsult).not.toHaveBeenCalled()
     }
+  })
+  it('history overview cards in a readonly all-worlds view expose no Markdown edit action and keep AI disabled', async () => {
+    const props = cardProps()
+    const keyword = { projectId: 1, keyword: '盐路', era: 'custom', category: 'economy' as const, description: '# 定稿', createdAt: 1, updatedAt: 1 }
+    const ui = await mount(<HistoryKeywordCard {...props} keyword={keyword} resizableInputs />)
+    expect([...ui.host.querySelectorAll('button')].some(button => button.textContent === '编辑源码')).toBe(false)
+    expect([...ui.host.querySelectorAll('button')].find(button => button.textContent?.includes('AI 历史考据'))!.disabled).toBe(true)
+    expect(props.onChange).not.toHaveBeenCalled()
   })
   it('collapsed or default-off history cards do not mount resizing controls', async () => {
     const props = cardProps(), keyword = { projectId: 1, keyword: '盐路', era: 'custom', category: 'economy' as const, description: '', createdAt: 1, updatedAt: 1 }

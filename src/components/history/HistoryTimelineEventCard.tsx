@@ -6,6 +6,8 @@ import { formatHistoricalYear } from '../../lib/history/year'
 import { CInput, CTextarea } from '../shared/CompositionInput'
 import HistoryAgentWorkspace, { type HistoryAgentViewState } from './HistoryAgentWorkspace'
 import HistoryChapterPicker from './HistoryChapterPicker'
+import { InlineTextarea } from '../shared/InlineEdit'
+import MarkdownReadView from '../shared/MarkdownReadView'
 
 interface Props {
   resizableInputs?: boolean
@@ -19,7 +21,7 @@ interface Props {
   consultAI: HistoryAgentViewState
   stormAI: HistoryAgentViewState
   onToggle: () => void
-  onChange: (patch: Partial<HistoricalTimelineEvent>) => void
+  onChange: (patch: Partial<HistoricalTimelineEvent>) => void | Promise<void>
   onConsult: () => void
   onStorm: () => void
   onDelete: () => void
@@ -219,24 +221,24 @@ export default function HistoryTimelineEventCard({
               <label className="block text-[11px] text-text-muted mb-1">
                 📒 条目定稿（写作时会进入小说上下文；考据 / 风暴 agent 会读取作为核验或发散对象，但<span className="text-amber-500">不会直接覆盖</span>）
               </label>
-              <CTextarea
+              {canEdit ? <InlineTextarea markdownRead minRows={3}
                 inputAreaLayout={inputAreaLayoutV1(resizableInputs, 'history.timeline.description')}
                 value={event.description}
-                onChange={change => onChange({ description: change.target.value })}
+                onChange={description => onChange({ description })}
                 placeholder="作者打磨好的最终条目内容，将作为 AI 写作的历史背景注入。例如：『公元 712 年，李隆基即位为唐玄宗，开元之治始。』"
                 className="w-full h-24 p-2 bg-bg-base border border-border rounded-lg text-xs text-text-primary resize-y focus:outline-none focus:border-accent"
-              />
+              /> : <MarkdownReadView value={event.description} readOnly />}
             </div>
 
             <div>
               <label className="block text-[11px] text-text-muted mb-1">对剧情/世界的影响 (可选)</label>
-              <CTextarea
+              {canEdit ? <InlineTextarea markdownRead minRows={2}
                 inputAreaLayout={inputAreaLayoutV1(resizableInputs, 'history.timeline.impact')}
                 value={event.impact || ''}
-                onChange={change => onChange({ impact: change.target.value })}
+                onChange={impact => onChange({ impact })}
                 placeholder="该事件如何推动主角剧情，或者对架空世界线产生什么影响..."
                 className="w-full h-20 p-2 bg-bg-base border border-border rounded-lg text-xs text-text-primary resize-y focus:outline-none focus:border-accent"
-              />
+              /> : <MarkdownReadView value={event.impact ?? ''} readOnly />}
             </div>
 
             <div>
@@ -252,13 +254,13 @@ export default function HistoryTimelineEventCard({
               <label className="block text-[11px] text-text-muted mb-1">
                 🧭 概念与创作思路（提交给 AI 之前的初步设定；得到 agent 反馈后可在此处修正）
               </label>
-              <CTextarea
+              {canEdit ? <InlineTextarea markdownRead minRows={3}
                 inputAreaLayout={inputAreaLayoutV1(resizableInputs, 'history.timeline.conceptNote')}
                 value={event.conceptNote || ''}
-                onChange={change => onChange({ conceptNote: change.target.value })}
+                onChange={conceptNote => onChange({ conceptNote })}
                 placeholder="描述你为这条事件想达到的效果、能接受的艺术改造或架空范围、希望保留 / 偏离的史实点。例如：『允许把火药提前到本朝；其余制度仍按真实唐制写。』"
                 className="w-full h-24 p-2 bg-bg-base border border-border rounded-lg text-xs text-text-primary resize-y focus:outline-none focus:border-accent"
-              />
+              /> : <MarkdownReadView value={event.conceptNote ?? ''} readOnly />}
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">

@@ -10,6 +10,8 @@ import { HISTORICAL_ERA_LABELS, KEYWORD_CATEGORY_LABELS } from '../../lib/types/
 import { CInput, CTextarea } from '../shared/CompositionInput'
 import HistoryAgentWorkspace, { type HistoryAgentViewState } from './HistoryAgentWorkspace'
 import HistoryChapterPicker from './HistoryChapterPicker'
+import { InlineTextarea } from '../shared/InlineEdit'
+import MarkdownReadView from '../shared/MarkdownReadView'
 
 interface Props {
   resizableInputs?: boolean
@@ -22,7 +24,7 @@ interface Props {
   consultAI: HistoryAgentViewState
   stormAI: HistoryAgentViewState
   onToggle: () => void
-  onChange: (patch: Partial<HistoricalKeyword>) => void
+  onChange: (patch: Partial<HistoricalKeyword>) => void | Promise<void>
   onConsult: () => void
   onStorm: () => void
   onDelete: () => void
@@ -153,13 +155,13 @@ export default function HistoryKeywordCard({
             <label className="block text-[11px] text-text-muted mb-1">
               📒 条目定稿（写作时会进入小说上下文；考据 / 风暴 agent 会读取作为核验或发散对象，但<span className="text-amber-500">不会直接覆盖</span>）
             </label>
-            <CTextarea
+            {canEdit ? <InlineTextarea markdownRead minRows={3}
               inputAreaLayout={inputAreaLayoutV1(resizableInputs, 'history.keyword.description')}
               value={keyword.description}
-              onChange={event => onChange({ description: event.target.value })}
+              onChange={description => onChange({ description })}
               placeholder="作者打磨好的最终条目内容，将作为 AI 写作的历史细节注入。例如：『飞钱：唐宪宗时期出现的汇兑凭证，由邸店或商号代为兑付。』"
               className="w-full h-24 p-2 bg-bg-base border border-border rounded-lg text-xs text-text-primary resize-y focus:outline-none focus:border-accent"
-            />
+            /> : <MarkdownReadView value={keyword.description} readOnly />}
           </div>
 
           <div>
@@ -176,13 +178,13 @@ export default function HistoryKeywordCard({
             <label className="block text-[11px] text-text-muted mb-1">
               🧭 概念与创作思路（提交给 AI 之前的初步设定；得到 agent 反馈后可在此处修正）
             </label>
-            <CTextarea
+            {canEdit ? <InlineTextarea markdownRead minRows={3}
               inputAreaLayout={inputAreaLayoutV1(resizableInputs, 'history.keyword.conceptNote')}
               value={keyword.conceptNote || ''}
-              onChange={event => onChange({ conceptNote: event.target.value })}
+              onChange={conceptNote => onChange({ conceptNote })}
               placeholder="描述你想为这个关键词达到的效果、能接受的艺术改造或架空范围。例如：『允许把飞钱的普及度写得比真实高一些；想要市井使用场景。』"
               className="w-full h-24 p-2 bg-bg-base border border-border rounded-lg text-xs text-text-primary resize-y focus:outline-none focus:border-accent"
-            />
+            /> : <MarkdownReadView value={keyword.conceptNote ?? ''} readOnly />}
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
