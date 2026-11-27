@@ -21,9 +21,19 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261125-capacity-release-input-v4.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261127-inspiration059-input-v2.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261127-inspiration059-input-v1.json",
+        "sha256": "c67d502a660318297a11f6ac2d50c5f30c51d7ffd5736e86f9a3d99992c67358",
+        "note": "Preserve the initial inspiration059 measurement before its manifest pointer was updated. The v2 receipt measures the final manifest as well; observed outcomes are unchanged."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261125-capacity-release-input-v4.json",
+        "sha256": "937ca6b59b50a4aaf816c46f432782a1c9221256f33a10a5c9e5284463d2a0b8",
+        "note": "Preserve the measured main receipt before the Work-owned inspiration059 template configuration. Remeasured deterministic observations and known gaps are unchanged; no model or product acceptance inferred."
+      },
       {
         "path": "tests/acceptance/narrative-world/baseline-20261125-capacity-release-input-v3.json",
         "workPackage": "CAPACITY-RELEASE-409",

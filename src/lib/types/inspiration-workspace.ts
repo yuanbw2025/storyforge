@@ -25,6 +25,8 @@ export interface InspirationWorkspace {
   workId?: number | null
   fragments: string
   versions: string
+  /** Work-owned author prompt configuration; independent of narrative content updatedAt. */
+  promptConfig?: string
   createdAt: number
   updatedAt: number
 }
