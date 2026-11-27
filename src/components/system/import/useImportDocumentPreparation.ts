@@ -5,6 +5,8 @@ import { publishCsvGridViewV1 } from './ImportDocOverview'
 import { chunkDocument, type ChunkPlan } from '../../../lib/import/chunker'
 import { detectVolumeStructure, type VolumeDetectResult } from '../../../lib/import/volume-detector'
 
+import { isLargeImportTextFileV1, openImportBlobTextSourceV1, type ImportBlobTextSourceV1 } from '../../../lib/import/blob-text-source'
+
 const DEFAULT_CHUNK_SIZE = 50000
 
 /** 032-L1-a：准备阶段遇到"没有可复制文本"时的显式状态。
@@ -12,6 +14,8 @@ const DEFAULT_CHUNK_SIZE = 50000
 export interface TextLayerBlockedV1 { filename: string; sizeBytes: number; pageCount?: number; status: ExtractResult['status']; warnings: ExtractResult['warnings'] }
 
 export default function useImportDocumentPreparation() {
+  const [blobTextSource, setBlobTextSource] = useState<ImportBlobTextSourceV1 | null>(null)
+  const readController = useRef<AbortController | null>(null)
   const [filename, setFilename] = useState('')
   const [rawText, setRawText] = useState('')
   const [fileError, setFileError] = useState<string | null>(null)
@@ -27,13 +31,17 @@ export default function useImportDocumentPreparation() {
   const [csvGrid, setCsvGrid] = useState<CsvGridV1 | null>(null)
   const lastUploadedFile = useRef<File | null>(null)
   const sourceReadSequence = useRef(0)
-  useEffect(() => () => { sourceReadSequence.current++ }, [])
+  useEffect(() => () => { sourceReadSequence.current++; readController.current?.abort() }, [])
 
   const handleFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     event.target.value = ''
     if (!file) return
+    readController.current?.abort()
+    const controller = new AbortController()
+    readController.current = controller
     const request = ++sourceReadSequence.current
+    setBlobTextSource(null)
     setFileError(null)
     setExtractInfo(null)
     setFilename(file.name)
@@ -48,6 +56,21 @@ export default function useImportDocumentPreparation() {
     setLoadingFile(true)
     lastUploadedFile.current = file
     try {
+      if (isLargeImportTextFileV1(file)) {
+        let lastPercent = -1
+        const streamed = await openImportBlobTextSourceV1(file, { signal: controller.signal, onProgress: (read, total) => {
+          const percent = Math.floor(read / total * 100)
+          if (request === sourceReadSequence.current && percent !== lastPercent) {
+            lastPercent = percent; setExtractInfo(`正在读取原文 ${percent}%`)
+          }
+        } })
+        if (request !== sourceReadSequence.current) return
+        setBlobTextSource(streamed)
+        setRawText(streamed.preview)
+        setExtractInfo(`文件 ${(file.size / 1024 / 1024).toFixed(2)} MB · 共 ${streamed.totalChars.toLocaleString()} 字符 · 仅显示开头预览，解析使用完整原文件`)
+        if (!streamed.hasText) setFileError('原文件没有可解析的正文。')
+        return
+      }
       const result = await extractTextFromFile(file)
       if (request !== sourceReadSequence.current) return
       if (result.status === 'empty') {
@@ -81,6 +104,8 @@ export default function useImportDocumentPreparation() {
 
   const handleRawTextChange = (text: string) => {
     sourceReadSequence.current++
+    readController.current?.abort()
+    setBlobTextSource(null)
     setLoadingFile(false)
     setFilename('')
     setExtractInfo(null)
@@ -93,24 +118,29 @@ export default function useImportDocumentPreparation() {
     lastUploadedFile.current = null
   }
 
+  const totalChars = blobTextSource?.totalChars ?? rawText.length
+  const hasSourceText = blobTextSource?.hasText ?? !!rawText.trim()
+  const preview = () => [{ index: 0, startChar: 0, endChar: totalChars, charCount: totalChars, label: '开始前自动分块', text: rawText }]
+  const manualPreview = (size: number) => blobTextSource ? Array.from({ length: Math.ceil(totalChars / size) }, (_, index) => {
+    const startChar = index * size, endChar = Math.min(totalChars, startChar + size)
+    return { index, startChar, endChar, charCount: endChar - startChar, label: `预计区段 ${index + 1}`, text: '' }
+  }) : chunkDocument(rawText, { targetChars: size })
   const prepareConfirmation = () => {
     // 没有可复制文本时，作者手动补文字前不允许进入确认/解析。
-    if (textLayerBlocked || !rawText.trim()) return
-    setPlans(automaticChunking ? [{ index: 0, startChar: 0, endChar: rawText.length, charCount: rawText.length,
-      label: '开始前自动分块', text: rawText }] : chunkDocument(rawText, { targetChars: chunkSize }))
-    setVolumeDetect(detectVolumeStructure(rawText))
+    if (textLayerBlocked || !hasSourceText) return
+    setPlans(automaticChunking ? preview() : manualPreview(chunkSize))
+    setVolumeDetect(blobTextSource ? null : detectVolumeStructure(rawText))
     setShowConfirm(true)
   }
 
   const handleChunkSizeChange = (size: number) => {
     setAutomaticChunking(false)
     setChunkSize(size)
-    if (rawText.trim()) setPlans(chunkDocument(rawText, { targetChars: size }))
+    if (hasSourceText) setPlans(manualPreview(size))
   }
   const handleAutomaticChunkingChange = (automatic: boolean) => {
     setAutomaticChunking(automatic)
-    if (rawText.trim()) setPlans(automatic ? [{ index: 0, startChar: 0, endChar: rawText.length, charCount: rawText.length,
-      label: '开始前自动分块', text: rawText }] : chunkDocument(rawText, { targetChars: chunkSize }))
+    if (hasSourceText) setPlans(automatic ? preview() : manualPreview(chunkSize))
   }
 
   const sourceBlob = () => ({
@@ -119,13 +149,15 @@ export default function useImportDocumentPreparation() {
   })
 
   const previewPlans = useMemo(() => {
-    if (automaticChunking || !rawText.trim()) return null
+    if (blobTextSource || automaticChunking || !rawText.trim()) return null
     return plans || chunkDocument(rawText, { targetChars: chunkSize })
-  }, [automaticChunking, chunkSize, plans, rawText])
+  }, [blobTextSource, automaticChunking, chunkSize, plans, rawText])
 
   return {
     filename,
     rawText,
+    blobTextSource, totalChars, hasSourceText,
+    cancelFileRead: () => handleRawTextChange(''),
     fileError,
     loadingFile,
     extractInfo,

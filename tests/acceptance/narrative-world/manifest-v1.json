@@ -21,9 +21,14 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261127-document031-auto-input-v1.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261128-document031-stream-source-v1.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261127-document031-auto-input-v1.json",
+        "sha256": "daf1085f59cda0ee579574baa4f2d8d70219969d78c6fda32a821ef34202c3c4",
+        "note": "Preserve the measured original before bounded Blob source reads and lazy import chunk retrieval. Remeasure only deterministic inputs; corpus, known gaps, provider behavior and human acceptance remain unchanged."
+      },
       {
         "path": "tests/acceptance/narrative-world/baseline-20261127-release409-finite-service-main685-v1.json",
         "sha256": "0531152751fd80358a1b885d38f306c55d8724ea8c3762c681740ce5836964ac",
@@ -1861,7 +1866,11 @@
     "src/lib/product-production/read-details.ts",
     "src/lib/ai/context-builder.ts",
     "src/lib/reference-analysis/context-selection.ts",
-    "src/lib/reference-analysis/content-skill.ts"
+    "src/lib/reference-analysis/content-skill.ts",
+    "src/lib/import/blob-text-source.ts",
+    "src/lib/import/chunk-text-registry.ts",
+    "src/lib/import/document-import-plan.ts",
+    "src/lib/import/frozen-source-recovery.ts"
   ],
   "splitPolicy": {
     "unit": "complete scenario family",

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { quickHash } from '../../lib/import/chunker'
-import { planNewDocumentImportV1 } from '../../lib/import/document-import-plan'
-import { recoverFrozenImportSourceV1 } from '../../lib/import/frozen-source-recovery'
+import { planNewDocumentImportV1, planNewBlobDocumentImportV1 } from '../../lib/import/document-import-plan'
+import { recoverFrozenImportSourceV1, registerBlobImportSourceV1, verifyBlobImportSourceV1 } from '../../lib/import/frozen-source-recovery'
 import {
   runSession, pausePipeline, cancelPipeline, isPipelineRunning, cancelPausedDocumentImportV1,
   readPendingDocumentImportV1, runPublishedReferenceAnalysisV1,
@@ -74,14 +74,16 @@ export default function ImportDocPanel({ project, onNavigate }: Props) {
   const recovery = useImportSessionRecovery(project.id!, project.activeWorldId, project.activeWorkId)
   const previewTargetScope = useRef<WorkspaceScope | null>(null)
   const admittingSession = useRef(false)
+  const admissionController = useRef<AbortController | null>(null)
+  useEffect(() => () => { if (!isPipelineRunning()) admissionController.current?.abort() }, [])
   const {
     filename, rawText, fileError, loadingFile, extractInfo, plans, chunkSize,
     showConfirm, volumeDetect, previewPlans, handleFile, handleRawTextChange,
     prepareConfirmation, handleChunkSizeChange, closeConfirm, sourceBlob,
-    automaticChunking, handleAutomaticChunkingChange,
+    automaticChunking, handleAutomaticChunkingChange, blobTextSource, totalChars, hasSourceText, cancelFileRead,
   } = source
   const previewIdentity = useMemo(() => ({ projectId: project.id, worldId: project.activeWorldId, workId: project.activeWorkId,
-    filename, rawText, targetWorldGroupId, automaticChunking, chunkSize }), [project.id, project.activeWorldId, project.activeWorkId, filename, rawText, targetWorldGroupId, automaticChunking, chunkSize])
+    filename, rawText, blobTextSource, targetWorldGroupId, automaticChunking, chunkSize }), [project.id, project.activeWorldId, project.activeWorkId, filename, rawText, blobTextSource, targetWorldGroupId, automaticChunking, chunkSize])
   const currentPreviewIdentity = useRef(previewIdentity)
   currentPreviewIdentity.current = previewIdentity
   const {
@@ -172,13 +174,13 @@ export default function ImportDocPanel({ project, onNavigate }: Props) {
    * 的既有去后缀规则对齐，hash 与 session.fileHash 同口径。读取失败保守空清单。 */
   const readPendingReferenceDuplicates = async (): Promise<ReferenceDuplicateItemV1[]> => {
     const scope = previewTargetScope.current
-    if (!scope || !rawText.trim()) return []
+    if (!scope || !hasSourceText) return []
     try {
       const references = await readOwnedRows<Reference>(scope, 'references', { owner: 'work' })
       return detectReferenceDuplicatesV1({
         existingReferences: references.map(reference => ({ id: reference.id, title: reference.title, fileHash: reference.fileHash })),
         incomingTitle: (filename || '未命名文档').replace(/\.[^.]+$/, ''),
-        incomingFileHash: rawText ? quickHash(rawText) : undefined,
+        incomingFileHash: blobTextSource?.fileHash ?? (rawText ? quickHash(rawText) : undefined),
       })
     } catch {
       return []
@@ -226,6 +228,8 @@ export default function ImportDocPanel({ project, onNavigate }: Props) {
       return
     }
     admittingSession.current = true
+    const controller = new AbortController()
+    admissionController.current = controller
     const identity = currentPreviewIdentity.current
     closeConfirm()
     // 提示属于本次预览；确认后按已有 adopt/reference 链走，不需要再留在界面上。
@@ -241,8 +245,21 @@ export default function ImportDocPanel({ project, onNavigate }: Props) {
       if (!targetScope || targetScope.projectId !== project.id)
         throw new ImportSessionAuthorityError('请在当前世界和作品重新预览并确认导入。')
       const originalSource = sourceBlob()
-      const admittedPlans = automaticChunking ? await planNewDocumentImportV1({ scope: targetScope, text: rawText,
-        importTarget, targetWorldGroupId: importTarget === 'project' ? selectedWorldGroupId ?? null : null }) : plans
+      const target = { scope: targetScope, importTarget,
+        targetWorldGroupId: importTarget === 'project' ? selectedWorldGroupId ?? null : null }
+      let lastPlanPercent = -1
+      const admittedPlans = blobTextSource ? await planNewBlobDocumentImportV1({ ...target, source: blobTextSource,
+        signal: controller.signal, manualChunkChars: automaticChunking ? undefined : chunkSize,
+        onProgress: (chars, total) => {
+          const percent = Math.floor(chars / total * 20) * 5
+          if (percent !== lastPlanPercent) {
+            lastPlanPercent = percent
+            useImportStatusStore.getState().pushActivity('info', `正在核对完整原文 ${percent}%`)
+          }
+        },
+      }) : automaticChunking ? await planNewDocumentImportV1({ ...target, text: rawText }) : plans
+      controller.signal.throwIfAborted()
+      useImportStatusStore.getState().setFatalError(null)
       if (currentPreviewIdentity.current !== identity || previewTargetScope.current !== targetScope)
         throw new ImportSessionAuthorityError('原文、分块设置或目标已经变化；请重新预览并确认导入。')
       if (!admittedPlans.length) throw new ImportSessionAuthorityError('没有可供解析的原文。')
@@ -251,9 +268,9 @@ export default function ImportDocPanel({ project, onNavigate }: Props) {
       for (const plan of admittedPlans) {
         chunks.push({ index: plan.index, startChar: plan.startChar, endChar: plan.endChar,
           charCount: plan.charCount, label: plan.label, status: 'pending', attempts: 0,
-          sourceTextHash: await hashImportChunkTextV1(plan.text) })
+          sourceTextHash: 'sourceTextHash' in plan ? plan.sourceTextHash : await hashImportChunkTextV1(plan.text) })
       }
-      const fileHash = quickHash(rawText)
+      const fileHash = blobTextSource?.fileHash ?? quickHash(rawText)
       if (currentPreviewIdentity.current !== identity || previewTargetScope.current !== targetScope)
         throw new ImportSessionAuthorityError('原文、分块设置或目标已经变化；请重新预览并确认导入。')
       const sessionData: Omit<ImportSession, 'id' | 'createdAt' | 'updatedAt'> = {
@@ -261,7 +278,7 @@ export default function ImportDocPanel({ project, onNavigate }: Props) {
         targetScope,
         filename: filename || '未命名文档',
         fileHash,
-        totalChars: rawText.length,
+        totalChars,
         totalChunks: admittedPlans.length,
         chunkSize: automaticChunking ? admittedPlans.reduce((largest, plan) => Math.max(largest, plan.charCount), 1) : chunkSize,
         chunks,
@@ -275,7 +292,8 @@ export default function ImportDocPanel({ project, onNavigate }: Props) {
 
       const sessionId = await useImportSessionStore.getState().create(sessionData)
       createdSessionId = sessionId
-      registerChunkTexts(sessionId, admittedPlans.map(p => ({ index: p.index, text: p.text })))
+      if (blobTextSource) registerBlobImportSourceV1(sessionId, blobTextSource, chunks)
+      else registerChunkTexts(sessionId, admittedPlans.map(p => ({ index: p.index, text: 'text' in p ? p.text : '' })))
 
       // 存原文 Blob —— 优先用原始 File（保留 Word/PDF 原格式，下次恢复一致）
       // 如果用户是粘贴文本，退化为 text/plain Blob
@@ -294,11 +312,17 @@ export default function ImportDocPanel({ project, onNavigate }: Props) {
       autoReportShown.current = null
       setReportSession(null)
 
+      controller.signal.throwIfAborted()
       // Wait for the formal candidate, then open the existing review surface.
-      await runAndReview(sessionId)
+      await runAndReview(sessionId, controller.signal)
+      controller.signal.throwIfAborted()
     } catch (error) {
-      reportImportFailure('无法开始导入', error, createdSessionId)
+      if (controller.signal.aborted) {
+        if (createdSessionId != null) await cancelPausedDocumentImportV1({ sessionId: createdSessionId, projectId: project.id! })
+        useImportStatusStore.getState().reset()
+      } else reportImportFailure('无法开始导入', error, createdSessionId)
     } finally {
+      if (admissionController.current === controller) admissionController.current = null
       admittingSession.current = false
     }
   }
@@ -358,8 +382,8 @@ export default function ImportDocPanel({ project, onNavigate }: Props) {
     setReportSession(row)
   }
 
-  const runAndReview = async (sessionId: number) => {
-    await runSession({ sessionId, projectId: project.id! })
+  const runAndReview = async (sessionId: number, signal?: AbortSignal) => {
+    await runSession({ sessionId, projectId: project.id!, signal })
     if (useImportStatusStore.getState().sessionId === sessionId) await showImportRecord(sessionId)
   }
 
@@ -417,18 +441,24 @@ export default function ImportDocPanel({ project, onNavigate }: Props) {
 
   // ── 用当前上传的文件续跑（作为兜底） ─────────────────────
   const restoreOriginalFromUpload = async (session: ImportSession) => {
-    if (!session.id || !rawText) return
+    if (!session.id || !hasSourceText) return
     const id = session.id
-    const newHash = quickHash(rawText)
+    const newHash = blobTextSource?.fileHash ?? quickHash(rawText)
     if (newHash !== session.fileHash) {
       toast.error('上传文件与原导入文件不同。请上传原文件，或为新文件另开导入。')
       return
     }
     try {
       const frozen = await readImportSessionAuthorityV1(id, project.id!, session)
-      const p = await recoverFrozenImportSourceV1(rawText, frozen)
-      await readImportSessionAuthorityV1(id, project.id!, frozen)
-      registerChunkTexts(id, p.map(c => ({ index: c.index, text: c.text })))
+      if (blobTextSource) {
+        await verifyBlobImportSourceV1(blobTextSource, frozen)
+        await readImportSessionAuthorityV1(id, project.id!, frozen)
+        registerBlobImportSourceV1(id, blobTextSource, frozen.chunks)
+      } else {
+        const p = await recoverFrozenImportSourceV1(rawText, frozen)
+        await readImportSessionAuthorityV1(id, project.id!, frozen)
+        registerChunkTexts(id, p.map(c => ({ index: c.index, text: c.text })))
+      }
       // 普通持久化失败仍可用本次内存原文；父根已删必须停止。
       try {
         const { blob: fileBlob, filename: saveName } = sourceBlob()
@@ -504,6 +534,7 @@ export default function ImportDocPanel({ project, onNavigate }: Props) {
     })
     if (!ok) return
     try {
+      admissionController.current?.abort()
       if (isPipelineRunning()) cancelPipeline()
       else if (status.sessionId != null) {
         await cancelPausedDocumentImportV1({ sessionId: status.sessionId, projectId: project.id! })
@@ -601,7 +632,7 @@ export default function ImportDocPanel({ project, onNavigate }: Props) {
       <ImportPipelineControls
         phase={phase}
         canResume={status.sessionId != null}
-        onPause={pausePipeline}
+        onPause={() => { if (isPipelineRunning()) pausePipeline(); else admissionController.current?.abort() }}
         onResume={handleResumeCurrent}
         onCancel={handleCancelCurrent}
       />
@@ -615,7 +646,7 @@ export default function ImportDocPanel({ project, onNavigate }: Props) {
           unfinished={unfinished}
           restoringBlob={restoringBlob}
           blobRestored={blobRestored}
-          hasRawText={!!rawText.trim()}
+          hasRawText={hasSourceText}
           boundToOriginal={hasFrozenImportIdentityV1(unfinished)}
           onResume={handleResume}
           onResumeWithUploaded={handleResumeWithUploaded}
@@ -652,7 +683,7 @@ export default function ImportDocPanel({ project, onNavigate }: Props) {
           onApplyReference={handleReuseToReference}
           onReviewCodex={() => handleOpenCodexReview(reusable)}
           onRestoreOriginal={reusable.publishedReferenceId && reusable.analysisDepth === 'deep' &&
-            !hasChunkTexts(reusable.id!) && rawText.trim() ? () => { void restoreOriginalFromUpload(reusable) } : undefined}
+            !hasChunkTexts(reusable.id!) && hasSourceText ? () => { void restoreOriginalFromUpload(reusable) } : undefined}
           onShowReport={() => {
             if (reusable.id != null) showImportRecord(reusable.id).catch(error =>
               reportImportFailure('无法读取原记录', error, reusable.id))
@@ -666,6 +697,7 @@ export default function ImportDocPanel({ project, onNavigate }: Props) {
         <ImportUploadZone
           filename={filename}
           rawText={rawText}
+          totalChars={totalChars} hasSourceText={hasSourceText} largePreview={!!blobTextSource} onCancelRead={cancelFileRead}
           loadingFile={loadingFile}
           fileError={fileError}
           extractInfo={extractInfo}
@@ -694,7 +726,7 @@ export default function ImportDocPanel({ project, onNavigate }: Props) {
       {showConfirm && plans && (
         <ImportConfirmModal
           filename={filename || '未命名文档'}
-          totalChars={rawText.length}
+          totalChars={totalChars}
           chunks={plans}
           chunkSize={chunkSize}
           automaticChunking={automaticChunking}
