@@ -140,7 +140,9 @@ describe.sequential('D4a native first intent and attributable field write', () =
     if (family === 'story') {
       const producer = await selectedRun(scope, nodeRunId, 0)
       expect(producer.contract.budget.serviceCapacityOnly).toBe(true)
-      expect(producer.contract.budget.maxOutputTokens).toBeGreaterThan(4096)
+      // Current frozen producers retain 0 as automatic service capacity,
+      // rather than restoring the historical application token ceiling.
+      expect(producer.contract.budget.maxOutputTokens).toBe(0)
     }
     let input = { scope, flow, runId: nodeRunId, nodeId: 'field', selectedVariantIndex: 0, draft: generated.candidates.field.output }
     const choose = async (index: number, edited?: string) => {
