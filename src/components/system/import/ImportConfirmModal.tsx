@@ -3,7 +3,8 @@ import { X, Wand2, AlertTriangle, Info, Gauge, Timer, Coins, BookOpen, ChevronDo
 import type { ChunkPlan } from '../../../lib/import/chunker'
 import type { VolumeDetectResult } from '../../../lib/import/volume-detector'
 import type { WorldGroup, ReferenceAnalysisDepth } from '../../../lib/types'
-import type { SameNameConflictItemV1 } from '../../../lib/import/dedup'
+import type { SameNameConflictItemV1, ReferenceDuplicateItemV1 } from '../../../lib/import/dedup'
+import { REFERENCE_DUPLICATE_RULE_V1 } from '../../../lib/import/dedup'
 
 interface Props {
   filename: string
@@ -22,6 +23,8 @@ interface Props {
   onCancel: () => void
   /** 032-L1-d：待导入条目与目标世界已有条目的同名清单（纯展示；空数组/缺省时不渲染区块） */
   sameNameConflicts?: SameNameConflictItemV1[]
+  /** 032-L1-d-REFERENCE-DUP：参考路径重复/同名清单；仅在"导入项目参考"区块内展示。 */
+  referenceDuplicates?: ReferenceDuplicateItemV1[]
 }
 
 /**
@@ -39,6 +42,7 @@ export default function ImportConfirmModal({
   onTargetWorldGroupChange,
   onChunkSizeChange, onConfirm, onCancel,
   sameNameConflicts,
+  referenceDuplicates,
 }: Props) {
   const [showStructure, setShowStructure] = useState(false)
   const [refDepth, setRefDepth] = useState<ReferenceAnalysisDepth>('quick')
@@ -280,8 +284,24 @@ export default function ImportConfirmModal({
                 </label>
               )}
             </div>
-            <div className="bg-bg-base border border-purple-400/30 rounded-lg p-2.5">
+            <div className="bg-bg-base border border-purple-400/30 rounded-lg p-2.5" data-target="reference">
               <div className="font-medium text-purple-400 mb-0.5">📚 导入项目参考</div>
+              {/* 032-L1-d-REFERENCE-DUP：仅参考路径的重复/同名提示（只读，不改变按钮语义） */}
+              {referenceDuplicates && referenceDuplicates.length > 0 && (
+                <div role="status" className="mb-2 rounded border border-warning/30 bg-warning/10 p-2 text-[11px] leading-relaxed">
+                  <span className="text-warning font-medium">检测到 {referenceDuplicates.length} 处重复/同名参考</span>
+                  <ul className="mt-1 space-y-0.5 text-text-secondary">
+                    {referenceDuplicates.map((duplicate, index) => (
+                      <li key={`${duplicate.reason}-${duplicate.incomingTitle}-${index}`}>
+                        {duplicate.reason === 'same-file'
+                          ? <>同一原件「{duplicate.incomingTitle}」已作为参考存在{duplicate.existingTitle !== duplicate.incomingTitle ? `（${duplicate.existingTitle}）` : ''}</>
+                          : <>同名参考「{duplicate.incomingTitle}」已存在{duplicate.existingTitle !== duplicate.incomingTitle ? `（${duplicate.existingTitle}）` : ''}</>}
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="mt-1 text-text-muted">{REFERENCE_DUPLICATE_RULE_V1}</p>
+                </div>
+              )}
               <div className="text-text-muted leading-relaxed mb-2">存入「项目参考」页面，作为创作参照，不影响当前项目。<span className="text-text-secondary">导入即做 13 维作品分析</span>，选个深度：</div>
               {/* 浅 / 深 档位 */}
               <div className="space-y-1.5">
