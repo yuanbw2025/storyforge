@@ -4,7 +4,7 @@ import { db } from '../../src/lib/db/schema'
 import { adopt, hashAdoptFieldValueV1 } from '../../src/lib/registry/adopt'
 import { useWorldviewStore } from '../../src/stores/worldview'
 import { coordinatePendingEditV1, resetPendingEditCoordinatorForTestsV1 } from '../../src/lib/authoring/pending-edit-coordinator'
-import { LOCAL_SAVE_NATURAL_FIELDS_V1, type LocalSaveIntentV1, type LocalSaveNaturalFieldV1 } from '../../src/lib/authoring/local-save-evidence'
+import { LOCAL_SAVE_NATURAL_FIELDS_V1, LOCAL_SAVE_WORLDVIEW_TEXT_FIELDS_V1, type LocalSaveIntentV1, type LocalSaveWorldviewTextFieldV1 } from '../../src/lib/authoring/local-save-evidence'
 import { fingerprintSettingSource } from '../../src/lib/fact-ledger/setting-assertions'
 import { CANON_RESOURCE_PROVIDER_V1 } from '../../src/lib/context-gateway/canon-provider'
 import { stampNewRecord } from '../../src/lib/workspace/scope'
@@ -13,7 +13,7 @@ const raw = '  # 潮汐\r\n\r\n```text\r\n  |--🌊  \r\n```\r\n  '
 beforeEach(async () => { await db.delete(); await db.open(); resetPendingEditCoordinatorForTestsV1(); vi.stubGlobal('fetch', vi.fn(() => { throw new Error('no network') })) })
 afterEach(() => { expect(fetch).not.toHaveBeenCalled(); vi.unstubAllGlobals(); db.close() })
 async function fixture() { const { scope } = await seedCurrentWorkspace('050 isolated'); await useWorldviewStore.getState().loadAll(scope); return scope }
-function intent(field: LocalSaveNaturalFieldV1 = 'worldStructure'): LocalSaveIntentV1 { return { kind: 'natural-field-local-save-v1', session: 'edit-1', generation: 1, expected: structuredClone(useWorldviewStore.getState().localSaveWitnesses[field]!) } }
+function intent(field: LocalSaveWorldviewTextFieldV1 = 'worldStructure'): LocalSaveIntentV1 { return { kind: 'natural-field-local-save-v1', session: 'edit-1', generation: 1, expected: structuredClone(useWorldviewStore.getState().localSaveWitnesses[field]!) } }
 async function row() { return (await db.worldviews.toArray())[0] }
 it('confirms N5 exact raw text only after root commit, preserves UID/owner and survives close/reopen', async () => {
   const scope = await fixture(); expect(await db.worldviews.count()).toBe(0)
@@ -141,4 +141,35 @@ it('captures caller scope before queueing and never publishes an old target into
   expect(useWorldviewStore.getState().loadedScope).toEqual(other.scope)
   expect(useWorldviewStore.getState().worldview).toBeNull()
   expect(await db.worldviews.get(ack.witness.recordId!)).toMatchObject({ worldId: originalScope.worldId })
+})
+
+
+it.each(LOCAL_SAVE_WORLDVIEW_TEXT_FIELDS_V1.filter(field => !(LOCAL_SAVE_NATURAL_FIELDS_V1 as readonly string[]).includes(field)))(
+  'confirms %s only from actual committed exact source and retains it on DB reopen', async field => {
+    const scope = await fixture(), expected = intent(field)
+    const ack = await useWorldviewStore.getState().saveWorldview({ projectId: scope.projectId, [field]: raw }, scope, expected)
+    expect(ack.witness).toMatchObject({ source: 'committed-write', present: true, value: raw,
+      valueHash: await hashAdoptFieldValueV1(raw), identity: { ...scope, field, table: 'worldviews', worldGroupId: null } })
+    expect(ack.witness.recordId).toBe((await row()).id)
+    await expect(useWorldviewStore.getState().saveWorldview({ projectId: scope.projectId, [field]: 'stale overwrite' }, scope, expected)).rejects.toThrow('已被修改')
+    db.close(); await db.open(); await useWorldviewStore.getState().loadAll(scope)
+    expect((await row())[field]).toBe(raw)
+    expect(useWorldviewStore.getState().localSaveWitnesses[field]).toMatchObject({ source: 'database-read', value: raw,
+      recordId: ack.witness.recordId, resourceUid: ack.witness.resourceUid })
+  })
+
+it('rolls back a new humanity receipt on quota error, rejects a false committed poststate and keeps object fields outside the whitelist', async () => {
+  const scope = await fixture(), field = 'politicsOverview', before = intent(field)
+  const fail = () => { throw new DOMException('new-field quota', 'QuotaExceededError') }
+  db.worldviews.hook('updating', fail)
+  try { await expect(useWorldviewStore.getState().saveWorldview({ projectId: scope.projectId, [field]: raw }, scope, before)).rejects.toThrow('new-field quota') }
+  finally { db.worldviews.hook('updating').unsubscribe(fail) }
+  expect(await db.worldviews.count()).toBe(0)
+  expect(useWorldviewStore.getState().localSaveWitnesses[field]?.source).toBe('database-read')
+  const corrupt = () => ({ politicsOverview: 'wrong source' }); db.worldviews.hook('updating', corrupt)
+  try { await expect(useWorldviewStore.getState().saveWorldview({ projectId: scope.projectId, [field]: raw }, scope, before)).rejects.toThrow('精确保存') }
+  finally { db.worldviews.hook('updating').unsubscribe(corrupt) }
+  expect(await db.worldviews.count()).toBe(0)
+  expect(LOCAL_SAVE_WORLDVIEW_TEXT_FIELDS_V1 as readonly string[]).not.toContain('divineDesign')
+  expect(LOCAL_SAVE_WORLDVIEW_TEXT_FIELDS_V1 as readonly string[]).not.toContain('naturalResources')
 })

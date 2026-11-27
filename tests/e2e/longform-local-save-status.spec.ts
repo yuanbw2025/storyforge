@@ -206,3 +206,36 @@ test('native fact invalidation rolls back with a failed field write; committed C
   expect(result.rejected).toContain('native fact fault'); expect(result.rollback).toEqual({ field: 'old native source', fact: 'confirmed' })
   expect(result.fact).toBe('stale'); expect(result.uidStable).toBe(true); expect(result.changedHash).toBe(true); expect(result.actual).toBe(result.raw); expect(result.ack).toBe(result.raw)
 })
+
+test('origin and humanity native fields show committed status through ordinary Workspace routes and reopened tab', async ({ page, context }) => {
+  const scope = await seed(page)
+  const cases = [
+    { route: 'module=worldview-origin', field: 'worldOrigin' },
+    { route: 'module=worldview-origin&originField=power', field: 'powerHierarchy' },
+    { route: 'module=worldview-humanity', field: 'races' },
+    { route: 'module=worldview-humanity', field: 'economyOverview', tab: '经济制度' },
+  ] as const
+  const originals: string[] = []
+  for (const [i, item] of cases.entries()) {
+    await page.goto(`./workspace/${scope.projectId}?${item.route}`)
+    if ('tab' in item) await page.locator('nav button').filter({ hasText: item.tab }).first().click()
+    const status = page.locator('[data-local-save-status]:visible').first()
+    await expect(status).toHaveAttribute('data-local-save-status', /unconfirmed|saved/)
+    const edit = page.getByRole('button', { name: '编辑源码', exact: true }).or(page.locator('.cursor-text:visible').first()).first()
+    await expect(edit).toBeVisible(); await edit.click()
+    const area = page.locator('textarea:visible').first()
+    await area.fill(`  # ${item.field} 🌊\r\n\r\n第17年，不可夜航。\r\n  `)
+    originals.push(await area.inputValue())
+    await expect(status).toHaveAttribute('data-local-save-status', 'dirty')
+    await flush(page)
+    await expect(status).toHaveAttribute('data-local-save-status', 'saved')
+    expect((await snapshot(page))[0][item.field]).toBe(originals[i])
+  }
+  await page.reload()
+  const reopenUrl = page.url(); await page.close()
+  const reopened = await context.newPage(); await reopened.goto(reopenUrl)
+  await reopened.locator('nav button').filter({ hasText: '经济制度' }).first().click()
+  await expect(reopened.locator('[data-local-save-status]:visible').first()).toHaveAttribute('data-local-save-status', 'saved')
+  const row = (await snapshot(reopened))[0]
+  for (const [i, item] of cases.entries()) expect(row[item.field]).toBe(originals[i])
+})

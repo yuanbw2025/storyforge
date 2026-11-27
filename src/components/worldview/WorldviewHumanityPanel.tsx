@@ -6,7 +6,8 @@ import { useState, useEffect } from 'react'
 import { useWorldviewStore } from '../../stores/worldview'
 import { useWorldGroupStore } from '../../stores/world-group'
 import WorldGroupSwitcher from '../world-group/WorldGroupSwitcher'
-import { InlineTextarea } from '../shared/InlineEdit'
+import { InlineTextarea, type InlineSave } from '../shared/InlineEdit'
+import type { LocalSaveContractV1, LocalSaveWorldviewTextFieldV1 } from '../../lib/authoring/local-save-evidence'
 import { useMasterCopilot, type PendingMasterCandidate } from '../agent/useMasterCopilot'
 import WorldviewAgentControls from './WorldviewAgentControls'
 import type { Project } from '../../lib/types'
@@ -21,7 +22,7 @@ import { codexEntryInWorld } from '../../lib/types/codex'
 
 interface FieldMeta {
   key: string       // skipKey for buildCtx
-  field: WorldviewAgentField
+  field: LocalSaveWorldviewTextFieldV1
   emoji: string
   label: string
   description: string
@@ -57,19 +58,20 @@ const HUMANITY_CODEX_KEYS: Record<string, string[] | undefined> = {
 
 interface Props {
   project: Project
+  confirmedLocalSaves?: boolean
   resizableInputs?: boolean
 }
 
-export default function WorldviewHumanityPanel({ project, resizableInputs = false }: Props) {
+export default function WorldviewHumanityPanel({ project, resizableInputs = false, confirmedLocalSaves = false }: Props) {
   const activeGroupId = useWorldGroupStore(s => s.activeGroupId)
   return <ScopedWorldAuthoringBoundary project={project} activeGroupId={activeGroupId}>
-    {view => <ScopedHumanityPanel {...view} resizableInputs={resizableInputs} />}
+    {view => <ScopedHumanityPanel {...view} resizableInputs={resizableInputs} confirmedLocalSaves={confirmedLocalSaves} />}
   </ScopedWorldAuthoringBoundary>
 }
 
-function ScopedHumanityPanel({ project, activeGroupId, resizableInputs = false }: Props & { activeGroupId: number | null }) {
+function ScopedHumanityPanel({ project, activeGroupId, resizableInputs = false, confirmedLocalSaves = false }: Props & { activeGroupId: number | null }) {
   const compact = useWorldSettingsLayout()
-  const { worldview, saveWorldview, loadedScope, activeWorldGroupId, loading, loadError } = useWorldviewStore()
+  const { worldview, saveWorldview, loadedScope, activeWorldGroupId, loading, loadError, localSaveWitnesses } = useWorldviewStore()
   const { authorScope, reloadCurrent } = useScopedWorldviewReadback(project, activeGroupId)
   const readReady = !loading && !loadError && loadedScope?.projectId === authorScope.projectId
     && loadedScope.worldId === authorScope.worldId && loadedScope.workId === authorScope.workId
@@ -211,7 +213,9 @@ function ScopedHumanityPanel({ project, activeGroupId, resizableInputs = false }
                 resizableInputs={resizableInputs}
                 meta={f}
                 value={values[f.key] ?? ''}
-                onChange={v => {
+                localSave={confirmedLocalSaves ? { identity: { ...authorScope, table: 'worldviews', field: f.field, worldGroupId: targetWorldGroupId }, witness: localSaveWitnesses[f.field] ?? null } : undefined}
+                onChange={(v, intent) => {
+                  if (intent) return saveWorldview({ projectId: project.id!, worldGroupId: targetWorldGroupId, [f.field]: v }, authorScope, intent)
                   setValues(prev => ({ ...prev, [f.key]: v }))
                   return save(f.field, v)
                 }}
@@ -261,6 +265,7 @@ function HumanityFieldEditor({
   meta,
   value,
   onChange,
+  localSave,
   project,
   activeGroupId,
   copilot,
@@ -273,7 +278,8 @@ function HumanityFieldEditor({
   meta: FieldMeta
   resizableInputs?: boolean
   value: string
-  onChange: (v: string) => void | Promise<void>
+  onChange: InlineSave
+  localSave?: LocalSaveContractV1
   project: Project
   activeGroupId: number | null
   copilot: ReturnType<typeof useMasterCopilot>
@@ -297,7 +303,7 @@ function HumanityFieldEditor({
       </div>
 
       <div className="bg-bg-surface border border-border rounded-xl p-4">
-        <InlineTextarea markdownRead inputAreaLayout={inputAreaLayoutV1(resizableInputs, worldviewInputAreaFieldV1(meta.field))} value={value} onChange={onChange} placeholder={meta.description} />
+        <InlineTextarea markdownRead localSave={localSave} inputAreaLayout={inputAreaLayoutV1(resizableInputs, worldviewInputAreaFieldV1(meta.field))} value={value} onChange={onChange} placeholder={meta.description} />
       </div>
       <WorldviewAgentControls
         field={meta.field}
