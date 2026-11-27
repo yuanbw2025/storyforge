@@ -57,7 +57,7 @@ async function setup(page: Page, answers: Array<string | null>) {
   return posts
 }
 
-test('B02 normal UI: full source → four semantic revisions → editable candidate → reload → explicit adoption', async ({ page }) => {
+for (const directFromEditor of [false, true]) test(`B02 normal UI: full source → four semantic revisions → editable candidate → reload → explicit adoption${directFromEditor ? ' · 直接从编辑器采纳' : ''}`, async ({ page }) => {
   const errors: string[] = []; page.on('pageerror', error => errors.push(error.message))
   const posts = await setup(page, [40, 60, 80, 100].map(n => '甲'.repeat(n)))
   await page.getByRole('button', { name: 'AI 生成', exact: true }).click()
@@ -77,15 +77,28 @@ test('B02 normal UI: full source → four semantic revisions → editable candid
   await expect(editor).toHaveValue('甲'.repeat(100))
   await editor.fill(edited)
   await expect(saveStatus).not.toHaveAttribute('data-candidate-local-save-status', 'saved')
-  await review.getByRole('button', { name: '保存后阅读', exact: true }).click()
-  await expect(editor).toHaveCount(0)
-  await expect(review.locator('[data-markdown-body]')).toHaveText(edited)
-  await expect(saveStatus).toHaveAttribute('data-candidate-local-save-status', 'saved')
-  await expect(review.getByRole('button', { name: '采纳', exact: true })).toBeEnabled()
-  await page.reload(); await openOrigin(page)
-  await expect(review.locator('[data-markdown-body]')).toHaveText(edited)
-  await expect(saveStatus).toHaveAttribute('data-candidate-local-save-status', 'saved')
-  await review.getByRole('button', { name: '采纳', exact: true }).click()
+  if (directFromEditor) {
+    const adopt = review.getByRole('button', { name: '采纳', exact: true })
+    await expect(adopt).toBeEnabled()
+    await adopt.scrollIntoViewIfNeeded()
+    const point = (await adopt.boundingBox())!
+    await page.mouse.move(point.x + point.width / 2, point.y + point.height / 2)
+    await page.mouse.down()
+    try {
+      expect(await rows(page, 'worldviews')).toHaveLength(0)
+      await expect(editor).toHaveValue(edited)
+    } finally { await page.mouse.up() }
+  } else {
+    await review.getByRole('button', { name: '保存后阅读', exact: true }).click()
+    await expect(editor).toHaveCount(0)
+    await expect(review.locator('[data-markdown-body]')).toHaveText(edited)
+    await expect(saveStatus).toHaveAttribute('data-candidate-local-save-status', 'saved')
+    await expect(review.getByRole('button', { name: '采纳', exact: true })).toBeEnabled()
+    await page.reload(); await openOrigin(page)
+    await expect(review.locator('[data-markdown-body]')).toHaveText(edited)
+    await expect(saveStatus).toHaveAttribute('data-candidate-local-save-status', 'saved')
+    await review.getByRole('button', { name: '采纳', exact: true }).click()
+  }
   await expect(review).toHaveCount(0)
   await expect.poll(async () => (await rows(page, 'agentRuns'))[0]?.status).toBe('completed')
   expect((await rows(page, 'worldviews'))[0]?.worldOrigin).toBe(edited)

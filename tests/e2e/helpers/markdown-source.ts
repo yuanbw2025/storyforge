@@ -72,3 +72,25 @@ export async function enterWorkDescriptionEditorV1(page: Page) {
 export async function expectWorkDescriptionSourceV1(page: Page, value: string) {
   await expectMarkdownSourceValueV1(workDescriptionScopeV1(page), page.getByLabel('作品简介', { exact: true }), value)
 }
+
+/** CreativeRules owns the direct field editor before its candidate section. */
+export function ruleSourceScopeV1(page: Page, label: string) {
+  return page.getByText(label, { exact: true }).locator('..').locator('..').locator(':scope > div').nth(1)
+}
+export async function enterRuleSourceEditorV1(page: Page, label: string, editor: Locator) {
+  const scope = ruleSourceScopeV1(page, label)
+  if (await editor.count() === 0 && await scope.locator('[data-markdown-read-view]').count() === 0) {
+    await expect(scope).toBeVisible()
+    await expect(scope).toHaveClass(/cursor-text/)
+    await scope.click()
+  }
+  return enterMarkdownSourceEditorV1(scope, editor)
+}
+export async function expectRuleSourceValueV1(page: Page, label: string, editor: Locator, value: string) {
+  if (!value.length && await editor.count() === 0) await enterRuleSourceEditorV1(page, label, editor)
+  if (value.length) {
+    await expect(ruleSourceScopeV1(page, label).locator('[data-markdown-read-view]')).toHaveCount(1)
+    await expect(editor).toHaveCount(0)
+  }
+  await expectMarkdownSourceValueV1(ruleSourceScopeV1(page, label), editor, value)
+}

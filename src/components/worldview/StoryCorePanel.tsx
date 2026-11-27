@@ -372,6 +372,7 @@ function FieldEditor({
               <button
                 type="button"
                 disabled={copilot.busy}
+                onMouseDown={event => { if (event.button === 0) event.preventDefault() }}
                 onClick={() => { void copilot.rejectCandidate(candidate) }}
                 className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-text-muted hover:bg-bg-hover hover:text-text-primary rounded disabled:opacity-50"
               >
@@ -381,6 +382,7 @@ function FieldEditor({
               <button
                 type="button"
                 disabled={copilot.busy}
+                onMouseDown={event => { if (event.button === 0) event.preventDefault() }}
                 onClick={() => { void onAdopted(candidate) }}
                 className="flex items-center gap-1 bg-accent px-3 py-1.5 text-xs text-white hover:opacity-90 rounded disabled:opacity-50"
               >

@@ -1,3 +1,4 @@
+import { enterMarkdownSourceEditorV1, expectMarkdownSourceValueV1, enterRuleSourceEditorV1, expectRuleSourceValueV1 } from './helpers/markdown-source'
 import { installBrowserServiceCapacityFixtureV1 } from './helpers/browser-ai-config'
 import { createLongform } from './helpers/product-entry'
 import { createWorld } from './helpers/product-entry'
@@ -1400,7 +1401,7 @@ test('主 Agent 调度世界领域任务，拒绝零写入并精确采纳可见�
   expect(generationCalls).toBe(3)
 })
 
-test('故事核心面板通过主 Agent 生成单字段候选，刷新恢复后编辑采纳并持久化', async ({ page }) => {
+for (const decideInChat of [false, true]) test(`故事核心面板通过主 Agent 生成单字段候选，刷新恢复后编辑采纳并持久化${decideInChat ? ' · 对话副驾决定' : ''}`, async ({ page }) => {
   let generationCalls = 0
   const modelCandidate = {
     field: 'logline',
@@ -1460,30 +1461,60 @@ test('故事核心面板通过主 Agent 生成单字段候选，刷新恢复后�
   await expect(page.getByRole('heading', { name: /一句话故事/ })).toBeVisible()
 
   await page.getByRole('button', { name: 'AI 生成', exact: true }).click()
-  const candidate = page.getByRole('textbox', { name: '一句话故事候选内容' })
-  await expect(candidate).toContainText(modelCandidate.value)
+  const candidatePane = decideInChat ? page.getByRole('complementary', { name: '主 Agent 创作副驾' }) : page.getByRole('main')
+  async function showCandidatePane() {
+    if (!decideInChat) return
+    const open = page.getByRole('button', { name: '打开 AI 对话副驾' })
+    if (await open.isVisible()) await open.click()
+    await expect(candidatePane).toBeVisible()
+  }
+  await showCandidatePane()
+  const candidate = candidatePane.getByRole('textbox', { name: '一句话故事候选内容' })
+  await expectMarkdownSourceValueV1(candidatePane.locator('[data-candidate-local-save-status]').locator('..'), candidate, modelCandidate.value)
   await expect(page.getByText('点击填写一句话故事…', { exact: true })).toBeVisible()
-  await expect(page.getByText('本次实际输入证据', { exact: true })).toBeVisible()
+  if (decideInChat) await candidatePane.getByText('质量提示与运行详情', { exact: true }).click()
+  await expect(candidatePane.getByText('本次实际输入证据', { exact: true })).toBeVisible()
 
   await page.reload()
   await openSidebarLeaf(page, '设定库', '故事设计')
-  await expect(candidate).toContainText(modelCandidate.value)
+  await showCandidatePane()
+  await expectMarkdownSourceValueV1(candidatePane.locator('[data-candidate-local-save-status]').locator('..'), candidate, modelCandidate.value)
   await expect(page.getByText('点击填写一句话故事…', { exact: true })).toBeVisible()
 
   const edited = {
     ...modelCandidate,
     value: '作者确认版：守灯人为找回父亲主动典当的记忆追查潮汐钟，并拒绝让港城继续以遗忘换取安稳。',
   }
+  await enterMarkdownSourceEditorV1(candidatePane.locator('[data-candidate-local-save-status]').locator('..'), candidate)
   await candidate.fill(edited.value)
-  await page.getByRole('button', { name: '采纳', exact: true }).click()
-  await expect(page.getByText(edited.value, { exact: true })).toBeVisible()
-  await expect(candidate).toHaveCount(0)
+  await expect(candidate).toHaveValue(edited.value)
+  const formal = () => page.evaluate(async () => {
+    const { db } = await (new Function('return import("/storyforge/src/lib/db/schema.ts")'))()
+    const projectId = Number(location.pathname.match(/workspace\/(\d+)/)![1])
+    const project = await db.projects.get(projectId)
+    return { logline: (await db.storyCores.where('projectId').equals(projectId).toArray())
+      .find((row: { workId?: number }) => row.workId === project.activeWorkId)?.logline ?? '',
+      adoptions: (await db.agentRunEvents.toArray()).filter((event: { type: string }) => event.type === 'adoption.committed').length }
+  })
+  const adopt = candidatePane.getByRole('button', { name: '采纳', exact: true })
+  await adopt.scrollIntoViewIfNeeded()
+  const point = (await adopt.boundingBox())!
+  await page.mouse.move(point.x + point.width / 2, point.y + point.height / 2)
+  await page.mouse.down()
+  try {
+    expect(await formal()).toEqual({ logline: '', adoptions: 0 })
+    await expect(candidate).toHaveValue(edited.value)
+  } finally { await page.mouse.up() }
+  await expect.poll(formal).toEqual({ logline: edited.value, adoptions: 1 })
+  await expect(candidatePane.locator('[data-candidate-local-save-status]')).toHaveCount(0)
+  await expect(page.getByRole('main').getByText(edited.value, { exact: true })).toBeVisible()
   expect(generationCalls).toBe(1)
 
   await page.reload()
   await openSidebarLeaf(page, '设定库', '故事设计')
-  await expect(page.getByText(edited.value, { exact: true })).toBeVisible()
-  await expect(candidate).toHaveCount(0)
+  await showCandidatePane()
+  await expect(candidatePane.locator('[data-candidate-local-save-status]')).toHaveCount(0)
+  await expect(page.getByRole('main').getByText(edited.value, { exact: true })).toBeVisible()
 })
 
 test('创作规则建议通过固定 Skill 刷新恢复，拒绝重生后编辑确认并写入规范字段', async ({ page }) => {
@@ -1531,34 +1562,37 @@ test('创作规则建议通过固定 Skill 刷新恢复，拒绝重生后编辑�
   const writingStyleSuggestion = page.locator('label').filter({ hasText: /^写作风格$/ }).locator('..').getByRole('button', { name: 'AI 建议', exact: true })
   await writingStyleSuggestion.click()
   const candidate = page.getByRole('textbox', { name: '写作风格候选内容' })
-  await expect(candidate).toHaveValue(modelCandidate.value)
-  await expect(writingStyle).toHaveValue('')
+  await expectMarkdownSourceValueV1(page.getByText('待确认 · 写作风格', { exact: true }).locator('..').locator('..'), candidate, modelCandidate.value)
+  await expectRuleSourceValueV1(page, '写作风格', writingStyle, '')
   await expect(page.getByText('本次实际输入证据', { exact: true })).toBeVisible()
 
   await page.reload()
   await openSidebarLeaf(page, '创作区', '创作规则')
-  await expect(candidate).toHaveValue(modelCandidate.value)
-  await expect(writingStyle).toHaveValue('')
+  await expectMarkdownSourceValueV1(page.getByText('待确认 · 写作风格', { exact: true }).locator('..').locator('..'), candidate, modelCandidate.value)
+  await expectRuleSourceValueV1(page, '写作风格', writingStyle, '')
   await page.getByRole('button', { name: '拒绝', exact: true }).click()
-  await expect(candidate).toHaveCount(0)
+  await expect(page.getByText('待确认 · 写作风格', { exact: true }).locator('..').locator('..')).toHaveCount(0)
   expect(generationCalls).toBe(1)
 
   await writingStyleSuggestion.click()
   const edited = '作者确认：用克制短句和可见动作呈现压力，只写视角人物能够感知的信息。'
+  await enterMarkdownSourceEditorV1(page.getByText('待确认 · 写作风格', { exact: true }).locator('..').locator('..'), candidate)
   await candidate.fill(edited)
-  await page.getByRole('button', { name: '确认写入', exact: true }).click()
-  await expect(writingStyle).toHaveValue(edited)
-  await expect(candidate).toHaveCount(0)
+  await page.getByRole('button', { name: '确认写入', exact: true }).focus()
+  await page.getByRole('button', { name: '确认写入', exact: true }).press('Enter')
+  await expectRuleSourceValueV1(page, '写作风格', writingStyle, edited)
+  await expect(page.getByText('待确认 · 写作风格', { exact: true }).locator('..').locator('..')).toHaveCount(0)
   expect(generationCalls).toBe(2)
 
   const atmosphere = page.getByPlaceholder(/描述作品的整体基调和氛围/)
+  await enterRuleSourceEditorV1(page, '基调和氛围', atmosphere)
   await atmosphere.fill('冷峻但不绝望，危险之后必须保留可行动的希望。')
   await atmosphere.blur()
   await page.reload()
   await openSidebarLeaf(page, '创作区', '创作规则')
-  await expect(writingStyle).toHaveValue(edited)
-  await expect(atmosphere).toHaveValue('冷峻但不绝望，危险之后必须保留可行动的希望。')
-  await expect(candidate).toHaveCount(0)
+  await expectRuleSourceValueV1(page, '写作风格', writingStyle, edited)
+  await expectRuleSourceValueV1(page, '基调和氛围', atmosphere, '冷峻但不绝望，危险之后必须保留可行动的希望。')
+  await expect(page.getByText('待确认 · 写作风格', { exact: true }).locator('..').locator('..')).toHaveCount(0)
 })
 
 test('神明与信仰面板一次生成结构化候选，刷新恢复后采纳并持久化', async ({ page }) => {
@@ -1879,8 +1913,24 @@ test('分步骤角色面板通过 character.create Skill 生成、恢复并确�
     shortDescription: '作者确认的旧港守灯钟匠。',
   }
   await candidate.fill(edited.name)
+  await enterMarkdownSourceEditorV1(page.getByRole('group', { name: '角色内容', exact: true }).getByText('简介', { exact: true }).locator('..'), page.getByRole('textbox', { name: '简介 · 候选 1', exact: true }))
   await page.getByRole('textbox', { name: '简介 · 候选 1', exact: true }).fill(edited.shortDescription)
-  await page.getByRole('button', { name: '采纳', exact: true }).click()
+  const adopt = page.getByRole('button', { name: '采纳', exact: true })
+  await adopt.scrollIntoViewIfNeeded()
+  const point = (await adopt.boundingBox())!
+  await page.mouse.move(point.x + point.width / 2, point.y + point.height / 2)
+  await page.mouse.down()
+  try {
+    expect(await page.evaluate(async () => {
+      const { db } = await (new Function('return import("/storyforge/src/lib/db/schema.ts")'))()
+      return db.characters.count()
+    })).toBe(0)
+    await expect(page.getByRole('textbox', { name: '简介 · 候选 1', exact: true })).toHaveValue(edited.shortDescription)
+  } finally { await page.mouse.up() }
+  await expect.poll(async () => page.evaluate(async () => {
+    const { db } = await (new Function('return import("/storyforge/src/lib/db/schema.ts")'))()
+    return (await db.characters.toArray()).map((row: { name: string }) => row.name)
+  })).toEqual([edited.name])
 
   await expect(page.getByText('角色生成 · 1', { exact: true })).toBeVisible()
   await expect(page.getByRole('button', { name: /沈砚灯.*作者确认的旧港守灯钟/ })).toBeVisible()
@@ -2015,9 +2065,12 @@ test('已有角色补全通过定向 Skill 恢复候选，确认后只写入所�
   await expect(editAlert).toHaveCount(0)
   await page.getByRole('button', { name: '确认写入', exact: true }).click()
 
-  await expect(page.getByPlaceholder('性格…')).toHaveValue(editedPersonality)
-  await expect(page.getByPlaceholder('目标(短/长期)…')).toHaveValue(supplementCandidate.patch.goals)
-  await expect(page.getByPlaceholder('背景故事…')).toHaveValue(modelCharacter.background)
+  await expect(page.getByPlaceholder('性格…')).toHaveCount(0)
+  await expectMarkdownSourceValueV1(page.locator('span.w-20').filter({ hasText: /^性格$/ }).locator('..'), page.getByPlaceholder('性格…'), editedPersonality)
+  await expect(page.getByPlaceholder('目标(短/长期)…')).toHaveCount(0)
+  await expectMarkdownSourceValueV1(page.locator('span.w-20').filter({ hasText: /^目标\(短\/长期\)$/ }).locator('..'), page.getByPlaceholder('目标(短/长期)…'), supplementCandidate.patch.goals)
+  await expect(page.getByPlaceholder('背景故事…')).toHaveCount(0)
+  await expectMarkdownSourceValueV1(page.locator('span.w-20').filter({ hasText: /^背景故事$/ }).locator('..'), page.getByPlaceholder('背景故事…'), modelCharacter.background)
   expect(characterCalls).toBe(1)
   expect(supplementCalls).toBe(2)
   expect(pageErrors).toEqual([])
@@ -2208,7 +2261,8 @@ test('故事线面板通过主 Agent 生成 durable 候选，确认后才写入�
 
   await expect(page.getByRole('button', { name: '潮汐钟主线', exact: true })).toBeVisible()
   await expect(page.locator('main input').first()).toHaveValue('潮汐钟主线')
-  await expect(page.locator('main textarea').first()).toHaveValue(edited[0].description)
+  await expect(page.getByLabel('故事线整体描述', { exact: true })).toHaveCount(0)
+  await expectMarkdownSourceValueV1(page.getByLabel('故事线名称', { exact: true }).locator('..').locator('..').locator('..'), page.getByLabel('故事线整体描述', { exact: true }), edited[0].description)
   expect(generationCalls).toBe(1)
 
   await page.reload()
@@ -2216,7 +2270,8 @@ test('故事线面板通过主 Agent 生成 durable 候选，确认后才写入�
   await expect(page.getByRole('heading', { name: /全局故事线/ })).toBeVisible({ timeout: 15_000 })
   await expect(page.getByRole('button', { name: '潮汐钟主线', exact: true })).toBeVisible()
   await expect(page.locator('main input').first()).toHaveValue('潮汐钟主线')
-  await expect(page.locator('main textarea').first()).toHaveValue(edited[0].description)
+  await expect(page.getByLabel('故事线整体描述', { exact: true })).toHaveCount(0)
+  await expectMarkdownSourceValueV1(page.getByLabel('故事线名称', { exact: true }).locator('..').locator('..').locator('..'), page.getByLabel('故事线整体描述', { exact: true }), edited[0].description)
 })
 
 test('主 Agent 为明确章纲生成正文，拒绝零写入并把可见修订稿同步到编辑器', async ({ page }) => {
