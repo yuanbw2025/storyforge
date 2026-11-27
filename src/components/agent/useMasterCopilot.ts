@@ -246,6 +246,7 @@ export function useMasterCopilot(input: {
   const runtimeCandidates = useRef(new Map<number, ExecutedMasterCandidate>())
   const localCandidateDrafts = useRef(new Map<number, string>())
   const candidateSaveStates = useRef(new Map<number, CandidateLocalDraftStateV1>())
+  const reloadSequence = useRef(0)
   const activeCandidateScope = useRef('')
   const workspaceScope = useMemo<WorkspaceScope | undefined>(() => (
     project.id != null && project.activeWorldId != null && project.activeWorkId != null
@@ -265,13 +266,18 @@ export function useMasterCopilot(input: {
   ), [])
 
   const reload = useCallback(async (id: number) => {
-    const rows = await projectWorldviewImportedHistoryV2(workspaceScope,await readAgentEvents(id, workspaceScope))
-    const endable = workspaceScope ? await findEndableWorldviewRunV2({scope:workspaceScope,conversationId:id}) : null
-    const received = workspaceScope ? await findWorldviewReceivedRunV2({ scope: workspaceScope, conversationId: id, worldGroupId }) : null
-    if (activeCandidateScope.current === scopeKey) {
-      setEvents(overlayLocalCandidateDrafts(rows))
-      setEndableWorldviewRun(endable)
-      setReceivedWorldviewRun(received)
+    const request = ++reloadSequence.current
+    try {
+      const rows = await projectWorldviewImportedHistoryV2(workspaceScope,await readAgentEvents(id, workspaceScope))
+      const endable = workspaceScope ? await findEndableWorldviewRunV2({scope:workspaceScope,conversationId:id}) : null
+      const received = workspaceScope ? await findWorldviewReceivedRunV2({ scope: workspaceScope, conversationId: id, worldGroupId }) : null
+      if (activeCandidateScope.current === scopeKey && request === reloadSequence.current) {
+        setEvents(overlayLocalCandidateDrafts(rows))
+        setEndableWorldviewRun(endable)
+        setReceivedWorldviewRun(received)
+      }
+    } catch (cause) {
+      if (activeCandidateScope.current === scopeKey && request === reloadSequence.current) throw cause
     }
   }, [overlayLocalCandidateDrafts, scopeKey, workspaceScope, worldGroupId])
 
@@ -312,6 +318,7 @@ export function useMasterCopilot(input: {
     runtimeCandidates.current.clear()
     localCandidateDrafts.current.clear()
     candidateSaveStates.current.clear()
+    reloadSequence.current++
     setConversationId(null)
     setEvents([])
     setAuthorRequest('')
@@ -771,6 +778,9 @@ export function useMasterCopilot(input: {
           }
         }
         const nextPayload = typeof result === 'string' ? result : null
+        // An older read may finish after this committed revision. Its snapshot
+        // cannot replace the acknowledged author draft or its durable payload.
+        reloadSequence.current++
         setEvents(current => current.map(event => event.id === eventId
           ? {
               ...event,
@@ -825,6 +835,7 @@ export function useMasterCopilot(input: {
         if (activeCandidateScope.current !== scopeKey) return
         localCandidateDrafts.current.delete(eventId)
         candidateSaveStates.current.set(eventId, { revision, status: 'idle' })
+        reloadSequence.current++
         setEvents(rows => rows.map(event => event.id === eventId ? saved : event))
         setError(null)
         refreshVisibleCandidateDraft(value => value + 1)

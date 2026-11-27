@@ -115,6 +115,26 @@ it('does not allow an earlier committed candidate to confirm later typing while 
   await act(async () => { release(); await flushPendingEditsV1() }); await waitFor(() => expect(status()).toBe('saved'))
   expect(JSON.parse((await db.agentEvents.get(f.candidate.event.id!))!.content).value).toBe('# 第二稿'); expect(calls).toBe(2)
 })
+it.each(['snapshot', 'failure'])('ignores an older read %s arriving after the latest committed author draft', async kind => {
+  const f = await fixture(), oldRows = await conversations.readAgentEvents(f.conversation.id!, f.scope)
+  const read = conversations.readAgentEvents
+  let release!: () => void, intercepted = false
+  const gate = new Promise<void>(resolve => { release = resolve })
+  vi.spyOn(conversations, 'readAgentEvents').mockImplementation(async (...args) => {
+    if (!intercepted) { intercepted = true; await gate; if (kind === 'failure') throw Error('obsolete read failure'); return oldRows }
+    return read(...args)
+  })
+  await click('编辑源码'); await input('# 第一稿已提交')
+  await act(async () => flushPendingEditsV1()); await waitFor(() => expect(intercepted).toBe(true))
+  await click('编辑源码')
+  await input('# 第二稿已提交'); await act(async () => flushPendingEditsV1())
+  await waitFor(() => expect(status()).toBe('saved'))
+  await act(async () => { release(); await new Promise(resolve => setTimeout(resolve, 20)) })
+  await waitFor(() => expect(status()).toBe('saved'))
+  expect(JSON.parse(controller.pendingCandidates[0].event.content).value).toBe('# 第二稿已提交')
+  expect(controller.error).toBeNull()
+  expect(JSON.parse((await db.agentEvents.get(f.candidate.event.id!))!.content).value).toBe('# 第二稿已提交')
+})
 it('withholds success for a changed draft, forged stored text or missing run proof', async () => {
   const f = await fixture(), before = (await db.agentEvents.get(f.candidate.event.id!))!
   expect(await readCandidateLocalSaveWitnessV1(f.scope, { ...before, content: 'memory-only' })).toBeNull()
