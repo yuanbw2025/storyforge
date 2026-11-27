@@ -8,6 +8,7 @@ import { useStoryArcStore, type StoryStageEditV1 } from '../../stores/story-arc'
 import { useMasterCopilot } from '../agent/useMasterCopilot'
 import { CInput } from '../shared/CompositionInput'
 import { CTextarea } from '../shared/CompositionInput'
+import CandidateSaveFeedback from '../agent/CandidateSaveFeedback'
 import { useDialog } from '../shared/Dialog'
 import AcknowledgedTextField from '../shared/AcknowledgedTextField'
 import { useAuthorRecordSavesV1 } from '../shared/AuthorRecordSaveScope'
@@ -415,6 +416,9 @@ export default function StoryArcPanel({ project, worldGroupId, initialRecordTarg
                 || candidate.payload.storyArcMutationRequest?.stageEvents
                 ? '新版（可编辑）'
                 : ''}
+              <CandidateSaveFeedback event={candidate.event} scope={copilot.candidateLocalSaveScope}
+                draftState={copilot.readCandidateLocalDraftState?.(candidate.event.id!)} busy={copilot.busy}
+                onRetry={() => copilot.flushCandidateDraft(candidate.event.id!)}>
               <CTextarea
                 aria-label={`${candidate.payload.label}候选内容`}
                 value={candidate.event.content}
@@ -424,6 +428,7 @@ export default function StoryArcPanel({ project, worldGroupId, initialRecordTarg
                 }}
                 className="min-h-72 w-full resize-y font-mono text-xs leading-5"
               />
+              </CandidateSaveFeedback>
             </label>
           </div>
           {candidate.payload.storyArcMutationRequest?.stageEvents && <p className="mt-2 text-xs text-text-muted">本轮只处理所选阶段事件；追加时保留已有事件，排序时只调整顺序。</p>}
