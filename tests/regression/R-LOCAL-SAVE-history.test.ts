@@ -78,6 +78,7 @@ it.each(['histories', 'historicalTimelineEvents', 'historicalKeywords'] as const
 
 it('preserves unrelated changes while rejecting stale fields, fabricated hashes, record swaps and wrong World partitions', async () => {
   const { identities, eventId, scope } = await fixture(), identity = identities[2]
+  if (identity.table !== 'historicalTimelineEvents') throw new Error('Fixture requires the native timeline event identity')
   const expected = await intent(identity)
   await useHistoricalStore.getState().updateEvent(eventId, { location: '保留地点' }, scope)
   await save(identity, raw, expected)
