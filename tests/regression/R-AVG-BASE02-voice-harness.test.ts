@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../../src/lib/db/schema'
+import { finiteServiceConfigFixtureV1 } from '../helpers/model-capacity-fixture'
 import { useAIConfigStore } from '../../src/stores/ai-config'
 import * as gates from '../../src/lib/avg/assembly-contract'
 import * as mediaVerifier from '../../src/lib/product-production/media-runtime-verifier'
@@ -264,8 +265,14 @@ describe('AVG voice actual command/Harness/producer/author/Preview path with con
     await db.productBuildArtifacts.update(script.id!, { payloadJson: JSON.stringify(corrupt) })
     await expect(readAvgTaskExecutionContextV1(input)).rejects.toThrow()
     await db.productBuildArtifacts.update(script.id!, { payloadJson: script.payloadJson })
+    // Legacy inputBudgetTokens/MaxTokens are not physical service limits.
+    // Preserve both real-window rejection and complete adequate-window delivery.
     await expect(contextAssembly.assembleContext({ ...input, sourceKeys: [AVG_TASK_CONTEXT_SOURCE_V1],
-      inputBudgetTokens: 128, sourceTransformer: preserveProductProductionContextV1 })).rejects.toThrow(/预算/)
+      modelConfig: await finiteServiceConfigFixtureV1(128), sourceTransformer: preserveProductProductionContextV1 })).rejects.toThrow(/预算/)
+    const adequate = await contextAssembly.assembleContext({ ...input, sourceKeys: [AVG_TASK_CONTEXT_SOURCE_V1],
+      modelConfig: await finiteServiceConfigFixtureV1(128_000), sourceTransformer: preserveProductProductionContextV1 })
+    expect(adequate.text).toContain(await readAvgTaskExecutionContextV1(input))
+    expect(adequate.sourceEvidence?.find(source => source.key === AVG_TASK_CONTEXT_SOURCE_V1)?.delivery).toBe('full')
     expect(s.fetcher).not.toHaveBeenCalled()
     expect(await db.productBuilds.get(s.buildId)).toEqual(build)
   })
