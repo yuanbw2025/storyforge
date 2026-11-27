@@ -153,7 +153,7 @@ export default function OutlineVolumeDetail({
 
       <div>
         <label className="text-xs text-text-muted mb-1 block">卷情节摘要</label>
-        <AcknowledgedTextField autoGrow label="卷情节摘要"
+        <AcknowledgedTextField markdownRead autoGrow label="卷情节摘要"
           value={volume.summary}
           onCommit={(value, expected) => onUpdateNode(volume.id!, { summary: value }, { expected: { summary: expected as string } })}
           placeholder="描述本卷的核心冲突、关键转折和主要情节..."

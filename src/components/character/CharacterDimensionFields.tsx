@@ -1,6 +1,7 @@
 import AcknowledgedTextField from '../shared/AcknowledgedTextField'
 import type { Character } from '../../lib/types'
 import { dimensionsByGroup, type CharacterDimensionKey, type CharacterDimensionSpec } from '../../lib/character/character-dimensions'
+import { FIELD_REGISTRY } from '../../lib/registry/field-registry'
 
 interface Props {
   character: Character
@@ -16,6 +17,7 @@ interface DimensionFieldProps {
   input?: boolean
   placeholder?: string
   className?: string
+  markdownRead?: boolean
 }
 
 export function CharacterDraftField({ dimension, ...props }: DimensionFieldProps) {
@@ -45,6 +47,7 @@ export default function CharacterDimensionFields({ character, onChange, exclude 
                   <CharacterDraftField
                     key={`${character.id ?? 'draft'}:${d.key}`}
                     dimension={d}
+                    markdownRead={FIELD_REGISTRY.some(spec => spec.target === 'characters' && spec.field === d.key && spec.type === 'longtext')}
                     value={character[d.key]}
                     onCommit={(value, expected) => onChange({ [d.key]: value } as Partial<Character>, { [d.key]: expected } as Partial<Character>)}
                   />
