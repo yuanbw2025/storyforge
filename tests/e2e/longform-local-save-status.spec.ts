@@ -1145,3 +1145,45 @@ test('050 Work notes keep failed text through filter and close, then retry and r
     return db.notes.get(id)
   }, fixture.note)).toEqual(before.note)
 })
+
+test('050 system-fiction manual form confirms native structured text and retains IME and quota failures until explicit save', async ({ page, context }) => {
+  const scope = await seed(page); await page.goto(`./workspace/${scope.projectId}?module=rules`)
+  const panel = page.getByRole('region', { name: '系统文元素配置', exact: true })
+  const labels = ['主角处境与目标', '系统机制', '奖励与成长', '限制与代价', '对抗力量与人物关系']
+  const keys = ['protagonistIntent', 'systemMechanism', 'rewardGrowth', 'limitsCosts', 'oppositionRelations']
+  const input = (label: string) => panel.getByRole('textbox', { name: `系统文元素 · ${label}`, exact: true })
+  const expected: Record<string, string> = {}
+  await expect(input(labels[0])).toBeEnabled()
+  await panel.getByRole('checkbox', { name: '启用这些系统文作者要求', exact: true }).check()
+  for (let i = 0; i < labels.length; i++) { await input(labels[i]).fill(`# ${labels[i]}\n\n原文 é 🌋。  `); expected[keys[i]] = await input(labels[i]).inputValue() }
+  await input(labels[1]).dispatchEvent('compositionstart')
+  await expect(panel.getByRole('button', { name: '保存元素', exact: true })).toBeDisabled()
+  await expect(flush(page)).rejects.toThrow('尚未保存')
+  await input(labels[1]).dispatchEvent('compositionend')
+  await page.evaluate(async () => {
+    const { db } = await (new Function('return import("/storyforge/src/lib/db/schema.ts")'))()
+    const fault = () => { throw new DOMException('native system-fiction quota', 'QuotaExceededError') }; db.creativeRules.hook('creating', fault)
+    Object.assign(window, { clearElements050Fault: () => db.creativeRules.hook('creating').unsubscribe(fault) })
+  })
+  await panel.getByRole('button', { name: '保存元素', exact: true }).click()
+  await expect(panel.locator('[data-local-save-status]')).toHaveAttribute('data-local-save-status', 'failed')
+  for (let i = 0; i < labels.length; i++) await expect(input(labels[i])).toHaveValue(expected[keys[i]])
+  await expect(flush(page)).rejects.toThrow('native system-fiction quota')
+  await page.evaluate(() => (window as unknown as { clearElements050Fault: () => void }).clearElements050Fault())
+  await panel.getByRole('button', { name: '重试保存系统文元素', exact: true }).click()
+  await expect(panel.locator('[data-local-save-status]')).toHaveAttribute('data-local-save-status', 'saved'); await flush(page)
+  const before = await page.evaluate(async () => {
+    const { db } = await (new Function('return import("/storyforge/src/lib/db/schema.ts")'))()
+    return db.creativeRules.toArray()
+  })
+  expect(before).toHaveLength(1); expect(before[0].systemFictionElements).toEqual({ version: 1, enabled: true, ...expected })
+  expect(before[0]).toMatchObject({ workId: scope.workId, writingStyle: '', prohibitions: '[]', consistencyRules: '[]' })
+  const url = page.url(); await page.close(); const reopened = await context.newPage(); await reopened.goto(url)
+  const reopenedPanel = reopened.getByRole('region', { name: '系统文元素配置', exact: true })
+  for (let i = 0; i < labels.length; i++) await expect(reopenedPanel.getByRole('textbox', { name: `系统文元素 · ${labels[i]}`, exact: true })).toHaveValue(expected[keys[i]])
+  await expect(reopenedPanel.locator('[data-local-save-status]')).toHaveAttribute('data-local-save-status', 'saved')
+  expect(await reopened.evaluate(async () => {
+    const { db } = await (new Function('return import("/storyforge/src/lib/db/schema.ts")'))()
+    return db.creativeRules.toArray()
+  })).toEqual(before)
+})
