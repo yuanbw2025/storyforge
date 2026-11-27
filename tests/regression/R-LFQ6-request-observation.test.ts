@@ -23,7 +23,7 @@ describe('LFQ6 · 实际请求参数与正文完成情况', () => {
     useAIConfigStore.setState({ config })
     const resolution = resolveRequestConfig(config)
     const safe = describeResolvedAIRequestSettingsV1(resolution, false)
-    expect(safe.parameters).toEqual({ temperature: 0, max_tokens: 3000 })
+    expect(safe.parameters).toEqual({ temperature: 0 })
     expect(JSON.stringify(safe)).not.toContain('test-only-secret')
     expect(JSON.stringify(safe)).not.toContain('localhost')
     expect(parseProseRequestSettingsV1(safe)).toEqual(safe)
@@ -53,7 +53,7 @@ describe('LFQ6 · 实际请求参数与正文完成情况', () => {
     expect(text).toBe('只到这里')
     expect(stream.finishReason).toBe('length')
     expect(stream.completion).toBe('complete')
-    expect(bodies.map(body => [body.model, body.temperature, body.max_tokens])).toEqual([['deepseek-chat', 0, 3000], ['deepseek-chat', 0, 3000]])
+    expect(bodies.map(body => [body.model, body.temperature, body.max_tokens])).toEqual([['deepseek-chat', 0, undefined], ['deepseek-chat', 0, undefined]])
   })
 
   it('JSON评审的实际模式进入安全参数证据，不能伪造任意schema或密钥', async () => {

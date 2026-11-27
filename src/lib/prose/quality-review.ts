@@ -90,8 +90,8 @@ function keys(value: Record<string, unknown>, expected: string[], label: string)
   if (Object.keys(value).sort().join('|') !== [...expected].sort().join('|')) throw new Error(`${label} 字段不符合报告契约。`)
 }
 
-function text(value: unknown, label: string, max: number): string {
-  if (typeof value !== 'string' || !value.trim() || value.length > max) throw new Error(`${label} 必须是有效文本。`)
+function text(value: unknown, label: string, max?: number): string {
+  if (typeof value !== 'string' || !value.trim() || (max !== undefined && value.length > max)) throw new Error(`${label} 必须是有效文本。`)
   return value
 }
 
@@ -118,7 +118,6 @@ export async function buildWholeChapterQualityReviewRequestV1(input: {
 }): Promise<{ messages: ChatMessage[]; targetTextHash: string }> {
   if (!Object.prototype.hasOwnProperty.call(labels, input.mode)) throw new Error('评审模式无效。')
   if (!input.chapterText.trim()) throw new Error('正文为空，不能进行全文评审。')
-  if (input.authorRequest && input.authorRequest.length > 16000) throw new Error('本次评审要求过长，请精简后再开始。')
   const targetTextHash = await hashCanonicalValue(input.chapterText)
   const system = `${qualityReviewSystemGuidanceV1(input.mode)}
 输出一个JSON对象，不要围栏或解释。外层必须同时有summary、strengths、issues三个键；没有问题也明确返回issues:[]，没有保留点写strengths:[]，不得仅返回空对象：
@@ -158,9 +157,9 @@ export async function parseWholeChapterQualityReviewV1(input: {
   try { decoded = JSON.parse(raw) } catch { throw new Error('评审响应格式不完整或无效，不能形成报告。') }
   const root = record(decoded, '评审结果')
   keys(root, ['summary', 'strengths', 'issues'], '评审结果')
-  const summary = text(root.summary, 'summary', 3000)
-  if (!Array.isArray(root.strengths) || root.strengths.length > 20 || !Array.isArray(root.issues) || root.issues.length > 40) throw new Error('评审列表超出范围或格式无效。')
-  const strengths = root.strengths.map(value => text(value, 'strength', 1000))
+  const summary = text(root.summary, 'summary')
+  if (!Array.isArray(root.strengths) || !Array.isArray(root.issues)) throw new Error('评审列表格式无效。')
+  const strengths = root.strengths.map(value => text(value, 'strength'))
   const anchors = new Map(qualityReviewAnchorsV1(input.chapterText, promptVersion).map(anchor => [anchor.anchorId, anchor]))
   const issues = root.issues.map((value, index): QualityReviewIssueV1 => {
     const row = record(value, `issues[${index}]`)
@@ -169,7 +168,7 @@ export async function parseWholeChapterQualityReviewV1(input: {
     if (!QUALITY_REVIEW_DIMENSIONS_V1.includes(row.dimension as QualityReviewDimensionV1) || !['suggestion', 'uncertain'].includes(String(row.confidence))) throw new Error('问题维度或不确定性标识无效。')
     const anchor = anchored && typeof row.anchorId === 'string' ? anchors.get(row.anchorId) : undefined
     if (anchored && !anchor) throw new Error('问题定位编号不属于当前正文，不能猜测引文。')
-    const quote = anchor?.quote ?? text(row.quote, 'quote', 1000)
+    const quote = anchor?.quote ?? text(row.quote, 'quote')
     let start = anchor?.start ?? row.start; let end = anchor?.end ?? row.end
     if (start === null && end === null) {
       const occurrence = input.chapterText.indexOf(quote)
@@ -180,7 +179,7 @@ export async function parseWholeChapterQualityReviewV1(input: {
       || (end as number) > input.chapterText.length || input.chapterText.slice(start as number, end as number) !== quote) throw new Error('问题引文与正文位置不一致。')
     return { id: `${input.targetTextHash.slice(0, 12)}:${index + 1}`, dimension: row.dimension as QualityReviewDimensionV1, confidence: row.confidence as 'suggestion' | 'uncertain', quote, start: start as number, end: end as number,
       paragraph: paragraphNumber(input.chapterText, start as number, promptVersion),
-      reason: text(row.reason, 'reason', 2000), suggestion: text(row.suggestion, 'suggestion', 2000) }
+      reason: text(row.reason, 'reason'), suggestion: text(row.suggestion, 'suggestion') }
   })
   const settings = parseProseRequestSettingsV1(input.settings)
   if (input.generatorIdentity) {

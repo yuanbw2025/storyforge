@@ -844,7 +844,6 @@ export async function createMasterAgentPlan(input: {
   }
   const history = input.conversationId == null ? [] : await readPlanningConversationEvents(input.conversationId, planningScope)
   const conversationText = buildLongformPlanningDialogueV1(history)
-  if (conversationText.length > 48000) throw new Error('当前会谈已超过本轮规划预算，请通过“整理需求摘要”保存已确认的方向后继续；原对话仍保留。')
   const messages = [{
     role: 'system' as const,
     content: `${input.readOnlyDiscussion ? '当前有未处理候选，只回答作者的问题，解释候选或给修改建议；tasks 必须为空，不生成新任务，不宣称已修改或采纳候选。' : ''}${planningOnly ? '当前为需求会谈与计划预览阶段，绝不执行生成。认真回答用户的问题。需求未定或用户只要讨论时 tasks 返回空数组，summary 给出具体回复及必要的问题。需求明确时可列出下一阶段任务供作者确认。' : ''}你是 StoryForge 面向用户的唯一主 Agent。你不直接生成作品，也不要求用户选择领域；
@@ -896,8 +895,8 @@ export async function createMasterAgentPlan(input: {
           projectId: input.projectId,
           // B10d：整卷/全书计划可能要枚举大量逐章任务，任务规划调用的 wire 输出
           // 不再注入固定 1,800 配额（旧配额会在长计划上截断并退回确定性小计划，
-          // 形成事实上的章数上限）；按连接配置执行——作者显式上限优先，否则按
-          // 已核实模型容量自动取值，自由讨论同样不叠加内部应答上限。
+          // 形成事实上的章数上限）；由已核实的模型服务容量安排输出，
+          // 自由讨论同样不叠加内部应答上限。
           configOverrides: {
             ...(input.freeDiscussion ? { maxTokens: config.maxTokens } : {}),
             temperature: input.freeDiscussion ? config.temperature : 0.2,

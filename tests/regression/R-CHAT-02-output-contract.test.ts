@@ -235,7 +235,7 @@ it('leaves old prompt contracts and unverified providers on the original request
 })
 
 it('treats a user zero as automatic service capacity and rejects invalid input', () => {
-  expect([undefined, 0, 4000, 20000].map(n => boundedChatOutputTokensV1(n, 8000))).toEqual([0, 0, 4000, 20000])
+  expect([undefined, 0, 4000, 20000].map(n => boundedChatOutputTokensV1(n, 8000))).toEqual([0, 0, 0, 0])
   for (const n of [-1, 1.5, NaN, Infinity]) expect(() => boundedChatOutputTokensV1(n, 8000)).toThrow('预算无效')
   expect(() => boundedChatOutputTokensV1(0, 0)).toThrow('预算无效')
 })
@@ -291,11 +291,11 @@ it('keeps frozen review identity when registry defaults change without imposing 
   expect(result.snapshot.contract.budget.maxOutputTokens).toBe(6400)
 })
 
-it('honors a lower user output cap for choice, expression and review', async () => {
+it('ignores a saved user API output cap for choice, expression and review', async () => {
   const chat = mockChat(), f = await start()
   await generateInteractionRuntimeCandidateV1({scope: f.scope, productRuntimeSessionId: f.sessionId, participantKey: 'guard',
     skillId: 'character.chat-narrative-action', objective: '验证用户更小的输出预算', aiConfig: {...config, maxTokens: 1000}})
-  expect(chat.mock.calls.map(call => call[1].maxTokens)).toEqual([1000, 1000, 1000])
+  expect(chat.mock.calls.map(call => call[1].maxTokens)).toEqual([0, 0, 0])
 })
 
 it('does not share mutable schemas between requests and keeps two options as plain action objects', () => {

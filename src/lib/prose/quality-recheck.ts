@@ -72,8 +72,8 @@ export async function parseQualityRecheckV1(input: {
     if (!row || typeof row !== 'object' || Array.isArray(row) || Object.keys(row).sort().join('|') !== (anchored ? 'anchorId|issueId|reason|status' : 'issueId|quote|reason|status')
       || !input.plan.issueIds.includes(row.issueId) || seen.has(row.issueId)
       || !['improved', 'unchanged', 'uncertain'].includes(row.status)
-      || (!anchored && (typeof row.quote !== 'string' || !row.quote.trim() || row.quote.length > 1000))
-      || typeof row.reason !== 'string' || !row.reason.trim() || row.reason.length > 2000) throw new Error('复核问题身份、引文或判断标识无效。')
+      || (!anchored && (typeof row.quote !== 'string' || !row.quote.trim()))
+      || typeof row.reason !== 'string' || !row.reason.trim()) throw new Error('复核问题身份、引文或判断标识无效。')
     const anchor = anchored && typeof row.anchorId === 'string' ? anchors.get(row.anchorId) : undefined
     if (anchored && !anchor) throw new Error('复核定位编号不属于当前候选。')
     const quote = anchor?.quote ?? row.quote

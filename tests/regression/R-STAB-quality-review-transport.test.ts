@@ -27,7 +27,7 @@ describe.sequential('STAB · bounded whole review transport preserves its actual
       const body = JSON.parse(String(init.body)); bodies.push(body)
       expect(body.chat_template_kwargs).toEqual({ enable_thinking: false })
       expect(body.response_format).toEqual({ type: 'json_object' })
-      expect(body.max_tokens).toBe(2400); expect(body.temperature).toBe(0)
+      expect(body).not.toHaveProperty('max_tokens'); expect(body.temperature).toBe(0)
       return new Response(JSON.stringify({ choices: [{ finish_reason: 'stop', message: { content: JSON.stringify({ summary: '保留先实测后记录的顺序。', strengths: ['行动依据明确'], issues: [] }) } }], usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 } }))
     }))
     const result = await runWholeChapterQualityReviewV1({ scope: f.scope, chapterId: f.chapterId, outlineNodeId: f.outlineNodeId, worldGroupId: null, mode, call: createWholeChapterQualityCallV1(f.scope.projectId, mode) })

@@ -35,7 +35,7 @@ describe('R-TTRPGOPEN12 model entity transport, candidate and no creation author
       expect(init?.method).toBe('POST')
       expect(String(url)).toBe('https://entity-wire.example.invalid/v1/chat/completions')
       const body = JSON.parse(String(init?.body)); expect(body.messages).toEqual(s.prepared.messages)
-      expect(body.max_tokens).toBe(1000); expect(body.stream).toBe(false); expect(body).not.toHaveProperty('tools')
+      expect(body).not.toHaveProperty('max_tokens'); expect(body.stream).toBe(false); expect(body).not.toHaveProperty('tools')
       expect(JSON.stringify(body)).not.toContain('ENTITY-MODEL-'); expect(JSON.stringify(body)).not.toContain('明确咨询并审查可实例化对象')
       return new Response(JSON.stringify({ choices: [{ message: { content: s.output } }], usage: { prompt_tokens: 200, completion_tokens: 100 } }),
         { status: 200, headers: { 'Content-Type': 'application/json' } })

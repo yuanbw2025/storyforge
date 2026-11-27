@@ -157,6 +157,15 @@ describe('AGENT-1 27.1-d · ChatCopilot 正文闭环', () => {
     expect(await db.chapters.count()).toBe(0)
   })
 
+  it('超过旧2000字符的本轮要求完整进入正文请求，不提前写稿', async () => {
+    const {project, firstId} = await seedProject()
+    const authorRequest = '请写第一章正文。' + '按已有章纲和场景顺序推进，保留明确的作者设定。'.repeat(250) + '【要求末尾】'
+    const prepared = await prepareProseCopilot({projectId: project.id!, worldGroupId: null, authorRequest})
+    expect(prepared.outlineNodeId).toBe(firstId)
+    expect(prepared.prepared.messages.map(message => message.content).join('\n')).toContain(authorRequest)
+    expect(await db.chapters.count()).toBe(0)
+  })
+
   it('正文 Skill 冻结生成或续写语义，不依赖提示词再次猜测操作', async () => {
     const { project, firstId } = await seedProject()
     const now = Date.now()

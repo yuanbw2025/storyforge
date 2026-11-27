@@ -47,7 +47,7 @@ describe.sequential('RACE-2 · races mode and finite output contract', () => {
     expect(resolveWorldviewFieldOperationV1({ requestedMode: 'polish', currentValue: '旧设定' })).toBe('polish')
   })
 
-  it('自动与自填输出只受真实模型容量和作者上限约束', () => {
+  it('旧自填输出不再限制新请求，只采用真实服务输出容量', () => {
     const agnes = { ...useAIConfigStore.getState().config, provider: 'agnes' as const, model: 'agnes-2.5-flash', baseUrl: 'https://apihub.agnes-ai.com/v1', maxTokens: 0 }
     const defaultBudget = resolveWorldviewFieldOutputBudgetV1({
       config: agnes, targetField: 'races', skillMaxOutputTokens: 6_000,
@@ -62,7 +62,7 @@ describe.sequential('RACE-2 · races mode and finite output contract', () => {
     const custom = resolveWorldviewFieldOutputBudgetV1({
       config: agnes, targetField: 'races', skillMaxOutputTokens: 6_000, requestedMaxTokens: 4_800,
     })
-    expect(custom).toMatchObject({ source: 'author-custom', effectiveMaxTokens: 4_800 })
+    expect(custom).toMatchObject({ source: 'default', requestedTokens: 0, effectiveMaxTokens: 65_500 })
 
     const kimi = resolveWorldviewFieldOutputBudgetV1({
       config: { ...agnes, provider: 'kimi', model: 'moonshot-v1-8k' },
@@ -71,7 +71,7 @@ describe.sequential('RACE-2 · races mode and finite output contract', () => {
     expect(kimi).toMatchObject({ effectiveCapTokens: 0, effectiveMaxTokens: 0 })
     expect(resolveWorldviewFieldOutputBudgetV1({
       config: agnes, targetField: 'races', skillMaxOutputTokens: 6_000, requestedMaxTokens: 6_001,
-    }).effectiveMaxTokens).toBe(6_001)
+    }).effectiveMaxTokens).toBe(65_500)
     expect(() => parseWorldviewFieldOutputBudgetV1({ ...custom, effectiveCapTokens: 99_999 }))
       .toThrow('证据不一致')
   })
@@ -95,7 +95,7 @@ describe.sequential('RACE-2 · races mode and finite output contract', () => {
     })
     expect(empty.input.mode).toBe('create')
     expect(empty.input.outputBudget).toMatchObject({
-      source: 'author-custom', effectiveMaxTokens: 4_500, longOutputMode: 'service-capacity',
+      source: 'default', requestedTokens: 0, effectiveMaxTokens: 65_500, longOutputMode: 'service-capacity',
     })
     expect(empty.prepared.messages.map(item => item.content).join('\n')).toContain('尚未采纳的上游候选')
 
@@ -122,7 +122,7 @@ describe.sequential('RACE-2 · races mode and finite output contract', () => {
       authorRequest: request('expand'),
       configOverride: config,
       generationOverrides: { maxTokens: 6_001 },
-    })).resolves.toMatchObject({ input: { outputBudget: { effectiveMaxTokens: 6_001 } } })
+    })).resolves.toMatchObject({ input: { outputBudget: { effectiveMaxTokens: 65_500 } } })
   })
 
   it('普通入口和节点旧入口都完整接收长字段', () => {

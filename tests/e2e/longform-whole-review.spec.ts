@@ -204,7 +204,7 @@ test('一致性专审读取本章计划，支持章内证据并在刷新后保�
   expect(requests[0].messages[1].content).toContain('清点工具，收款后签收，最后关灯')
   expect(requests[0].messages[1].content).toContain(original)
   expect(requests[0].messages[1].content).toContain('"anchorId":"p2"')
-  expect(requests[0].max_tokens).toBe(4000)
+  expect(requests[0].max_tokens).toBeUndefined()
   expect(requests[0].stream).toBe(false)
   expect(requests[0].response_format).toEqual({ type: 'json_object' })
   const reviewButton = page.getByRole('button', { name: '质量审校', exact: true })

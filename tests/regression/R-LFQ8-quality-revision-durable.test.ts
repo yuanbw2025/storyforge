@@ -193,23 +193,25 @@ describe('LFQ8 · 同一正文候选的范围修订与采纳', () => {
     const f = await seed()
     f.recheck.mockImplementationOnce(async (_m, _c, result) => {
       result.completion = 'complete'; result.finishReason = 'stop'
-      return JSON.stringify({ review: { summary: '建议由作者决定', strengths: [], issues: [] }, outcomes: [{ issueId: f.review.report.issues[0].id, status, quote: '陈禾签下名字。', reason: '模型无法确认阅读效果' }] })
+      return JSON.stringify({ review: { summary: '建议由作者决定', strengths: [], issues: [] }, outcomes: [{ issueId: f.review.report.issues[0].id, status, quote: '陈禾签下名字。', reason: '模型无法确认阅读效果'.repeat(250) }] })
     })
     const result = await runQualityRevisionV1(input(f))
     expect(result.candidate?.qualityRevision?.recheck.outcomes[0].status).toBe(status)
+    expect(result.candidate?.qualityRevision?.recheck.outcomes[0].reason).toBe('模型无法确认阅读效果'.repeat(250))
     await adoptQualityRevisionV1({ scope: f.scope, candidate: result.candidate! })
     expect(f.revise).toHaveBeenCalledTimes(1); expect(f.recheck).toHaveBeenCalledTimes(1)
   }, DURABLE_TEST_TIMEOUT)
 
-  it('受保护原句在问题所在段也逐字保留；输出预算不足零模型请求', async () => {
+  it('受保护原句逐字保留，旧API输出设置不再阻止修稿', async () => {
     const f = await seed()
     f.revise.mockImplementationOnce(async (_m, _c, result) => { result.completion = 'complete'; result.finishReason = 'stop'; return JSON.stringify({ edits: [{ spanId: 'p2.1', replacement: '。' }] }) })
     const result = await runQualityRevisionV1({ ...input(f), protectedQuotes: ['陈禾签下名字'] })
     expect(result.candidate?.outputText).toContain('陈禾签下名字。')
     const second = await seed()
     useAIConfigStore.setState({ config: { ...useAIConfigStore.getState().config, maxTokens: 20000 } })
-    await expect(runQualityRevisionV1(input(second))).rejects.toThrow('预算')
-    expect(second.revise).not.toHaveBeenCalled(); expect(second.recheck).not.toHaveBeenCalled()
+    const secondResult = await runQualityRevisionV1(input(second))
+    expect(secondResult.candidate).toBeTruthy()
+    expect(second.revise).toHaveBeenCalledOnce(); expect(second.recheck).toHaveBeenCalledOnce()
   }, DURABLE_TEST_TIMEOUT)
 
   it('重复附加保护原句在复核前停止，收到的补丁与只读预演可恢复，原稿不变', async () => {

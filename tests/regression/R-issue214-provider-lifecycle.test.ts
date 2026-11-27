@@ -47,7 +47,7 @@ describe('issue214 · 作者模型与提供商生命周期', () => {
     store.setState({ config, taskRoutes: {} })
     const fetch = vi.fn(async (_url: unknown, init: RequestInit) => {
       const body = JSON.parse(String(init.body))
-      expect(body).toMatchObject({ model: config.model, stream: true, max_tokens: 1024, stream_options: { include_usage: true } })
+      expect(body).toMatchObject({ model: config.model, stream: true, stream_options: { include_usage: true } })
       expect(body).not.toHaveProperty('temperature')
       return new Response([
         'data: {"choices":[{"delta":{"content":"合成回执"},"finish_reason":null}]}',
@@ -117,7 +117,7 @@ describe('issue214 · 作者模型与提供商生命周期', () => {
     const fetch = vi.fn(async (_url: unknown, init: RequestInit) => {
       const body = JSON.parse(String(init.body))
       expect(body.model).toBe(model)
-      expect(body.max_tokens).toBe(1024)
+      expect(body.max_tokens).not.toBe(1024)
       expect(body.temperature).toBe(keepsTemperature ? 0.3 : undefined)
       return new Response(JSON.stringify({ choices: [{ message: { content: '合成回执' }, finish_reason: 'stop' }] }), { status: 200 })
     })

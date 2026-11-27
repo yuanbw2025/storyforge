@@ -119,11 +119,11 @@ async function assertSourceTransformResult(
  * 输入预算 = 所选模型的上下文窗口(减输出预留与安全边际)。
  * 这样上下文只在「真的接近模型窗口」时才按优先级软裁,而不是被固定小预算提前砍。
  */
-function deriveInputBudget(input: AssembleContextInput, capacity?: ModelCapacityV1): number {
+function deriveInputBudget(capacity?: ModelCapacityV1): number {
   // Old role/source budgets are compatibility metadata, not new task quotas.
   // Infinity is local arithmetic only; the returned manifest records actual
   // selected material size when the connection's capacity is unknown.
-  return capacity ? serviceInputBudgetV1(capacity, input.modelConfig?.maxTokens) ?? Infinity : Infinity
+  return capacity ? serviceInputBudgetV1(capacity) ?? Infinity : Infinity
 }
 
 export async function assembleContext(input: AssembleContextInput): Promise<AssembleContextResult> {
@@ -136,7 +136,7 @@ export async function assembleContext(input: AssembleContextInput): Promise<Asse
   const selected = selectSources(resolvedBase)
   await assertContextAnchors(resolvedBase, selected)
   const preparedConfig = input.modelConfig ? await prepareModelCapacityV1(input.modelConfig) : undefined
-  let inputBudget = deriveInputBudget(input, preparedConfig?.modelCapacity)
+  let inputBudget = deriveInputBudget(preparedConfig?.modelCapacity)
   const needsContinuity = selected.some(source => (
     source.key === 'previousChapterEnding'
     || source.key === 'chapterContinuityHandoff'

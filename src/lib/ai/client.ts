@@ -53,7 +53,8 @@ export function resolveRequestConfig(config: AIConfig, meta?: AICallMeta) {
     routes: state.taskRoutes,
     explicitOverrides: meta?.configOverrides,
   })
-  return { ...resolution, config: inheritModelCapacityV1(config, resolution.config) }
+  // Retain legacy saved settings as history; new calls always use service capacity.
+  return { ...resolution, config: { ...inheritModelCapacityV1(config, resolution.config), maxTokens: 0 } }
 }
 
 export type AIRequestConfigResolution = ReturnType<typeof resolveRequestConfig>
@@ -79,7 +80,7 @@ export function describeResolvedAIRequestSettingsV1(
   options?: ChatRequestOptions,
   messages: ReadonlyArray<{ role: ChatMessage['role']; content: unknown }> = [],
 ): AIRequestSettingsV1 {
-  const config = resolution.config
+  const config = { ...resolution.config, maxTokens: 0 }
   const modelCapacity = freezeModelCapacityV1(config)
   const parameters: Record<string, unknown> = {}
   if (config.provider !== 'codex') {
@@ -234,9 +235,9 @@ function buildRequest(
 ) {
   // 基础请求体：所有 provider 都需要的字段
   const serviceOutput = preparedOutputV2 ? null : referenceServiceOutputLimit(config, messages, estimateChatRequestOptionsTokens(options))
-  const authorOutput = options?.capacityPolicy !== 'reference-service' && config.maxTokens > 0 ? config.maxTokens : null
+  const verifiedOutputLimit = freezeModelCapacityV1(config).outputLimitSource !== 'policy'
   config = { ...config, maxTokens: preparedOutputV2 ? preparedOutputV2.tokens ?? 0
-    : authorOutput == null ? serviceOutput ?? 0 : Math.min(authorOutput, serviceOutput ?? Infinity) }
+    : verifiedOutputLimit ? serviceOutput ?? 0 : 0 }
   const body: Record<string, unknown> = {
     model: config.model,
     messages,

@@ -46,7 +46,7 @@ for (const audience of ['party', 'gm-only'] as const) test(`${audience}: actual 
     facts: [f.fact, { ...f.fact, canonicalValue: false, detail: '相反的判断，只能由真人逐项弃用。' }] })
   await page.route('**/oracle-model-desk-native/v1/chat/completions', async route => {
     const wire = route.request().postDataJSON(), text = JSON.stringify(wire.messages); wires.push(text)
-    expect(wire.model).toBe('oracle-model-desk-native'); expect(wire.max_tokens).toBe(1000)
+    expect(wire.model).toBe('oracle-model-desk-native'); expect(wire.max_tokens).toBeUndefined()
     expect(text).toContain(f.npc); expect(text).not.toMatch(/ORACLE-POLICY-PRIVATE-PROFILE|dynamicTemplateKey|operationKey/)
     if (audience === 'party') { expect(text).not.toContain(f.place); expect(text).not.toContain('.equipment.0') }
     await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ id: 'native-oracle-desk', model: wire.model,

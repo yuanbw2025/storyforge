@@ -1,4 +1,3 @@
-import { requireFixedBudgetValueV1 } from '../finite-budget'
 import Dexie from 'dexie'
 import { db } from '../../db/schema'
 import type { AgentRunContractV3, AgentRunRecord, ChatMessage, WorkspaceScope } from '../../types'
@@ -61,7 +60,6 @@ export async function runWholeChapterQualityReviewV1(input: {
   await assertWorkspaceContentRevisionFreshV1(revision, { scope: input.scope, worldGroupId: input.worldGroupId })
   const skill = getAgentSkillV1('prose.quality-review', 'prose')
   if (skill.promptVersion !== QUALITY_REVIEW_PROMPT_VERSION_V1) throw new Error('全文评审 Skill 与请求版本不一致。')
-  if (resolution.config.maxTokens > requireFixedBudgetValueV1(skill.maxOutputTokens)) throw new Error('当前评审输出上限超过本轮预算，请先调低输出上限。')
   const binding = await createAgentSkillExecutionBindingV2(skill, { optionalContextActivations: [], writeTargets: [] })
   const formalEntry = await freezeFormalAIEntryBindingV1(entries[input.mode])
   const runtimeBindingHash = await hashCanonicalValue({ targetTextHash: request.targetTextHash, promptVersion: QUALITY_REVIEW_PROMPT_VERSION_V1, settings, mode: input.mode })
@@ -70,13 +68,13 @@ export async function runWholeChapterQualityReviewV1(input: {
     scope: { projectId: input.scope.projectId, worldGroupId: input.worldGroupId, chapterIds: [input.chapterId], outlineNodeIds: [input.outlineNodeId] },
     permissions: { contextSourceKeys: resolveAgentSkillContextSourceKeysV1(skill), writeTargets: [] },
     executionBindings: [{ stepId: QUALITY_REVIEW_STEP_V1, ...binding, formalEntry }], runtimeBindingHash,
-    budget: { maxModelCalls: 1, maxToolCalls: 0, maxInputTokens: 48000, maxOutputTokens: 16000, maxAttemptsPerStep: 1, maxProtocolErrors: 0 },
+    budget: { serviceCapacityOnly: true, maxModelCalls: 1, maxToolCalls: 0, maxInputTokens: assembled.inputBudget, maxOutputTokens: 0, maxAttemptsPerStep: 1, maxProtocolErrors: 0 },
     acceptance: [{ id: 'quality.full-input', kind: 'deterministic-check', required: true }, { id: 'quality.quotes', kind: 'deterministic-check', required: true }, { id: 'quality.freshness', kind: 'deterministic-check', required: true }],
     verificationPlan: [{ id: 'quality.terminal', kind: 'terminal', verifier: VERIFIER, criterionIds: ['quality.full-input', 'quality.quotes', 'quality.freshness'] }],
     failurePolicy: { onProtocolError: 'fail', onVerificationFailure: 'fail', onStaleInput: 'pause-for-author' },
   }
   const budget = new AgentTeamBudgetTracker(useAIConfigStore.getState().agentTeamBudgetProfile)
-  const reservation = budget.reserveCall({ label: '全文阅读评审', messages: request.messages, maxOutputTokens: resolution.config.maxTokens && resolution.config.maxTokens > 0 ? resolution.config.maxTokens : 16000 })
+  const reservation = budget.reserveCall({ label: '全文阅读评审', messages: request.messages, maxOutputTokens: 0 })
   let snapshot = await createAgentRunV1({ scope: input.scope, worldGroupId: input.worldGroupId, contract })
   snapshot = await append(input.scope, snapshot, 'step.scheduled', { stepId: QUALITY_REVIEW_STEP_V1 })
   snapshot = await append(input.scope, snapshot, 'step.started', { stepId: QUALITY_REVIEW_STEP_V1, attempt: 1 })
