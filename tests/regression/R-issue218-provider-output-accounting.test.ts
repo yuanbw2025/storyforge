@@ -78,7 +78,7 @@ describe('issue218 · 官方兼容端点输出预算与流式用量', () => {
     const config = { ...base, maxTokens: 0 }
     const { chat } = await client(config)
     const fetch = vi.fn(async (_url: unknown, init: RequestInit) => {
-      expect(JSON.parse(String(init.body)).max_tokens).toBe(4000)
+      expect(JSON.parse(String(init.body))).not.toHaveProperty('max_tokens')
       return new Response('{"choices":[{"message":{"content":"合成协议回执"},"finish_reason":"stop"}]}')
     })
     vi.stubGlobal('fetch', fetch)

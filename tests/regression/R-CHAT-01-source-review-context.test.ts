@@ -1,3 +1,4 @@
+import { finiteServiceConfigFixtureV1 } from '../helpers/model-capacity-fixture'
 import {afterEach, beforeEach, expect, it, vi} from 'vitest'
 import {db} from '../../src/lib/db/schema'
 import {assembleContext} from '../../src/lib/registry/assemble-context'
@@ -87,7 +88,7 @@ it('keeps source review atomic under a small budget and never calls a compressor
   const f = await fixture(), transformer = vi.fn()
   expect(CONTEXT_SOURCE_BY_KEY.get('chat.source-review')?.atomic).toBe(true)
   await expect(assembleContext({projectId: f.scope.projectId, scope: f.scope, sourceKeys: ['chat.source-review'], chatSourceReviewRequest: f.request,
-    inputBudgetTokens: 64, sourceTransformer: transformer})).rejects.toBeInstanceOf(AtomicContextSourceBudgetErrorV1)
+    modelConfig: await finiteServiceConfigFixtureV1(64), inputBudgetTokens: 64, sourceTransformer: transformer})).rejects.toBeInstanceOf(AtomicContextSourceBudgetErrorV1)
   expect(transformer).not.toHaveBeenCalled()
 })
 

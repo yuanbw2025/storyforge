@@ -896,7 +896,7 @@ async function prepareGeneration(input: {
       resolvedConfig = resolveRequestConfig(input.aiConfig, {
         category: 'authoring.text-open-world-creator-artifact-edit',
         projectId: input.selection.scope.projectId,
-        configOverrides: { maxTokens: requireFixedBudgetValueV1(executionBinding.maxOutputTokens) },
+        configOverrides: { maxTokens: 0 },
         contextOverflowPolicy: 'reject',
       })
       if (!isAIConfigReady(resolvedConfig.config)) {

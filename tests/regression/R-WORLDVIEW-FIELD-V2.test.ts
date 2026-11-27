@@ -350,7 +350,7 @@ describe.sequential('B02 C1–C6 · ordinary UI task to same-client durable cand
     const restored=await restoreWorldviewFieldMasterV2(f.scope,result.runId)
     expect(restored.candidates[0].draft).toContain('完整输出尾标')
     expect(parseWorldviewFieldCandidateDraftV2(restored.candidates[0].draft).value).toBe(answer)
-    expect(()=>parseWorldviewFieldCandidateDraft(restored.candidates[0].draft)).toThrow()
+    expect(parseWorldviewFieldCandidateDraft(restored.candidates[0].draft).value).toBe(answer)
     expect((await db.worldviews.get(f.worldviewId))?.worldOrigin).toBe('')
     expect(restored.sourceCaptures[1].rawText).toContain('世界来源尾部保留标记')
     expect(restored.sourceCaptures[1].rawText).not.toContain('serialized')
@@ -471,7 +471,7 @@ describe.sequential('B02 C1–C6 · ordinary UI task to same-client durable cand
   },20000)
   it('ordinary UI long hint crosses the real hook product admission before the V1 splitter and reaches the exact prepared wire',async()=>{
     const f=await fixture(),hint='作者完整约束。'.repeat(1600)+'末尾硬约束：潮门只能朝海开启。'
-    expect(()=>formatWorldviewFieldGenerationRequestV1({field:'worldOrigin',mode:'expand',hint})).toThrow('8000')
+    expect(formatWorldviewFieldGenerationRequestV1({field:'worldOrigin',mode:'expand',hint})).toContain(hint)
     const project=await db.projects.get(f.scope.projectId)
     if(!project)throw new Error('ordinary UI fixture needs its real workspace')
     let generationFinished = false

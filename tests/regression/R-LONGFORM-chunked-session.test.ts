@@ -64,7 +64,7 @@ describe.sequential('chunked outline durable integration', () => {
     await expect(runChunkedChapterModel(session, [{ role: 'user', content: '生成' }], 0)).rejects.toThrow()
     expect(model).not.toHaveBeenCalled()
   })
-  it('retains exact predecessor evidence when a long chunked candidate is truncated for the next block', async () => {
+  it('retains the complete long predecessor candidate for the next block without a source quota', async () => {
     const { session, project } = await seed(); select(session); await saveChunkedOutlineSession(session)
     const first = JSON.stringify([{ title: '旧信', summary: '亲人留下海港线索。'.repeat(2_000) }])
     const second = JSON.stringify([{ title: '出发', summary: '告别故乡。' }, { title: '风雨', summary: '越过风浪。' }, { title: '港口', summary: '抵达灯塔港。' }])
@@ -77,9 +77,9 @@ describe.sequential('chunked outline durable integration', () => {
     const candidate = (await readOutlineGenerationCandidateV1(recovered.scope, recovered.candidateRunId!))!
     const verified = await verifyContextGatewayCandidateEvidenceV1({ scope: recovered.scope, runId: candidate.runId, stepId: candidate.stepId, attempt: 1, candidateHash: candidate.candidateHash })
     expect(model).toHaveBeenCalledTimes(2)
-    expect(JSON.stringify(model.mock.calls[1][1])).toContain('该上下文源已按预算截断')
-    expect(verified.manifest.sources.find(source => source.key === 'priorOutlineCandidate')?.delivery).toBe('truncated')
-    expect(verified.manifest.artifacts.some(artifact => artifact.role === 'source-snapshot' && artifact.sourceKey === 'priorOutlineCandidate')).toBe(true)
+    expect(JSON.stringify(model.mock.calls[1][1])).toContain('亲人留下海港线索。'.repeat(2_000))
+    expect(verified.manifest.sources.find(source => source.key === 'priorOutlineCandidate')?.delivery).toBe('full')
+    expect(verified.manifest.artifacts.some(artifact => artifact.role === 'source-snapshot' && artifact.sourceKey === 'priorOutlineCandidate')).toBe(false)
     expect(JSON.parse(candidate.output)).toEqual([...JSON.parse(first), ...JSON.parse(second)])
     expect(await db.outlineNodes.where('parentId').equals(session.volumeId).count()).toBe(0)
     await adoptChunkedOutlineSession(recovered)

@@ -692,13 +692,13 @@ export async function resumeChatNarrativeActionV1(input: Pick<InteractionRuntime
     const generation: InteractionRuntimeGenerationInputV1 = {...input, productRuntimeSessionId: sessionId, participantKey,
       skillId: 'character.chat-narrative-action', objective: snapshot.contract.objective}
     try {
-      const assembled = await assembleContext({projectId: input.scope.projectId, scope: input.scope, worldGroupId: snapshot.run.worldGroupId ?? null,
+      // Reread current source bytes, but reproduce the original manifest's
+      // accounting metadata. A changed model allocation must not rewrite paid
+      // evidence or cause the saved choice to be generated again.
+      const assembled = {...await assembleContext({projectId: input.scope.projectId, scope: input.scope, worldGroupId: snapshot.run.worldGroupId ?? null,
         productRuntimeSessionId: sessionId, interactionParticipantKey: participantKey, sourceKeys: ['interactionRuntime'],
-        ...(usesChatActionBoundContextV1(binding) ? {chatActionContextRunId: snapshot.run.id} : {}),
-        // Revalidate the immutable source under its original assembly budget. A
-        // new model allocation governs remaining dispatch, never historical evidence.
-        inputBudgetTokens: Math.min(parseContextManifestV1(packet.manifest).inputBudget, CHAT_ACTION_CHOICE_INPUT_TOKENS_V1),
-        inputBudgetMaxTokens: CHAT_ACTION_CHOICE_INPUT_TOKENS_V1})
+        ...(usesChatActionBoundContextV1(binding) ? {chatActionContextRunId: snapshot.run.id} : {})}),
+        inputBudget: parseContextManifestV1(packet.manifest).inputBudget}
       snapshot = (await chooseRuntimeChatActionV1({scope: input.scope, snapshot, participantKey, assembled, actorMessages: packet.actorMessages,
         aiConfig: input.aiConfig, runAI: input.runAI, signal: input.signal})).snapshot
       const proof = await readChatActionChoiceEvidenceV1({scope: input.scope, snapshot, participantKey})
@@ -772,9 +772,8 @@ async function generateRuntimeCandidate(input: InteractionRuntimeGenerationInput
   await input.onRunCreated?.(snapshot.run.id)
   snapshot = await append(input.scope, snapshot, 'step.scheduled', { stepId: INTERACTION_RUNTIME_STEP_ID_V1 })
   snapshot = await append(input.scope, snapshot, 'step.started', { stepId: INTERACTION_RUNTIME_STEP_ID_V1, attempt: 1 })
-  // 行动选择族有冻结的选择/表达证据预算（manifest.inputBudget 与累计输入
-  // 不得超过 CHAT_ACTION_CHOICE_INPUT_TOKENS_V1）；其运行时上下文必须留在
-  // 同一上限内，否则已冻结的选择证据无法核验。其它技能按已证实容量推导。
+  // Historical forecasts remain in the Run evidence. Source assembly and
+  // dispatch use the selected service capacity without a separate role quota.
   const derivedChatInputBudget = !input.runAI && input.aiConfig
     ? await chatRuntimeInputBudgetV1({
       aiConfig: input.aiConfig, projectId: input.scope.projectId,
@@ -782,9 +781,7 @@ async function generateRuntimeCandidate(input: InteractionRuntimeGenerationInput
       outputReservation: requireFixedBudgetValueV1(skill.maxOutputTokens),
     })
     : CHAT_RUNTIME_DEFAULT_INPUT_TOKENS_V1
-  const chatInputBudgetTokens = actionChoice
-    ? Math.min(CHAT_ACTION_CHOICE_INPUT_TOKENS_V1, derivedChatInputBudget)
-    : derivedChatInputBudget
+  const chatInputBudgetTokens = derivedChatInputBudget
   try {
     const assembled = await assembleContext({
       projectId: input.scope.projectId,

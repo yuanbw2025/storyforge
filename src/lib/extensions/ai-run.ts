@@ -79,7 +79,7 @@ export async function generateExtensionCandidate(input: { profileId: number; tas
       runRaw: async callMessages => {
         snapshot = await append(scope, snapshot, 'model.requested', { stepId: STEP, attempt: 1, bindingHash: await hash(binding) })
         const start = performance.now()
-        const output = await (input.runAI ? input.runAI(callMessages) : executeFrozenFormalAIEntryV1('extensions.generate', formalEntry, skill, 'src/lib/extensions/ai-run.ts', callMessages, input.aiConfig!, { category: 'extension.generate', projectId: scope.projectId, configOverrides: { maxTokens: 8000 }, contextOverflowPolicy: 'reject' }, input.signal))
+        const output = await (input.runAI ? input.runAI(callMessages) : executeFrozenFormalAIEntryV1('extensions.generate', formalEntry, skill, 'src/lib/extensions/ai-run.ts', callMessages, input.aiConfig!, { category: 'extension.generate', projectId: scope.projectId, configOverrides: { maxTokens: 0 }, contextOverflowPolicy: 'reject' }, input.signal))
         snapshot = await append(scope, snapshot, 'model.responded', { stepId: STEP, attempt: 1, outputHash: await hash(output) })
         return { output, durationMs: Math.max(0, Math.round(performance.now() - start)) }
       },

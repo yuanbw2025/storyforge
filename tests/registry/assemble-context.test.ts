@@ -1,3 +1,4 @@
+import { finiteServiceConfigFixtureV1 } from '../helpers/model-capacity-fixture'
 /**
  * Phase 1.3a · CONTEXT_SOURCES + assembleContext()
  */
@@ -332,7 +333,7 @@ describe('Phase 1.3a · 统一上下文装配层', () => {
       sourceKeys: ['previousChapterEnding', 'references'],
       previousChapterEnding: '主角在城门前发现旧王印记。',
       citedReferenceIds: [refId],
-      inputBudgetTokens: 60,
+      modelConfig: await finiteServiceConfigFixtureV1(60), inputBudgetTokens: 60,
     })
 
     expect(assembled.overBudgetBeforeTrim).toBe(true)
@@ -348,9 +349,9 @@ describe('Phase 1.3a · 统一上下文装配层', () => {
       previousChapterEnding: '主角在城门前发现旧王印记。', citedReferenceIds: [refId],
       inputBudgetTokens: 4000, sourceBudgetScale: 0.1,
     })
-    expect(scaled.included).toEqual(['previousChapterEnding'])
-    expect(scaled.trimmed).toContain('references')
-    expect(scaled.sourceEvidence?.find(row => row.key === 'references')).toMatchObject({delivery: 'none', inputTokens: 0})
+    expect(scaled.included).toEqual(['previousChapterEnding', 'references'])
+    expect(scaled.trimmed).toEqual([])
+    expect(scaled.sourceEvidence?.find(row => row.key === 'references')).toMatchObject({delivery: 'full'})
 
   })
 
@@ -362,7 +363,7 @@ describe('Phase 1.3a · 统一上下文装配层', () => {
       scope,
       sourceKeys: ['previousChapterEnding'],
       previousChapterEnding: exact,
-      inputBudgetTokens: 64,
+      modelConfig: await finiteServiceConfigFixtureV1(64), inputBudgetTokens: 64,
     })
 
     expect(assembled.included).toEqual(['previousChapterEnding'])

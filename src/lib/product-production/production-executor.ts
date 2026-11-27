@@ -1,4 +1,3 @@
-import { requireFixedBudgetValueV1 } from '../agent/finite-budget'
 import {CHAT_DESIGNED_CHARACTER_CONSTRAINTS_V1, CHAT_VISUAL_DESIGN_PROMPT_V1, compileChatVisualDesignV1, type ChatVisualContextV1} from '../character-interaction/visual-design'
 import {chatOpeningPerspectiveProductionPromptV1, chatOpeningPerspectiveReviewPromptV1, chatOpeningPerspectiveReviewSchemaV1, parseChatOpeningPerspectiveReviewV1} from '../character-interaction/opening-perspectives'
 import {chatOpeningRelationalReviewPromptV1, chatOpeningRelationalReviewSchemaV1} from '../character-interaction/opening-review-relations'
@@ -137,7 +136,6 @@ import {
 } from '../adventure/production-artifacts-v2'
 import {
   TEXT_ADVENTURE_PRODUCTION_AGENT_IDS,
-  getAgentSkillV1,
 } from '../agent/skill-registry'
 import { bindTextAdventureNarrativeActionsV1 } from '../adventure/production-compiler'
 import { productPublicDescriptionV1 } from './public-copy'
@@ -238,20 +236,10 @@ export function productProductionProviderOutputLimitV1(
   if (!Number.isInteger(reserved) || reserved < 1) {
     fail('文本任务 output token 预留无效')
   }
-  if (!task.skillId) return reserved
-  const registered = Math.min(reserved, requireFixedBudgetValueV1(getAgentSkillV1(task.skillId).maxOutputTokens))
-  // The first Dialogue Editor pass may legitimately spend substantial hidden
-  // reasoning over a whole act. A repair packet is different: it contains a
-  // bounded list of already-located defects and asks only for ordinal deltas.
-  // Cap that provider request so one malformed repair cannot think for tens
-  // of minutes while the durable task appears permanently running. This is a
-  // narrower request inside both the Skill ceiling and the frozen Plan
-  // reservation; receipts still account the provider's actual usage.
-  if (task.skillId === 'text-adventure.dialogue-pass.v1'
-    && contextText.includes('"schema":"storyforge.text-adventure-repair-feedback"')) {
-    return Math.min(registered, 16_000)
-  }
-  return registered
+  // Preserve the explicit consumption authorization, without adding a Skill
+  // quota or a smaller repair-only cap on top of that authorization.
+  void contextText
+  return reserved
 }
 
 function productCharacterKeys(brief: ProductProductionBriefV3): string[] {

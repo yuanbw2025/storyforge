@@ -44,7 +44,9 @@ export async function readChatActionChoiceInputBudgetV1(scope: WorkspaceScope, s
     calls.push({stepId, estimatedInputTokens})
   }
   const estimatedInputTokens = calls.reduce((total, call) => total + call.estimatedInputTokens, 0)
-  if (calls.length > requireFixedBudgetValueV1(snapshot.contract.budget.maxModelCalls) || estimatedInputTokens > requireFixedBudgetValueV1(snapshot.contract.budget.maxInputTokens)) fail('已发送请求超出冻结输入预算；保留原结果，不能继续采用')
+  // Whole-run token/call forecasts do not limit content. Exact registered
+  // steps, one dispatch per step and immutable evidence still govern recovery;
+  // the client checks the selected service's actual per-request window.
   return {version: 1 as const, estimator: 'chat-request-input-v1' as const, calls, estimatedInputTokens,
     maximumInputTokens: requireFixedBudgetValueV1(snapshot.contract.budget.maxInputTokens), maximumModelCalls: requireFixedBudgetValueV1(snapshot.contract.budget.maxModelCalls)}
 }
@@ -57,8 +59,6 @@ export async function assertChatActionChoiceInputBudgetV1(input: {scope: Workspa
   if (!previous) return
   if (previous.calls.some(call => call.stepId === input.stepId)) fail('本步骤已经发送过请求，不能重复调用')
   await readChatActionOutputBudgetV1(input.scope, input.snapshot)
-  if (!input.snapshot.contract.executionBindings?.some(binding => binding.stepId === input.stepId)
-    || previous.calls.length + 1 > previous.maximumModelCalls) fail('下一步超出冻结调用预算')
-  const estimated = previous.estimatedInputTokens + estimateChatActionRequestInputV1(input.messages, input.requestOptions)
-  if (estimated > previous.maximumInputTokens) fail(`完整请求累计预计需要 ${estimated} tokens，超过本次运行的 ${previous.maximumInputTokens} 输入预算；未发送下一步，已有结果保留`)
+  if (!input.snapshot.contract.executionBindings?.some(binding => binding.stepId === input.stepId)) fail('下一步未登记在原运行中')
+  estimateChatActionRequestInputV1(input.messages, input.requestOptions)
 }

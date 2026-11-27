@@ -16,6 +16,14 @@ export async function seedModelAllocationFixtureV1(config: AIConfig, window: num
   return result
 }
 
+/** A real metadata-parser fixture for tests that require an evidenced physical
+ * window, rather than the old unconfirmed application fallback. */
+export async function finiteServiceConfigFixtureV1(window: number, maxTokens = 0): Promise<AIConfig> {
+  const config: AIConfig = { provider: 'custom', model: `finite-window-${window}`, baseUrl: 'https://allocation.invalid/v1',
+    apiKey: 'SYNTHETIC_ONLY', temperature: 0, maxTokens }
+  return { ...config, modelCapacity: await seedModelAllocationFixtureV1(config, window) }
+}
+
 /** Explicit finite allocation at the internal frozen-run boundary, for fake
  * transports (notably Codex bridges without a metadata endpoint) and pure
  * window arithmetic tests. This is synthetic input, never availability proof

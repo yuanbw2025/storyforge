@@ -117,9 +117,9 @@ function assertExactKeys(
   }
 }
 
-function nonEmptyString(value: unknown, label: string, max: number): string {
-  if (typeof value !== 'string' || !value.trim() || value.length > max) {
-    throw new Error(`${label} 必须是 1-${max} 字符的非空字符串。`)
+function nonEmptyString(value: unknown, label: string, _max: number): string {
+  if (typeof value !== 'string' || !value.trim()) {
+    throw new Error(`${label} 必须是非空字符串。`)
   }
   return value.trim()
 }
@@ -223,8 +223,8 @@ function parseFindings(input: {
   candidateText: string
   assembled: AssembleContextResult
 }): MasterCandidateSemanticReviewFindingV1[] {
-  if (!Array.isArray(input.value) || input.value.length > 20) {
-    throw new Error('候选语义终验 findings 必须是最多 20 项的数组。')
+  if (!Array.isArray(input.value)) {
+    throw new Error('候选语义终验 findings 必须是数组。')
   }
   const allowedCodes = new Set(issueCodesFor(input.domain))
   const sourceByKey = new Map(reviewSegments(input.assembled).map(segment => [segment.key, segment.content]))
@@ -602,7 +602,7 @@ export function runMasterCandidateSemanticReviewWithClientV1(
     review: messages => chat(messages, reviewerConfig, {
       category: MASTER_CANDIDATE_REVIEW_CATEGORY_V1,
       projectId: input.scope.projectId,
-      configOverrides: { maxTokens: 3_000, temperature: 0 },
+      configOverrides: { maxTokens: 0, temperature: 0 },
       contextOverflowPolicy: 'reject',
     }, input.signal),
   })

@@ -13,7 +13,8 @@ export const CHAT_ACTION_OUTPUT_BUDGET_CRITERION_V1 = 'runtime.action-output-bud
 const receiptSchema = z.object({
   schema: z.literal('storyforge.chat-action-output-budget'), version: z.literal(1),
   stepId: z.string().min(1), bindingHash: z.string().regex(/^[a-f0-9]{64}$/), outputHash: z.string().regex(/^[a-f0-9]{64}$/),
-  provider: z.string().min(1), model: z.string().min(1), requestedOutputTokens: z.number().int().positive(),
+  provider: z.string().min(1), model: z.string().min(1), requestedOutputTokens: z.number().int().nonnegative(),
+  capacityPolicy: z.literal('service').optional(),
   transportLimit: z.enum(['not-sent', 'requested-unverified', 'test-adapter']),
   usage: z.object({inputTokens: z.number().int().nonnegative(), outputTokens: z.number().int().nonnegative(), totalTokens: z.number().int().nonnegative()}).strict().nullable(),
   estimatedVisibleOutputTokens: z.number().int().nonnegative(),
@@ -46,7 +47,7 @@ export async function recordChatActionOutputBudgetV1(input: {
   const model = input.injected ? 'injected' : input.aiConfig?.model ?? fail('缺少模型')
   const usage = input.result.usage
   const receipt = {
-    schema: 'storyforge.chat-action-output-budget', version: 1, stepId,
+    schema: 'storyforge.chat-action-output-budget', version: 1, capacityPolicy: 'service', stepId,
     bindingHash: requested.payload.bindingHash, outputHash: await hashCanonicalValue(input.output), provider, model,
     requestedOutputTokens: boundedChatOutputTokensV1(input.injected ? undefined : input.aiConfig?.maxTokens, requireFixedBudgetValueV1(binding.maxOutputTokens)),
     transportLimit: input.injected ? 'test-adapter' : provider === 'codex' ? 'not-sent' : 'requested-unverified',
@@ -63,6 +64,7 @@ export async function recordChatActionOutputBudgetV1(input: {
 export async function readChatActionOutputBudgetV1(scope: WorkspaceScope, snapshot: AgentRunSnapshotV1) {
   if (!hasChatActionOutputBudgetV1(snapshot)) return null
   const calls: Array<{stepId: string; accountedOutputTokens: number; usageSource: 'provider' | 'visible-estimate'; receiptHash: string}> = []
+  const legacyCalls: Array<{ accountedOutputTokens: number }> = []
   for (const requested of snapshot.events.filter(event => event.type === 'model.requested')) {
     if (requested.type !== 'model.requested') continue
     const {stepId, attempt} = requested.payload
@@ -88,11 +90,12 @@ export async function readChatActionOutputBudgetV1(scope: WorkspaceScope, snapsh
     const {event, value} = receipts[0], parsed = receiptSchema.safeParse(value)
     if (!parsed.success) fail('输出用量凭据无效')
     const receipt = parsed.data
+    const serviceManaged = receipt.capacityPolicy === 'service'
     const primary = snapshot.contract.executionBindings!.find(item => item.stepId === 'interaction:runtime-candidate')!
     const {stepId: _step, ...executionBinding} = primary
     if (event.sequence <= rawEvents[0].sequence || receipt.stepId !== stepId || receipt.bindingHash !== requested.payload.bindingHash
       || receipt.outputHash !== outputHash || receipt.estimatedVisibleOutputTokens !== estimateTokens(output)
-      || receipt.requestedOutputTokens > requireFixedBudgetValueV1(binding.maxOutputTokens)
+      || !serviceManaged && (receipt.requestedOutputTokens < 1 || receipt.requestedOutputTokens > requireFixedBudgetValueV1(binding.maxOutputTokens))
       || snapshot.contract.runtimeBindingHash !== await hashCanonicalValue({executionBinding,
         modelIdentity: {provider: receipt.provider, model: receipt.model, transport: 'chat-v1'}})
       || receipt.transportLimit !== (receipt.provider === 'test-adapter' ? 'test-adapter' : receipt.provider === 'codex' ? 'not-sent' : 'requested-unverified')) fail('输出用量凭据与原请求不一致')
@@ -100,9 +103,10 @@ export async function readChatActionOutputBudgetV1(scope: WorkspaceScope, snapsh
     if (receipt.usage && receipt.usage.totalTokens < receipt.usage.inputTokens + receipt.usage.outputTokens) fail('提供商用量合计无效')
     const accountedOutputTokens = Math.max(receipt.estimatedVisibleOutputTokens, receipt.usage?.outputTokens ?? 0)
     calls.push({stepId, accountedOutputTokens, usageSource: receipt.usage ? 'provider' : 'visible-estimate', receiptHash: event.payload.contentHash})
-    if (accountedOutputTokens > receipt.requestedOutputTokens) fail(`本步骤输出用量 ${accountedOutputTokens} tokens 超出 ${receipt.requestedOutputTokens} 预算；原响应已保留，停止后续调用及采用`)
+    if (!serviceManaged) legacyCalls.push({ accountedOutputTokens })
+    if (receipt.requestedOutputTokens > 0 && accountedOutputTokens > receipt.requestedOutputTokens) fail(`本步骤输出用量 ${accountedOutputTokens} tokens 超出 ${receipt.requestedOutputTokens} 预算；原响应已保留，停止后续调用及采用`)
   }
   const accountedOutputTokens = calls.reduce((sum, call) => sum + call.accountedOutputTokens, 0)
-  if (calls.length > requireFixedBudgetValueV1(snapshot.contract.budget.maxModelCalls) || accountedOutputTokens > requireFixedBudgetValueV1(snapshot.contract.budget.maxOutputTokens)) fail('累计输出超出冻结预算；原响应已保留，停止后续调用及采用')
+  if (legacyCalls.length > requireFixedBudgetValueV1(snapshot.contract.budget.maxModelCalls) || legacyCalls.reduce((sum, call) => sum + call.accountedOutputTokens, 0) > requireFixedBudgetValueV1(snapshot.contract.budget.maxOutputTokens)) fail('累计输出超出冻结预算；原响应已保留，停止后续调用及采用')
   return {version: 1 as const, calls, accountedOutputTokens, maximumOutputTokens: requireFixedBudgetValueV1(snapshot.contract.budget.maxOutputTokens)}
 }

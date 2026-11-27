@@ -216,7 +216,7 @@ export async function generateNarrativeAnnotationCandidateV1(input: {
         const started = performance.now(), result: ChatResult = {}
         const response = input.runAI ? await input.runAI(callMessages) : {
           output: await chat(callMessages, config!, { category: 'canon.narrative.extract', projectId: input.scope.projectId,
-            configOverrides: { maxTokens: 6000 }, contextOverflowPolicy: 'reject' }, undefined, result),
+            configOverrides: { maxTokens: 0 }, contextOverflowPolicy: 'reject' }, undefined, result),
           usage: result.usage, durationMs: Math.round(performance.now() - started),
         }
         if (response.output.length > 120_000) fail('模型响应超过完整保存上限，已停止')

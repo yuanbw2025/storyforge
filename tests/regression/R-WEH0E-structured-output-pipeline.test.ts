@@ -185,21 +185,11 @@ describe('WEH-0E structured output pipeline', () => {
       .toBe('structured-output-invalid-enum')
   })
 
-  it('超长属于 blocked 且不可自动 repair', () => {
+  it('合法长回答不因历史 maxChars 配额被拒绝，非法字段仍被拒绝', () => {
     const tiny = { ...contract, maxChars: 20 }
-    let caught: StructuredOutputPipelineErrorV1 | null = null
-    try {
-      evaluateStructuredOutputV1({
-        raw: '{"field":"races","value":"内容超过上限"}',
-        contract: tiny,
-        parse: parseField,
-      })
-    } catch (error) {
-      caught = error as StructuredOutputPipelineErrorV1
-    }
-    expect(caught?.evidence.status).toBe('blocked')
-    expect(caught?.evidence.issues[0].category).toBe('length')
-    expect(caught?.retryable).toBe(false)
+    const value = '完整细节。'.repeat(40_000)
+    expect(evaluateStructuredOutputV1({ raw: JSON.stringify({ field: 'races', value }), contract: tiny, parse: parseField }).output.value).toBe(value)
+    expect(() => evaluateStructuredOutputV1({ raw: JSON.stringify({ field: 'unauthorized', value }), contract: tiny, parse: parseField })).toThrow()
   })
 
   it('世界观、故事、角色和细纲对同一种非法 JSON 使用同一 parse 分类', () => {

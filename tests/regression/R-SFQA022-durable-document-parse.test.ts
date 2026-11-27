@@ -82,7 +82,7 @@ it('rejects an oversized source before dispatch when the configured window is sm
   useAIConfigStore.getState().setConfig({ model: 'isolated-custom-model', contextWindow: 32_768 })
   const post = vi.fn()
   vi.stubGlobal('fetch', post)
-  await expect(createDocumentImportChunkCandidateV1(f.input)).rejects.toThrow(/完整交付/)
+  await expect(createDocumentImportChunkCandidateV1(f.input)).rejects.toThrow(/完整(?:交付|请求)/)
   expect(post).not.toHaveBeenCalled()
   expect(await db.agentRuns.count()).toBe(0)
 })

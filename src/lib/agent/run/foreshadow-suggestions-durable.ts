@@ -577,7 +577,7 @@ export async function generateForeshadowSuggestionCandidateV1(input: {
       : chat(prepared.messages, input.aiConfig!, {
           category: 'foreshadow.suggest',
           projectId: input.scope.projectId,
-          configOverrides: { maxTokens: requireFixedBudgetValueV1(getAgentSkillV1('outline.foreshadow-suggestions').maxOutputTokens) },
+          configOverrides: { maxTokens: 0 },
           contextOverflowPolicy: 'reject',
         }))
   } catch (error) {

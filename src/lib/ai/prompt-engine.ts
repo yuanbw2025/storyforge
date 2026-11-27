@@ -65,8 +65,8 @@ export function renderPrompt(
   // - bad 示例：作者标记的"避免的输出"
   const allGoodExamples = (template.examples?.good || []).filter(e => e.text.trim())
   const allBadExamples = (template.examples?.bad || []).filter(e => e.text.trim())
-  const goodExamples = options?.contentPolicy === 'task-content-unbounded-v2' ? allGoodExamples : allGoodExamples.slice(0,3)
-  const badExamples = options?.contentPolicy === 'task-content-unbounded-v2' ? allBadExamples : allBadExamples.slice(0,2)
+  const goodExamples = allGoodExamples
+  const badExamples = allBadExamples
   if (goodExamples.length > 0 || badExamples.length > 0) {
     const parts: string[] = ['', '---', '【参考示例】']
     if (goodExamples.length > 0) {

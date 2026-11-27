@@ -424,7 +424,7 @@ function generationOverrides(node: AuthoringNodeInstance, inputs: AuthoringInput
   return {
     ...(Number.isFinite(temperature) ? { temperature } : {}),
     ...(Number.isFinite(maxTokens) && maxTokens > 0
-      ? { maxTokens: Math.max(100, Math.round(maxTokens)) }
+      ? { maxTokens: Math.round(maxTokens) }
       : {}),
   }
 }

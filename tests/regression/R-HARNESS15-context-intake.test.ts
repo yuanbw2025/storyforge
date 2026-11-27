@@ -1,3 +1,4 @@
+import { finiteServiceConfigFixtureV1 } from '../helpers/model-capacity-fixture'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { assembleContext } from '../../src/lib/registry/assemble-context'
 import {
@@ -47,6 +48,7 @@ describe('R-HARNESS15 · Skill 输入状态与精确上下文交付证据', () =
       sourceKeys: ['manualText'],
       manualSourceText: '潮'.repeat(20_000),
       inputBudgetTokens: 8_000,
+      modelConfig: await finiteServiceConfigFixtureV1(8_000),
       sourceBudgetScale: 0.1,
     })
     const evidence = assembled.sourceEvidence?.[0]

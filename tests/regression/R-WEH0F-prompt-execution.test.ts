@@ -86,7 +86,7 @@ describe('WEH-0F Prompt execution contract', () => {
     expect(firstRun.messages).not.toEqual(secondRun.messages)
   })
 
-  it('历史 1000 字静默截断已删除；超过明确 8000 字上限时调用前报错', () => {
+  it('作者要求不再受历史 1000/8000 字配额限制且全文保留', () => {
     const inRange = '设定'.repeat(700)
     expect(formatWorldviewFieldGenerationRequestV1({ field: 'races', mode: 'expand', hint: inRange }))
       .toContain(inRange)
@@ -95,10 +95,9 @@ describe('WEH-0F Prompt execution contract', () => {
     expect(formatCharacterGenerationRequestV1({ hint: inRange })).toContain(inRange)
 
     const overLimit = '超长'.repeat(4_100)
-    expect(() => formatWorldviewFieldGenerationRequestV1({ field: 'races', mode: 'expand', hint: overLimit }))
-      .toThrow('没有截断')
+    expect(formatWorldviewFieldGenerationRequestV1({ field: 'races', mode: 'expand', hint: overLimit })).toContain(overLimit)
     expect(formatStoryCoreGenerationRequestV1({ field: 'theme', mode: 'expand', hint: overLimit })).toContain(overLimit)
-    expect(() => formatCharacterGenerationRequestV1({ hint: overLimit })).toThrow('没有截断')
+    expect(formatCharacterGenerationRequestV1({ hint: overLimit })).toContain(overLimit)
   })
 
   it('冻结内容被篡改或参数未在模板声明时 fail closed', async () => {

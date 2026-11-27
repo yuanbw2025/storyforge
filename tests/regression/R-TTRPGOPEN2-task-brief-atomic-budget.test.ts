@@ -1,3 +1,4 @@
+import { finiteServiceConfigFixtureV1 } from '../helpers/model-capacity-fixture'
 import{afterEach,beforeEach,expect,it,vi}from'vitest'
 import{db}from'../../src/lib/db/schema'
 import{CONTEXT_SOURCE_BY_KEY}from'../../src/lib/registry/context-sources'
@@ -36,13 +37,14 @@ it('delivers a valid full author situation policy above8k through the actual reg
  expect(assembled.trimmed).toEqual([]);expect(assembled.text).toContain(f.brief.ttrpgOpen!.settings.openAuthoring.situationTemplates[0].driverGoal)
  expect(await rows()).toBe(before);expect(fetch).not.toHaveBeenCalled()
 })
-it('still rejects a complete atom above the exact request budget before any trimming or model call',async()=>{
- const f=await fixture(),before=await rows();await expect(assembleContext({...f.input,inputBudgetTokens:8000})).rejects.toThrow(/原子来源.*超出预算/);expect(await rows()).toBe(before);expect(fetch).not.toHaveBeenCalled()
+it('rejects a complete atom above an evidenced service window before any trimming or model call',async()=>{
+ const f=await fixture(),before=await rows();await expect(assembleContext({...f.input,modelConfig:await finiteServiceConfigFixtureV1(8000),inputBudgetTokens:8000})).rejects.toThrow(/原子来源.*超出预算/);expect(await rows()).toBe(before);expect(fetch).not.toHaveBeenCalled()
 })
-it('keeps an explicit hard source ceiling even when a caller requests a larger global window',async()=>{
+it('delivers the full atomic source beyond its historical source ceiling',async()=>{
  const f=await fixture(true),source=CONTEXT_SOURCE_BY_KEY.get(key)!,text=await source.read(f.input),before=await rows()
  expect(source.budgetTokens).toBe(100000);expect(estimateTokens(text)).toBeGreaterThan(100000)
- await expect(assembleContext({...f.input,inputBudgetTokens:200000})).rejects.toThrow(/原子来源.*超出预算/);expect(await rows()).toBe(before);expect(fetch).not.toHaveBeenCalled()
+ const assembled=await assembleContext({...f.input,inputBudgetTokens:200000})
+ expect(assembled.text).toBe(text);expect(assembled.trimmed).toEqual([]);expect(assembled.sourceEvidence?.[0]).toMatchObject({delivery:'full'});expect(await rows()).toBe(before);expect(fetch).not.toHaveBeenCalled()
 })
 it('preserves atomic/protected flags, legacy8k and exact owner/hash/Plan guards',async()=>{
  const f=await fixture(),source=CONTEXT_SOURCE_BY_KEY.get(key)!;expect(source).toMatchObject({atomic:true,protectedFromTrim:true});expect(CONTEXT_SOURCE_BY_KEY.get('product-production.brief')!.budgetTokens).toBe(8000)
