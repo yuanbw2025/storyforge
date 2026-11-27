@@ -153,3 +153,19 @@ it('keeps an unhashable legacy row readable while withholding its saved witness'
   expect(useCodexStore.getState().entries.find(entry => entry.id === id)).toBeDefined()
   expect(useCodexStore.getState().localSaveWitnesses[id]).toBeUndefined()
 })
+
+it('empty longtext input survives the parent source-status capture and commits exact text', async () => {
+  const { host, scope, id } = await fixture()
+  await db.codexEntries.update(id, { description: '', fields: '{}' })
+  await act(async () => useCodexStore.getState().loadExisting(scope))
+  await waitFor(() => expect(status(host)).toBe('saved'))
+  const leaf = source(host, 'field:memo')
+  await act(async () => leaf.querySelector<HTMLElement>('.cursor-text')!.click())
+  const area = leaf.querySelector('textarea')!
+  await edit(area, '# 完整原文\n\n尾部空格。  ')
+  expect(area.value).toBe('# 完整原文\n\n尾部空格。  ')
+  expect(status(host)).toBe('dirty')
+  await act(async () => flushPendingEditsV1())
+  await waitFor(() => expect(status(host)).toBe('saved'))
+  expect(JSON.parse((await db.codexEntries.get(id))!.fields).memo).toBe('# 完整原文\n\n尾部空格。  ')
+})

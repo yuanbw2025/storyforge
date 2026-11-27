@@ -2,6 +2,7 @@ import { expect, test, type Page } from '@playwright/test'
 import { BUILTIN_CATEGORIES } from '../../src/lib/types/codex'
 import { createLongform } from './helpers/product-entry'
 import { openLongformLeaf } from './helpers/longform-navigation'
+import { enterMarkdownSourceEditorV1 } from './helpers/markdown-source'
 
 const places: Record<string, [string, string]> = {
   mineral: ['自然环境', '自然资源'], herb: ['自然环境', '自然资源'], beast: ['自然环境', '自然资源'],
@@ -49,6 +50,8 @@ for (const category of BUILTIN_CATEGORIES.filter(category => places[category.bui
     const entry = await add(page, projectId, category.builtInKey, name)
     await page.getByPlaceholder('图标', { exact: true }).fill('♦')
     await page.getByPlaceholder('一句话简介', { exact: true }).fill('盐镇探路所需，能力有明确代价。')
+    await enterMarkdownSourceEditorV1(page.locator('[data-codex-source-field="description"]'),
+      page.getByPlaceholder('详细描述', { exact: true }), '详细描述')
     await page.getByPlaceholder('详细描述', { exact: true }).fill('只有先留下脚印才能辨认来路，不能直接获知未走过的路。')
     await page.getByPlaceholder('标签（用顿号或逗号分隔）', { exact: true }).fill('探路、代价')
     await page.getByRole('button', { name: '3 星', exact: true }).click()
@@ -63,8 +66,14 @@ for (const category of BUILTIN_CATEGORIES.filter(category => places[category.bui
         refs[field.key] = [target.id]
       } else {
         const value = field.type === 'select' ? field.options![0] : field.type === 'number' ? '3' : `盐镇-${field.label}-原文`
+        if (field.type === 'longtext') await enterMarkdownSourceEditorV1(row, row.locator('textarea'), field.placeholder ?? '点击编辑…')
         if (field.type === 'select') await row.locator('select').selectOption(value)
         else await row.locator(field.type === 'longtext' ? 'textarea' : 'input').fill(value)
+        await expect(row.locator(field.type === 'select' ? 'select' : field.type === 'longtext' ? 'textarea' : 'input')).toHaveValue(value)
+        if (field.type === 'longtext') {
+          await row.locator('textarea').press('Tab')
+          await expect(row.locator('textarea')).toHaveCount(0)
+        }
         values[field.key] = value
       }
     }
@@ -84,9 +93,14 @@ for (const category of BUILTIN_CATEGORIES.filter(category => places[category.bui
         if (field.refMulti === false) { await row.getByRole('checkbox', { name: new RegExp(target.name) }).click(); await expect(row).not.toContainText(target.name) }
         else await row.getByRole('checkbox', { name: new RegExp(target.name) }).uncheck()
       } else {
+        if (field.type === 'longtext') await enterMarkdownSourceEditorV1(row, row.locator('textarea'), field.placeholder ?? '点击编辑…')
         await expect(row.locator(field.type === 'select' ? 'select' : field.type === 'longtext' ? 'textarea' : 'input')).toHaveValue(values[field.key])
         if (field.type === 'select') await row.locator('select').selectOption('')
         else await row.locator(field.type === 'longtext' ? 'textarea' : 'input').fill('')
+        if (field.type === 'longtext') {
+          await row.locator('textarea').press('Tab')
+          await expect(row.locator('textarea')).toHaveCount(0)
+        }
       }
     }
     await openLongformLeaf(page, '故事设计'); await expect(page).toHaveURL(/module=story-design/)

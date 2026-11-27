@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test'
 import { createLongform } from './helpers/product-entry'
 import { openLongformLeaf } from './helpers/longform-navigation'
+import { enterMarkdownSourceEditorV1 } from './helpers/markdown-source'
 
 async function mineral(page: Page) {
   await page.addInitScript(() => localStorage.setItem('storyforge_guide_completed', 'e2e'))
@@ -28,10 +29,19 @@ test('codex name, summary, description and two structured leaves survive an imme
   const id = await mineral(page)
   await page.getByPlaceholder('名称', { exact: true }).fill('响盐矿')
   await page.getByPlaceholder('一句话简介', { exact: true }).fill('记录盐桥回声的矿物')
+  await enterMarkdownSourceEditorV1(page.locator('[data-codex-source-field="description"]'),
+    page.getByPlaceholder('详细描述', { exact: true }), '详细描述')
   await page.getByPlaceholder('详细描述', { exact: true }).fill('敲击后才发出旧桥的回声，不能用它直接预知未来。')
+  await page.getByPlaceholder('详细描述', { exact: true }).press('Tab')
+  await expect(page.getByPlaceholder('详细描述', { exact: true })).toHaveCount(0)
   const appearance = page.getByText('外观', { exact: true }).locator('..').locator('textarea')
   const effect = page.getByText('功效作用', { exact: true }).locator('..').locator('textarea')
-  await appearance.fill('有蓝色条纹的盐晶'); await effect.fill('记录一次敲击声')
+  await enterMarkdownSourceEditorV1(page.getByText('外观', { exact: true }).locator('..'), appearance, '形状 / 颜色 / 质感')
+  await appearance.fill('有蓝色条纹的盐晶')
+  await appearance.press('Tab')
+  await expect(appearance).toHaveCount(0)
+  await enterMarkdownSourceEditorV1(page.getByText('功效作用', { exact: true }).locator('..'), effect, '点击编辑…')
+  await effect.fill('记录一次敲击声')
   await openLongformLeaf(page, '故事设计')
   const entry = await read(page, id), fields = JSON.parse(entry.fields)
   expect(entry.name).toBe('响盐矿'); expect(entry.summary).toBe('记录盐桥回声的矿物')
@@ -72,8 +82,13 @@ test('codex rapid structured edits merge while a prior write is delayed', async 
       return update(...args)
     }
   })
-  await page.getByText('外观', { exact: true }).locator('..').locator('textarea').fill('蓝色盐晶')
-  await page.getByText('功效作用', { exact: true }).locator('..').locator('textarea').fill('只记录一次回声')
+  const appearance = page.getByText('外观', { exact: true }).locator('..')
+  await enterMarkdownSourceEditorV1(appearance, appearance.locator('textarea'), '形状 / 颜色 / 质感')
+  await appearance.locator('textarea').fill('蓝色盐晶')
+  await appearance.locator('textarea').press('Tab')
+  const effect = page.getByText('功效作用', { exact: true }).locator('..')
+  await enterMarkdownSourceEditorV1(effect, effect.locator('textarea'), '点击编辑…')
+  await effect.locator('textarea').fill('只记录一次回声')
   await openLongformLeaf(page, '故事设计')
   await expect(page).toHaveURL(/module=story-design/)
   expect(JSON.parse((await read(page, id)).fields)).toMatchObject({ appearance: '蓝色盐晶', effect: '只记录一次回声' })
