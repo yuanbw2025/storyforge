@@ -39,6 +39,7 @@ vi.mock('../../src/stores/world-group', () => ({
     groups,
     links,
     loading: false,
+    loadedScope: { projectId: 1, worldId: 11, workId: 12 },
     loadAll: mocks.loadAll,
     ensurePrimaryGroup: mocks.ensurePrimaryGroup,
     createGroup: mocks.createGroup,

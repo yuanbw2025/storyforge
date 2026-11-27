@@ -1,18 +1,33 @@
 /** 当前多世界创作域 Store。 */
 import { create } from 'zustand'
+import { isPortableResourceUidV1 } from '../lib/context-gateway/resource-uid'
+import { coordinatePendingEditV1 } from '../lib/authoring/pending-edit-coordinator'
 import { db } from '../lib/db/schema'
 import type { WorldGroup, WorldGroupLink, WorkspaceScope } from '../lib/types'
 import { requireBackupBefore } from '../lib/safety/require-backup-before'
 import { assignUnscopedRecordsToPrimaryWorld, cascadeDeleteGroup, transactionTablesFor, worldScopedTables } from '../lib/registry/lifecycle'
 import { assertRecordInScope, readOwnedRows, resolveScopeLike, scopeTransactionTables, stampNewRecord, type WorkspaceScopeLike } from '../lib/workspace/scope'
 import { updateWorkspace } from '../lib/workspace/works'
-import { WORLD_GROUP_TYPE_LABELS } from '../lib/types/world-group'
+import { WORLD_GROUP_TYPE_LABELS, WORLD_LINK_TYPE_LABELS } from '../lib/types/world-group'
 
 const now = () => Date.now()
 let groupReadRequest = 0, groupWriteRevision = 0
 const GROUP_AUTHOR_FIELDS = ['name', 'description', 'type', 'icon', 'color', 'entryCondition', 'exitCondition', 'plannedChapterCount', 'powerRestriction', 'takeawayRules', 'order'] as const
 type GroupAuthorPatch = Partial<Pick<WorldGroup, typeof GROUP_AUTHOR_FIELDS[number]>>
 interface GroupSaveOptions { scope?: WorkspaceScope; expected?: WorldGroup }
+const LINK_AUTHOR_FIELDS = ['fromGroupId', 'toGroupId', 'linkType', 'name', 'description', 'bidirectional'] as const
+type LinkAuthorPatch = Partial<Pick<WorldGroupLink, typeof LINK_AUTHOR_FIELDS[number]>>
+interface LinkSaveOptions { scope?: WorkspaceScope; expected?: WorldGroupLink }
+function validateLinkPatch(patch: LinkAuthorPatch) {
+  if (Object.keys(patch).some(key => !LINK_AUTHOR_FIELDS.includes(key as typeof LINK_AUTHOR_FIELDS[number]))) throw new Error('世界关系更新包含身份或非作者字段。')
+  for (const field of ['fromGroupId', 'toGroupId'] as const) if (field in patch && (!Number.isSafeInteger(patch[field]) || patch[field]! < 1)) throw new Error('世界关系端点必须是有效ID。')
+  if ('linkType' in patch && !Object.prototype.hasOwnProperty.call(WORLD_LINK_TYPE_LABELS, patch.linkType!)) throw new Error('世界关系类型无效。')
+  for (const field of ['name', 'description'] as const) if (patch[field] !== undefined && typeof patch[field] !== 'string') throw new Error('世界关系字段必须是原文。')
+  if ('bidirectional' in patch && typeof patch.bidirectional !== 'boolean') throw new Error('世界关系方向必须明确。')
+}
+function linkFieldsMatch(row: WorldGroupLink, patch: LinkAuthorPatch) {
+  return Object.entries(patch).every(([field, value]) => Reflect.get(row, field) === value)
+}
 const sameWorld = (a: WorkspaceScope | null, b: WorkspaceScope) => a?.projectId === b.projectId && a.worldId === b.worldId
 
 async function ensurePrimaryInDatabase(scope: WorkspaceScope): Promise<number> {
@@ -45,8 +60,7 @@ interface WorldGroupStore {
 
   // 世界间关系
   createLink: (data: Omit<WorldGroupLink, 'id' | 'createdAt' | 'updatedAt'>, scope?: WorkspaceScope) => Promise<number>
-  updateLink: (id: number, patch: Partial<Pick<WorldGroupLink,
-    'fromGroupId' | 'toGroupId' | 'linkType' | 'name' | 'description' | 'bidirectional'>>) => Promise<void>
+  updateLink: (id: number, patch: LinkAuthorPatch, options?: LinkSaveOptions) => Promise<WorldGroupLink>
   deleteLink: (id: number) => Promise<void>
 
   // 确保默认主世界组存在
@@ -183,44 +197,84 @@ export const useWorldGroupStore = create<WorldGroupStore>((set, get) => ({
     set({ groups })
   },
 
-  createLink: async (data, frozenScope) => {
-    const scope = await resolveScopeLike(frozenScope ?? data.projectId)
-    if (scope.projectId !== data.projectId) throw new Error('世界关系创建作用域不匹配。')
-    const [from, to] = await Promise.all([db.worldGroups.get(data.fromGroupId), db.worldGroups.get(data.toGroupId)])
-    if (!from || !to || !await assertRecordInScope(scope, 'worldGroups', from, { owner: 'world' })
-      || !await assertRecordInScope(scope, 'worldGroups', to, { owner: 'world' })) {
-      throw new Error('[WorldGroup] 世界关系端点不属于当前 World')
+  createLink: async (input, frozenScope) => {
+    const data = structuredClone(input), target = frozenScope ? { ...frozenScope } : data.projectId
+    const { projectId, ...patch } = data
+    validateLinkPatch(patch)
+    if (['fromGroupId', 'toGroupId', 'linkType', 'bidirectional'].some(field => !Object.prototype.hasOwnProperty.call(patch, field))) throw new Error('世界关系缺少端点、类型或方向。')
+    const scope = await resolveScopeLike(target)
+    if (scope.projectId !== projectId) throw new Error('世界关系创建作用域不匹配。')
+    const created = await db.transaction('rw', scopeTransactionTables(db.worldGroupLinks, db.worldGroups), async transaction => {
+      const table = transaction.table<WorldGroupLink, number>('worldGroupLinks'), groups = transaction.table<WorldGroup, number>('worldGroups')
+      await resolveScopeLike(scope)
+      if (data.fromGroupId === data.toGroupId) throw new Error('[WorldGroup] 世界关系不能连接同一世界')
+      const [from, to] = await Promise.all([groups.get(data.fromGroupId), groups.get(data.toGroupId)])
+      if (!from || !to || !await assertRecordInScope(scope, 'worldGroups', from, { owner: 'world' })
+        || !await assertRecordInScope(scope, 'worldGroups', to, { owner: 'world' })) throw new Error('[WorldGroup] 世界关系端点不属于当前 World')
+      const original = stampNewRecord(scope, 'worldGroupLinks', { ...data, createdAt: now(), updatedAt: now() } as WorldGroupLink, { owner: 'world' })
+      const id = await db.worldGroupLinks.add.bind(table)(original) as number
+      const actual = await table.get(id)
+      if (!actual || !isPortableResourceUidV1(actual.ragDocumentId, 'world-group-link') || !await assertRecordInScope(scope, 'worldGroupLinks', actual, { owner: 'world' })
+        || !linkFieldsMatch(actual, patch)) throw new Error('世界关系创建后未能确认相同身份与原文。')
+      return actual
+    })
+    groupWriteRevision++
+    let actual: WorldGroupLink | undefined
+    try {
+      actual = await db.worldGroupLinks.get(created.id!)
+      if (!actual || actual.ragDocumentId !== created.ragDocumentId || !await assertRecordInScope(scope, 'worldGroupLinks', actual, { owner: 'world' })
+        || !linkFieldsMatch(actual, patch)) throw new Error('提交后关系已变化。')
+    } catch {
+      throw Object.assign(new Error('世界关系已提交，但尚未确认回读；请重试读取，不会重复创建。'), { committedWorldLink: { id: created.id!, ragDocumentId: created.ragDocumentId } })
     }
-    const id = await db.worldGroupLinks.add(stampNewRecord(scope, 'worldGroupLinks', {
-      ...data,
-      createdAt: now(),
-      updatedAt: now(),
-    } as WorldGroupLink, { owner: 'world' })) as number
-    const links = await readOwnedRows<WorldGroupLink>(scope, 'worldGroupLinks', { owner: 'world' })
-    if (sameWorld(get().loadedScope, scope)) set({ links })
-    return id
+    if (sameWorld(get().loadedScope, scope)) set({ links: [...get().links.filter(link => link.id !== actual!.id), actual] })
+    return actual.id!
   },
 
-  updateLink: async (id, patch) => {
-    const current = get().links.find(link => link.id === id) ?? await db.worldGroupLinks.get(id)
-    if (!current) throw new Error('[WorldGroup] 世界关系不存在')
-    const scope = await resolveScopeLike(current.projectId)
-    if (!await assertRecordInScope(scope, 'worldGroupLinks', current, { owner: 'world' })) {
-      throw new Error('[WorldGroup] 世界关系不属于当前 World')
-    }
-    const fromGroupId = patch.fromGroupId ?? current.fromGroupId
-    const toGroupId = patch.toGroupId ?? current.toGroupId
-    if (fromGroupId === toGroupId) throw new Error('[WorldGroup] 世界关系不能连接同一世界')
-    const [from, to] = await Promise.all([db.worldGroups.get(fromGroupId), db.worldGroups.get(toGroupId)])
-    if (!from || !to || !await assertRecordInScope(scope, 'worldGroups', from, { owner: 'world' })
-      || !await assertRecordInScope(scope, 'worldGroups', to, { owner: 'world' })) {
-      throw new Error('[WorldGroup] 世界关系端点不属于当前 World')
-    }
-    const updatedAt = now()
-    await db.worldGroupLinks.update(id, { ...patch, updatedAt })
-    set({
-      links: get().links.map(link => link.id === id ? { ...link, ...patch, updatedAt } : link),
+  updateLink: async (id, input, options) => {
+    const patch = structuredClone(input), config = options ? structuredClone(options) : undefined
+    validateLinkPatch(patch)
+    const initialRead = db.worldGroupLinks.get(id)
+    void initialRead.catch(() => undefined)
+    const selected = config?.scope ? resolveScopeLike(config.scope) : initialRead.then(row => {
+      if (!row) throw new Error('[WorldGroup] 世界关系不存在')
+      return resolveScopeLike(row.projectId)
     })
+    void selected.catch(() => undefined)
+    return coordinatePendingEditV1({ key: `world-link:${id}`, persist: async () => {
+      const scope = await selected, initial = await initialRead
+      const updated = await db.transaction('rw', scopeTransactionTables(db.worldGroupLinks, db.worldGroups), async transaction => {
+        const table = transaction.table<WorldGroupLink, number>('worldGroupLinks'), groups = transaction.table<WorldGroup, number>('worldGroups')
+        const update = db.worldGroupLinks.update.bind(table)
+        await resolveScopeLike(scope)
+        const current = await table.get(id)
+        if (!current || !initial || current.ragDocumentId !== initial.ragDocumentId || !await assertRecordInScope(scope, 'worldGroupLinks', current, { owner: 'world' })) throw new Error('世界关系已不存在或不属于当前 World，输入已保留。')
+        if (config?.expected && (current.id !== config.expected.id || current.ragDocumentId !== config.expected.ragDocumentId
+          || !isPortableResourceUidV1(current.ragDocumentId, 'world-group-link') || !linkFieldsMatch(current, Object.fromEntries(LINK_AUTHOR_FIELDS.map(field => [field, config.expected![field]]))))) throw new Error('世界关系已被其他页面修改，输入已保留。')
+        const fromId = patch.fromGroupId ?? current.fromGroupId, toId = patch.toGroupId ?? current.toGroupId
+        if (fromId === toId) throw new Error('[WorldGroup] 世界关系不能连接同一世界')
+        const [from, to] = await Promise.all([groups.get(fromId), groups.get(toId)])
+        if (!from || !to || !await assertRecordInScope(scope, 'worldGroups', from, { owner: 'world' })
+          || !await assertRecordInScope(scope, 'worldGroups', to, { owner: 'world' })) throw new Error('[WorldGroup] 世界关系端点不属于当前 World')
+        if (await update(id, { ...patch, updatedAt: Math.max(now(), current.updatedAt + 1) }) !== 1) throw new Error('世界关系更新0行，输入已保留。')
+        const actual = await table.get(id)
+        if (!actual || actual.ragDocumentId !== current.ragDocumentId || !await assertRecordInScope(scope, 'worldGroupLinks', actual, { owner: 'world' }) || !linkFieldsMatch(actual, patch)) throw new Error('世界关系精确保存校验失败，输入已保留。')
+        return actual
+      })
+      groupWriteRevision++
+      let actual: WorldGroupLink | undefined
+      try {
+        actual = await db.worldGroupLinks.get(id)
+        if (!actual || actual.ragDocumentId !== updated.ragDocumentId || !await assertRecordInScope(scope, 'worldGroupLinks', actual, { owner: 'world' }) || !linkFieldsMatch(actual, patch)) throw new Error('关系提交后内容已变化。')
+      } catch {
+        throw Object.assign(new Error('世界关系已提交，但尚未确认回读；请重试读取。'), { committedWorldLink: { id, ragDocumentId: updated.ragDocumentId } })
+      }
+      if (sameWorld(get().loadedScope, scope)) {
+        const cached = get().links
+        set({ links: cached.some(link => link.id === id) ? cached.map(link => link.id === id ? actual! : link) : [...cached, actual] })
+      }
+      return actual
+    } })
   },
 
   deleteLink: async (id) => {

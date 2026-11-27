@@ -1,7 +1,7 @@
 /**
  * 世界总览面板 — 管理多个世界组 + 世界关系
  */
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useContext } from 'react'
 import { db } from '../../lib/db/schema'
 import { Plus, Trash2, GripVertical, ChevronRight, Sparkles, Loader2, Check, Pencil } from 'lucide-react'
 import { useWorldGroupStore } from '../../stores/world-group'
@@ -15,9 +15,16 @@ import {
   rejectWorldSuggestCandidateV1,
   type WorldSuggestCandidateV1,
 } from '../../lib/agent/run/world-suggest-durable'
-import { resolveScopeLike } from '../../lib/workspace/scope'
+import { isPortableResourceUidV1 } from '../../lib/context-gateway/resource-uid'
+import { AuthorRecordSaveScopeV1 } from '../shared/AuthorRecordSaveScope'
+import { LocalSaveStatus } from '../shared/InlineEdit'
+import { CInput, CTextarea } from '../shared/CompositionInput'
+import ScopedWorldAuthoringBoundary from './ScopedWorldAuthoringBoundary'
+import { acknowledgePendingEditFailureV1, capturePendingEditFailureV1, type PendingEditFailureTokenV1, flushPendingEditsV1, registerPendingDraftFlusherV1 } from '../../lib/authoring/pending-edit-coordinator'
+import { useBeforeUnload } from '../../hooks/useBeforeUnload'
+import { assertRecordInScope, resolveScopeLike } from '../../lib/workspace/scope'
 import { WORLD_GROUP_TYPE_LABELS, WORLD_LINK_TYPE_LABELS } from '../../lib/types/world-group'
-import type { Project, WorkspaceScope, WorldGroup, WorldGroupType, WorldGroupLinkType } from '../../lib/types'
+import type { Project, WorkspaceScope, WorldGroup, WorldGroupType, WorldGroupLinkType, WorldGroupLink } from '../../lib/types'
 import WorldGroupDetail from './WorldGroupDetail'
 import { WORLD_SUGGEST_FIELDS_V1 } from '../../lib/ai/world-group-ai'
 import { FIELD_BY_TARGET } from '../../lib/registry/field-registry'
@@ -42,8 +49,24 @@ const EMPTY_LINK_FORM: WorldLinkFormState = {
   from: '', to: '', type: 'portal', name: '', description: '', bidirectional: false,
 }
 
+function linkFormFromRecord(link: WorldGroupLink): WorldLinkFormState {
+  return { from: link.fromGroupId, to: link.toGroupId, type: link.linkType, name: link.name ?? '', description: link.description ?? '', bidirectional: link.bidirectional === true }
+}
 export default function WorldGroupOverview({ project }: Props) {
-  const { groups, links, loading, loadAll, createGroup, deleteGroup, ensurePrimaryGroup, createLink, updateLink, deleteLink } = useWorldGroupStore()
+  const admitted = useContext(AuthorRecordSaveScopeV1) !== null
+  return <ScopedWorldAuthoringBoundary project={project} activeGroupId={null}>
+    {view => <AuthorRecordSaveScopeV1.Provider value={admitted ? { projectId: view.project.id!, worldId: view.project.activeWorldId!, workId: view.project.activeWorkId! } : null}>
+      <ScopedWorldGroupOverview project={view.project} />
+    </AuthorRecordSaveScopeV1.Provider>}
+  </ScopedWorldAuthoringBoundary>
+}
+function ScopedWorldGroupOverview({ project }: Props) {
+  const confirmedMode = useContext(AuthorRecordSaveScopeV1) !== null
+  const { groups: liveGroups, links: liveLinks, loadedScope, loading, loadAll, createGroup, deleteGroup, ensurePrimaryGroup, createLink, updateLink, deleteLink } = useWorldGroupStore()
+  const currentOwner = loadedScope?.projectId === project.id && loadedScope?.worldId === project.activeWorldId
+  const retained = useRef({ groups: [] as WorldGroup[], links: [] as WorldGroupLink[] })
+  if (currentOwner) retained.current = { groups: liveGroups, links: liveLinks }
+  const { groups, links } = currentOwner ? { groups: liveGroups, links: liveLinks } : retained.current
   const aiConfig = useAIConfigStore(state => state.config)
   const [editingGroup, setEditingGroup] = useState<WorldGroup | null>(null)
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null)
@@ -51,6 +74,23 @@ export default function WorldGroupOverview({ project }: Props) {
   const [showLinkForm, setShowLinkForm] = useState(false)
   const [editingLinkId, setEditingLinkId] = useState<number | null>(null)
   const [linkForm, setLinkForm] = useState<WorldLinkFormState>(EMPTY_LINK_FORM)
+  const linkBase = useRef<WorldGroupLink | null>(null)
+  const linkFailureToken = useRef<PendingEditFailureTokenV1 | undefined>(undefined)
+  const committedLink = useRef<{ id: number; ragDocumentId: string; form: WorldLinkFormState } | null>(null)
+  const [readLink, setReadLink] = useState<WorldGroupLink | null>(null)
+  const [linkBaseline, setLinkBaseline] = useState(JSON.stringify(EMPTY_LINK_FORM))
+  const [linkError, setLinkError] = useState('')
+  const [composing, setComposing] = useState(false)
+  const composingRef = useRef(false), linkDirtyRef = useRef(false), linkFailureRef = useRef('')
+  const linkPending = useRef<Promise<void> | null>(null)
+  const linkDirty = showLinkForm && JSON.stringify(linkForm) !== linkBaseline
+  linkDirtyRef.current = linkDirty
+  const [lastSavedLink, setLastSavedLink] = useState<{ ownerKey: string; row: WorldGroupLink } | null>(null)
+  const ownerKey = `${project.id}:${project.activeWorldId}`
+  useEffect(() => registerPendingDraftFlusherV1(async () => {
+    if (linkPending.current) await linkPending.current
+    if (linkDirtyRef.current || composingRef.current || linkFailureRef.current) throw new Error(linkFailureRef.current || '世界关系尚未保存，请先保存关系或取消放弃输入。')
+  }), [])
 
   // AI 建议世界
   const [showSuggest, setShowSuggest] = useState(false)
@@ -67,6 +107,7 @@ export default function WorldGroupOverview({ project }: Props) {
   const [operationError, setOperationError] = useState('')
   const [manualBusy, setManualBusy] = useState(false)
   const manualBusyRef = useRef(false)
+  useBeforeUnload(linkDirty || composing || Boolean(linkError) || (showLinkForm && manualBusy))
   const [reloadAttempt, setReloadAttempt] = useState(0)
 
   useEffect(() => {
@@ -85,7 +126,8 @@ export default function WorldGroupOverview({ project }: Props) {
     setSuggestError(null)
     setAdoptedCount(0)
     void (async () => {
-      const resolved = await resolveScopeLike(project.id!)
+      const resolved = await resolveScopeLike(project.activeWorldId != null && project.activeWorkId != null
+        ? { projectId: project.id!, worldId: project.activeWorldId, workId: project.activeWorkId } : project.id!)
       if (cancelled) return
       await loadAll(resolved)
       await ensurePrimaryGroup(resolved)
@@ -120,11 +162,11 @@ export default function WorldGroupOverview({ project }: Props) {
     return () => { cancelled = true }
   }, [project.id, project.activeWorldId, project.activeWorkId, loadAll, ensurePrimaryGroup, reloadAttempt])
 
-  const runManual = async (action: () => Promise<void>) => {
+  const runManual = async (action: () => Promise<void>, onError?: (message: string, cause: unknown) => void) => {
     if (manualBusyRef.current || !scope) return
     manualBusyRef.current = true; setManualBusy(true); setOperationError('')
     try { await action() }
-    catch (cause) { setOperationError(cause instanceof Error ? cause.message : String(cause)) }
+    catch (cause) { const message = cause instanceof Error ? cause.message : String(cause); if (onError) onError(message, cause); else setOperationError(message) }
     finally { manualBusyRef.current = false; setManualBusy(false) }
   }
 
@@ -265,45 +307,84 @@ export default function WorldGroupOverview({ project }: Props) {
     setConfirmDeleteId(null)
   })
 
-  const handleCreateLink = () => runManual(async () => {
-    if (linkForm.from === '' || linkForm.to === '' || linkForm.from === linkForm.to) return
-    const patch = {
-      fromGroupId: Number(linkForm.from),
-      toGroupId: Number(linkForm.to),
-      linkType: linkForm.type,
-      name: linkForm.name.trim() || undefined,
-      description: linkForm.description.trim() || undefined,
-      bidirectional: linkForm.bidirectional,
-    }
-    if (editingLinkId == null) {
-      await createLink({ projectId: project.id!, ...patch }, scope!)
-    } else {
-      await updateLink(editingLinkId, patch)
-    }
-    setEditingLinkId(null)
-    setLinkForm(EMPTY_LINK_FORM)
-    setShowLinkForm(false)
-  })
-
-  const handleEditLink = (linkId: number) => {
-    const link = links.find(item => item.id === linkId)
-    if (!link) return
-    setEditingLinkId(linkId)
-    setLinkForm({
-      from: link.fromGroupId,
-      to: link.toGroupId,
-      type: link.linkType,
-      name: link.name ?? '',
-      description: link.description ?? '',
-      bidirectional: link.bidirectional === true,
+  const handleCreateLink = () => {
+    if (composingRef.current || manualBusyRef.current) return Promise.resolve()
+    const snapshot = { ...linkForm }, frozenScope = scope ? { ...scope } : null, existing = linkBase.current
+    const operation = runManual(async () => {
+      if (!frozenScope || snapshot.from === '' || snapshot.to === '' || snapshot.from === snapshot.to) throw new Error('请先选择不同的起点与目标世界。')
+      setLinkError(''); linkFailureRef.current = ''
+      const patch = { fromGroupId: snapshot.from, toGroupId: snapshot.to, linkType: snapshot.type,
+        name: snapshot.name || undefined, description: snapshot.description || undefined, bidirectional: snapshot.bidirectional }
+      let id = editingLinkId ?? committedLink.current?.id ?? null
+      let expected = existing
+      if (committedLink.current) {
+        const recovered = await db.worldGroupLinks.get(committedLink.current.id)
+        if (!recovered || recovered.ragDocumentId !== committedLink.current.ragDocumentId
+          || !await assertRecordInScope(frozenScope, 'worldGroupLinks', recovered, { owner: 'world' })
+          || JSON.stringify(linkFormFromRecord(recovered)) !== JSON.stringify(committedLink.current.form)) throw new Error('已提交的关系又发生变化，输入已保留；请取消后重新读取并核对。')
+        expected = recovered
+        if (linkFailureToken.current) acknowledgePendingEditFailureV1({ token: linkFailureToken.current, decision: 'retry-command' })
+        linkFailureToken.current = undefined
+      }
+      if (id == null) id = await createLink({ projectId: frozenScope.projectId, ...patch }, frozenScope)
+      else if (confirmedMode) await updateLink(id, patch, { scope: frozenScope, expected: expected ?? undefined })
+      else await updateLink(id, patch)
+      if (confirmedMode) {
+        const actual = await db.worldGroupLinks.get(id)
+        if (!actual || !isPortableResourceUidV1(actual.ragDocumentId, 'world-group-link')
+          || !await assertRecordInScope(frozenScope, 'worldGroupLinks', actual, { owner: 'world' })
+          || JSON.stringify(linkFormFromRecord(actual)) !== JSON.stringify(snapshot)) throw new Error('未读到相同关系身份与输入原文，草稿已保留。')
+        setLastSavedLink({ ownerKey, row: actual })
+      }
+      linkDirtyRef.current = false; linkFailureRef.current = ''; linkBase.current = null; linkFailureToken.current = undefined; committedLink.current = null; setReadLink(null)
+      setEditingLinkId(null); setLinkForm(EMPTY_LINK_FORM); setLinkBaseline(JSON.stringify(EMPTY_LINK_FORM)); setShowLinkForm(false)
+    }, (message, cause) => {
+      linkFailureRef.current = message; setLinkError(message); linkFailureToken.current = capturePendingEditFailureV1(cause) ?? linkFailureToken.current
+      const evidence = cause && typeof cause === 'object' ? Reflect.get(cause, 'committedWorldLink') : null
+      if (evidence && Number.isSafeInteger(evidence.id) && isPortableResourceUidV1(evidence.ragDocumentId, 'world-group-link'))
+        committedLink.current = { id: evidence.id, ragDocumentId: evidence.ragDocumentId, form: snapshot }
     })
-    setShowLinkForm(true)
+    linkPending.current = operation
+    void operation.finally(() => { if (linkPending.current === operation) linkPending.current = null })
+    return operation
   }
-
+  const handleEditLink = (linkId: number) => runManual(async () => {
+    await flushPendingEditsV1()
+    const link = confirmedMode ? await db.worldGroupLinks.get(linkId) : links.find(item => item.id === linkId)
+    if (!link || !scope || (confirmedMode && (!isPortableResourceUidV1(link.ragDocumentId, 'world-group-link')
+      || !await assertRecordInScope(scope, 'worldGroupLinks', link, { owner: 'world' })))) throw new Error('世界关系身份或原 World 已变化，请重新读取。')
+    linkBase.current = link; setReadLink(confirmedMode ? link : null)
+    const form = linkFormFromRecord(link)
+    setLinkBaseline(JSON.stringify(form)); setLinkForm(form); linkDirtyRef.current = false; linkFailureRef.current = ''
+    setEditingLinkId(linkId); setShowLinkForm(true); setLastSavedLink(null); setLinkError('')
+  })
   const closeLinkForm = () => {
-    setShowLinkForm(false)
-    setEditingLinkId(null)
-    setLinkForm(EMPTY_LINK_FORM)
+    if (linkPending.current) return
+    try { if (linkFailureToken.current) acknowledgePendingEditFailureV1({ token: linkFailureToken.current, decision: 'abandon-command' }) }
+    catch (cause) { linkFailureRef.current = cause instanceof Error ? cause.message : String(cause); setLinkError(linkFailureRef.current); return }
+    linkFailureToken.current = undefined; committedLink.current = null; setReadLink(null)
+    linkDirtyRef.current = false; linkFailureRef.current = ''; linkBase.current = null; composingRef.current = false
+    setComposing(false); setLinkError(''); setShowLinkForm(false); setEditingLinkId(null)
+    setLinkForm(EMPTY_LINK_FORM); setLinkBaseline(JSON.stringify(EMPTY_LINK_FORM))
+  }
+  const openNewLink = () => runManual(async () => {
+    await flushPendingEditsV1()
+    linkBase.current = null; setReadLink(null); linkDirtyRef.current = false; linkFailureRef.current = ''
+    setEditingLinkId(null); setLinkForm(EMPTY_LINK_FORM); setLinkBaseline(JSON.stringify(EMPTY_LINK_FORM)); setLastSavedLink(null); setLinkError(''); setShowLinkForm(true)
+  })
+  useEffect(() => {
+    if (!confirmedMode || !showLinkForm || editingLinkId == null || !scope) return
+    let active = true
+    const target = { ...scope }, id = editingLinkId
+    void db.worldGroupLinks.get(id).then(async row => {
+      if (!row || !isPortableResourceUidV1(row.ragDocumentId, 'world-group-link')
+        || !await assertRecordInScope(target, 'worldGroupLinks', row, { owner: 'world' })) throw new Error('关系本机保存尚未确认。')
+      if (active) setReadLink(row)
+    }).catch(() => { if (active) setReadLink(null) })
+    return () => { active = false }
+  }, [confirmedMode, showLinkForm, editingLinkId, scope, liveLinks])
+  const leaveForm = (action: () => void | Promise<void>) => {
+    void flushPendingEditsV1().then(action).catch(cause => setOperationError(cause instanceof Error ? cause.message : String(cause)))
   }
 
   // 如果正在编辑某个世界，显示详情
@@ -331,9 +412,9 @@ export default function WorldGroupOverview({ project }: Props) {
         </p>
       </div>
 
-      {operationError && <div role="alert" className="rounded-lg border border-red-500/20 p-3 text-sm text-error">操作未完成：{operationError}<button type="button" className="ml-3 underline" disabled={manualBusy} onClick={() => setReloadAttempt(value => value + 1)}>重新读取世界列表</button></div>}
+      {operationError && <div role="alert" className="rounded-lg border border-red-500/20 p-3 text-sm text-error">操作未完成：{operationError}<button type="button" className="ml-3 underline" disabled={manualBusy} onClick={() => leaveForm(() => setReloadAttempt(value => value + 1))}>重新读取世界列表</button></div>}
       {manualBusy && <p role="status" className="text-xs text-text-muted">正在保存世界设置…</p>}
-      {loading ? (
+      {loading && !showLinkForm && groups.length === 0 ? (
         <div className="text-text-muted text-sm py-8 text-center">加载中...</div>
       ) : (
         <>
@@ -350,7 +431,7 @@ export default function WorldGroupOverview({ project }: Props) {
                   AI 建议世界
                 </button>
                 <button
-                  onClick={handleAddWorld}
+                  onClick={() => leaveForm(handleAddWorld)}
                   disabled={manualBusy || !scope}
                   className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-accent text-white hover:bg-accent-hover transition-colors"
                 >
@@ -481,7 +562,7 @@ export default function WorldGroupOverview({ project }: Props) {
                   {/* 操作按钮 */}
                   <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button
-                      onClick={() => setEditingGroup(g)}
+                      onClick={() => leaveForm(() => setEditingGroup(g))}
                       className="p-1.5 rounded text-text-muted hover:text-accent hover:bg-accent/10 transition-colors"
                       title="编辑"
                     >
@@ -527,11 +608,12 @@ export default function WorldGroupOverview({ project }: Props) {
 
           {/* 世界关系 */}
           {groups.length > 1 && (
-            <section className="space-y-2">
+            <section aria-label="世界关系编辑" className="space-y-2">
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-semibold text-text-primary">世界关系</h3>
                 <button
-                  onClick={() => showLinkForm ? closeLinkForm() : setShowLinkForm(true)}
+                  onClick={() => { if (showLinkForm) closeLinkForm(); else void openNewLink() }}
+                  disabled={manualBusy || !scope}
                   className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-bg-elevated text-text-secondary border border-border hover:text-accent hover:border-accent/50 transition-colors"
                 >
                   <Plus className="w-3.5 h-3.5" />
@@ -541,7 +623,9 @@ export default function WorldGroupOverview({ project }: Props) {
 
               {/* 关系创建表单 */}
               {showLinkForm && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 p-3 bg-bg-surface border border-border rounded-lg">
+                <fieldset disabled={manualBusy} className="grid grid-cols-1 sm:grid-cols-2 gap-2 p-3 bg-bg-surface border border-border rounded-lg"
+                  onCompositionStartCapture={() => { composingRef.current = true; setComposing(true) }}
+                  onCompositionEndCapture={() => { composingRef.current = false; setComposing(false) }}>
                   <div className="sm:col-span-2 text-xs font-medium text-text-secondary">
                     {editingLinkId == null ? '新建世界通道' : '编辑世界通道'}
                   </div>
@@ -570,7 +654,7 @@ export default function WorldGroupOverview({ project }: Props) {
                       <option key={v} value={v}>{l}</option>
                     ))}
                   </select>
-                  <input
+                  <CInput
                     value={linkForm.name}
                     onChange={e => setLinkForm(f => ({ ...f, name: e.target.value }))}
                     placeholder="通道名称（可选）"
@@ -584,7 +668,8 @@ export default function WorldGroupOverview({ project }: Props) {
                     />
                     双向通道
                   </label>
-                  <textarea
+                  <CTextarea
+                    aria-label="世界关系描述"
                     value={linkForm.description}
                     onChange={event => setLinkForm(form => ({ ...form, description: event.target.value }))}
                     placeholder="描述通道触发方式、方向差异或其它约束（可选）"
@@ -593,16 +678,18 @@ export default function WorldGroupOverview({ project }: Props) {
                   />
                   <button
                     onClick={handleCreateLink}
-                    disabled={linkForm.from === '' || linkForm.to === '' || linkForm.from === linkForm.to}
+                    disabled={composing || linkForm.from === '' || linkForm.to === '' || linkForm.from === linkForm.to}
                     className="sm:col-span-2 px-3 py-1.5 text-xs rounded-lg bg-accent text-white hover:bg-accent-hover disabled:opacity-40 transition-colors"
                   >
                     {editingLinkId == null ? '创建关系' : '保存关系'}
                   </button>
-                </div>
+                  {confirmedMode && <div className="sm:col-span-2"><LocalSaveStatus status={linkError ? 'failed' : manualBusy ? 'saving' : linkDirty || composing ? 'dirty' : readLink && JSON.stringify(linkFormFromRecord(readLink)) === JSON.stringify(linkForm) ? 'saved' : 'unconfirmed'} error={linkError} retryLabel="重试保存世界关系" retry={() => { void handleCreateLink() }} /></div>}
+                </fieldset>
               )}
 
+              {!showLinkForm && confirmedMode && lastSavedLink?.ownerKey === ownerKey && <LocalSaveStatus status="saved" error="" retry={() => undefined} />}
               {/* 关系流向图（自适应布局） */}
-              <WorldRelationGraph onNodeClick={(g) => setEditingGroup(g)} />
+              <WorldRelationGraph onNodeClick={(g) => leaveForm(() => setEditingGroup(g))} />
 
               {links.length > 0 && (
                 <div className="space-y-1">
