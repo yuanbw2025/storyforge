@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
     error: null as string | null,
     submitTargetedRequest: vi.fn(async () => undefined),
     updateCandidate: vi.fn(async () => undefined),
+    flushCandidateDraft: vi.fn(async () => undefined),
     rejectCandidate: vi.fn(async () => undefined),
     adoptCandidate: vi.fn(async () => true),
     resume: vi.fn(async () => undefined),
@@ -181,6 +182,8 @@ describe('R-HARNESS39 · 创作规则面板统一进入主 Agent Harness', () =>
       }),
     ])
 
+    const atmosphereView = [...host.querySelectorAll('[data-markdown-read-view]')].find(view => view.textContent?.includes('规范字段基调'))!
+    await act(async () => [...atmosphereView.querySelectorAll('button')].find(button => button.textContent === '编辑源码')!.click())
     const atmosphere = host.querySelector<HTMLTextAreaElement>(
       'textarea[placeholder^="描述作品的整体基调"]',
     )!
@@ -201,6 +204,8 @@ describe('R-HARNESS39 · 创作规则面板统一进入主 Agent Harness', () =>
     expect(host.textContent).toContain('待确认 · 写作风格')
     expect(host.textContent).toContain('约 510 tokens')
     expect(host.textContent).toContain('本次实际输入证据')
+    const candidateView = [...host.querySelectorAll('[data-markdown-read-view]')].find(view => view.textContent?.includes('模型建议的写作风格'))!
+    await act(async () => [...candidateView.querySelectorAll('button')].find(button => button.textContent === '编辑源码')!.click())
     const editor = host.querySelector<HTMLTextAreaElement>('textarea[aria-label="写作风格候选内容"]')!
     expect(editor.value).toBe('模型建议的写作风格')
     await act(async () => setValue(editor, '作者修订后的写作风格'))
@@ -256,7 +261,7 @@ describe('R-HARNESS39 · 创作规则面板统一进入主 Agent Harness', () =>
     expect(input.value).toBe('免费签到，不增加惩罚')
     await act(async () => save.click())
     expect(mocks.rulesStore.save).toHaveBeenLastCalledWith({ projectId: 1, systemFictionElements: { ...createSystemFictionElementsV1(), enabled: true, systemMechanism: '免费签到，不增加惩罚' } }, { projectId: 1, worldId: 11, workId: 12 })
-    expect(host.querySelector<HTMLTextAreaElement>('textarea[placeholder^="描述期望的写作风格"]')?.value).toBe('旧写作风格')
+    expect([...host.querySelectorAll('[data-markdown-body]')].some(body => body.textContent === '旧写作风格')).toBe(true)
   })
 
   it('作品切换不沿用旧元素草稿；每次保存携带固定 Work 作用域', async () => {
