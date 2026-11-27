@@ -44,7 +44,13 @@ export type LocalSaveHistoryIdentityV1 = WorkspaceScope & { worldGroupId: number
   | { table: 'histories'; field: 'overview' | 'eraSystem' }
   | { table: 'historicalTimelineEvents' | 'historicalKeywords'; field: 'description' | 'conceptNote'; recordId: number }
 )
-export type LocalSaveIdentityV1 = LocalSaveWorldviewIdentityV1 | LocalSaveStoryCoreIdentityV1 | LocalSaveCreativeRuleIdentityV1 | LocalSaveHistoryIdentityV1
+export interface LocalSaveRecordIdentityV1 extends WorkspaceScope {
+  table: 'characters' | 'outlineNodes'
+  field: string
+  recordId: number
+  worldGroupId: number | null
+}
+export type LocalSaveIdentityV1 = LocalSaveWorldviewIdentityV1 | LocalSaveStoryCoreIdentityV1 | LocalSaveCreativeRuleIdentityV1 | LocalSaveHistoryIdentityV1 | LocalSaveRecordIdentityV1
 export interface LocalSaveWitnessV1 {
   version: 1
   source: 'database-read' | 'committed-write'

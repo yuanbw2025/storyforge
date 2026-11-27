@@ -1,3 +1,4 @@
+import type { LocalSaveIntentV1 } from '../../lib/authoring/local-save-evidence'
 import { Fragment, useEffect, useState } from 'react'
 import { Plus, Trash2, ChevronDown, ChevronRight } from 'lucide-react'
 import { useCharacterStore } from '../../stores/character'
@@ -51,7 +52,8 @@ export default function CharacterExtraPanel({ project }: Props) {
     motivation: '', abilities: '', relationships: '', arc: '',
   })
 
-  const update = (id: number, patch: Partial<Character>, expected?: Partial<Character>) => updateCharacter(id, patch, { scope: loadedScope ?? undefined, expected })
+  const update = (id: number, patch: Partial<Character>, expected?: Partial<Character>, confirmation?: LocalSaveIntentV1) => confirmation && loadedScope
+    ? updateCharacter(id, patch, { scope: loadedScope, expected, confirmation }) : updateCharacter(id, patch, { scope: loadedScope ?? undefined, expected })
 
   return (
     <>
@@ -108,7 +110,8 @@ export default function CharacterExtraPanel({ project }: Props) {
                       <td className="px-3 py-1.5">
                         <CharacterDraftField input
                           value={c.name}
-                          onCommit={(value, expected) => update(c.id!, { name: value }, { name: expected } as Partial<Character>)}
+                          character={c} field="name"
+                          onCommit={(value, expected, confirmation) => update(c.id!, { name: value }, { name: expected } as Partial<Character>, confirmation)}
                   dimension={{ label: '姓名', rows: 2 }}
                           className="w-full px-2 py-1 bg-bg-base border border-border rounded text-sm text-text-primary focus:outline-none focus:border-accent"
                         />
@@ -116,7 +119,8 @@ export default function CharacterExtraPanel({ project }: Props) {
                       <td className="px-3 py-1.5">
                         <CharacterDraftField input
                           value={c.firstAppearance}
-                          onCommit={(value, expected) => update(c.id!, { firstAppearance: value }, { firstAppearance: expected } as Partial<Character>)}
+                          character={c} field="firstAppearance"
+                          onCommit={(value, expected, confirmation) => update(c.id!, { firstAppearance: value }, { firstAppearance: expected } as Partial<Character>, confirmation)}
                   dimension={{ label: '首次出场', rows: 2 }}
                           placeholder="如：第 3 卷"
                           className="w-full px-2 py-1 bg-bg-base border border-border rounded text-sm text-text-primary focus:outline-none focus:border-accent"
@@ -125,7 +129,8 @@ export default function CharacterExtraPanel({ project }: Props) {
                       <td className="px-3 py-1.5">
                         <CharacterDraftField input
                           value={c.location}
-                          onCommit={(value, expected) => update(c.id!, { location: value }, { location: expected } as Partial<Character>)}
+                          character={c} field="location"
+                          onCommit={(value, expected, confirmation) => update(c.id!, { location: value }, { location: expected } as Partial<Character>, confirmation)}
                   dimension={{ label: '常驻地点', rows: 2 }}
                           placeholder="如：第 12 章"
                           className="w-full px-2 py-1 bg-bg-base border border-border rounded text-sm text-text-primary focus:outline-none focus:border-accent"
@@ -134,7 +139,8 @@ export default function CharacterExtraPanel({ project }: Props) {
                       <td className="px-3 py-1.5">
                         <CharacterDraftField input
                           value={c.storyRole}
-                          onCommit={(value, expected) => update(c.id!, { storyRole: value }, { storyRole: expected } as Partial<Character>)}
+                          character={c} field="storyRole"
+                          onCommit={(value, expected, confirmation) => update(c.id!, { storyRole: value }, { storyRole: expected } as Partial<Character>, confirmation)}
                   dimension={{ label: '在故事中的作用', rows: 2 }}
                           placeholder="如：路过的剑客 / 报信人"
                           className="w-full px-2 py-1 bg-bg-base border border-border rounded text-sm text-text-primary focus:outline-none focus:border-accent"
@@ -143,7 +149,8 @@ export default function CharacterExtraPanel({ project }: Props) {
                       <td className="px-3 py-1.5">
                         <CharacterDraftField input
                           value={c.ending}
-                          onCommit={(value, expected) => update(c.id!, { ending: value }, { ending: expected } as Partial<Character>)}
+                          character={c} field="ending"
+                          onCommit={(value, expected, confirmation) => update(c.id!, { ending: value }, { ending: expected } as Partial<Character>, confirmation)}
                   dimension={{ label: '结局走向', rows: 2 }}
                           placeholder="如：失踪 / 已死"
                           className="w-full px-2 py-1 bg-bg-base border border-border rounded text-sm text-text-primary focus:outline-none focus:border-accent"
@@ -184,7 +191,7 @@ export default function CharacterExtraPanel({ project }: Props) {
                         <td colSpan={6} className="px-3 py-3">
                           <CharacterDimensionFields
                             character={c}
-                            onChange={(patch, expected) => update(c.id!, patch, expected)}
+                            onChange={(patch, expected, confirmation) => update(c.id!, patch, expected, confirmation)}
                             exclude={TABLE_DIMS}
                           />
                         </td>
