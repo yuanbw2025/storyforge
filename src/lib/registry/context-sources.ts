@@ -52,7 +52,6 @@ import { readNarrativeCanonContextV1 } from '../world-engine/narrative-domain-co
 import { readStorylineProgressContext } from '../storyline/storyline-progress'
 import { readCodexExtractionBaselineContextV1 } from '../codex/extraction'
 import { readHistoryAgentBaselineContextV1 } from '../history/agent-baseline'
-import { readReferenceDerivedBaselineContextV1 } from '../reference-analysis/derived-agent-baseline'
 import {
   buildLongTermConsistencyDossierV1,
   formatLongTermConsistencyDossierV1,
@@ -2109,6 +2108,15 @@ async function readCharacterPassages(projectId: number, name?: string, worldGrou
 }
 
 export const CONTEXT_SOURCES: ContextSource[] = [
+  { key: 'workCoverMetadataV1', label: '封面作品元信息', scope: 'project', ownerFrom: 'work', layer: 'L0', budgetTokens: 4_000,
+    atomic: true, protectedFromTrim: true,
+    read: async input => { const loading = import('../work-cover/context'); const module = await (Dexie.currentTransaction ? Dexie.waitFor(loading) : loading); return module.readWorkCoverMetadataV1(input) } },
+  { key: 'workCoverBriefV1', label: '封面提示词', scope: 'project', ownerFrom: 'work', layer: 'L0', budgetTokens: 12_000,
+    atomic: true, protectedFromTrim: true,
+    read: async input => { const loading = import('../work-cover/context'); const module = await (Dexie.currentTransaction ? Dexie.waitFor(loading) : loading); return module.readWorkCoverBriefV1(input) } },
+  { key: 'workCoverSelectedTextV1', label: '作者选用的封面正文片段', scope: 'project', ownerFrom: 'work', layer: 'L0', budgetTokens: 12_000,
+    atomic: true, protectedFromTrim: true,
+    read: async input => { const loading = import('../work-cover/context'); const module = await (Dexie.currentTransaction ? Dexie.waitFor(loading) : loading); return module.readWorkCoverSelectedTextV1(input) } },
   { key: 'extensionRecords', label: '插件冻结任务与自有记录', scope: 'project', layer: 'L0', ownerFrom: 'work', budgetTokens: 24000, protectedFromTrim: true, atomic: true,
     enabled: input => Boolean(input.extensionSnapshot),
     read: async input => { const loading = import('../extensions/ai-registry'); const module = await (Dexie.currentTransaction ? Dexie.waitFor(loading) : loading); return module.readExtensionContext(input) } },
@@ -3422,11 +3430,15 @@ export const CONTEXT_SOURCES: ContextSource[] = [
       (input.referenceDerivedMode === 'summary' || input.referenceDerivedMode === 'characters')
       && Number.isInteger(input.referenceAnalysisRunId)
     ),
-    read: input => readReferenceDerivedBaselineContextV1({
-      scope: input.scope!,
-      mode: input.referenceDerivedMode!,
-      runId: input.referenceAnalysisRunId!,
-    }),
+    read: async input => {
+      const loading = import('../reference-analysis/derived-agent-baseline')
+      const { readReferenceDerivedBaselineContextV1 } = await (Dexie.currentTransaction ? Dexie.waitFor(loading) : loading)
+      return readReferenceDerivedBaselineContextV1({
+        scope: input.scope!,
+        mode: input.referenceDerivedMode!,
+        runId: input.referenceAnalysisRunId!,
+      })
+    },
   },
   {
     key: 'styleLearningBaseline',

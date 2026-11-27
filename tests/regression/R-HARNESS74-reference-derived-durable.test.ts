@@ -13,7 +13,7 @@ import { getAgentSkillV1 } from '../../src/lib/agent/skill-registry'
 import {
   parseReferenceDerivedResultStrictV1,
 } from '../../src/lib/reference-analysis/derived-agent-plan'
-import { readReferenceDerivedBaselineV1 } from '../../src/lib/reference-analysis/derived-agent-baseline'
+import { readReferenceDerivedBaselineContextV1, readReferenceDerivedBaselineV1 } from '../../src/lib/reference-analysis/derived-agent-baseline'
 import {
   abandonReferenceDerivedRunV1,
   adoptReferenceDerivedCandidateV1,
@@ -62,6 +62,29 @@ async function seed(suffix = '', status: 'active' | 'ready' = 'active') {
     projectId, worldId, workId, referenceId, analysisRunId,
   }
 }
+
+it('registered lazy baseline preserves both modes, transaction lifetime and Work isolation without writes', async () => {
+  await db.delete(); await db.open()
+  try {
+    const fixture = await seed('按需读取')
+    const source = CONTEXT_SOURCE_BY_KEY.get('referenceDerivedBaseline')!
+    const before = { references: await db.references.toArray(), runs: await db.referenceAnalysisRuns.toArray(), chunks: await db.referenceChunkAnalysis.toArray() }
+    for (const mode of ['summary', 'characters'] as const) {
+      const input = { projectId: fixture.projectId, scope: fixture.scope, referenceDerivedMode: mode, referenceAnalysisRunId: fixture.analysisRunId }
+      const expected = await readReferenceDerivedBaselineContextV1({ scope: fixture.scope, runId: fixture.analysisRunId, mode })
+      expect(await source.read(input)).toBe(expected)
+      await db.transaction('r', [db.references, db.referenceAnalysisRuns, db.referenceChunkAnalysis], async () => {
+        expect(await source.read(input)).toBe(expected)
+        expect(await db.referenceAnalysisRuns.get(fixture.analysisRunId)).toBeDefined()
+      })
+    }
+    const other = await seed('其它作品')
+    await expect(source.read({ projectId: other.projectId, scope: other.scope, referenceDerivedMode: 'summary', referenceAnalysisRunId: fixture.analysisRunId })).rejects.toThrow('不属于当前 Work')
+    expect(await db.references.where('projectId').equals(fixture.projectId).toArray()).toEqual(before.references)
+    expect(await db.referenceAnalysisRuns.where('projectId').equals(fixture.projectId).toArray()).toEqual(before.runs)
+    expect((await db.referenceChunkAnalysis.toArray()).filter(row => row.projectId === fixture.projectId)).toEqual(before.chunks)
+  } finally { db.close() }
+})
 
 it('summary baseline keeps late evidence and qualifications even with a shared opening', async () => {
   await db.delete(); await db.open()
