@@ -16,7 +16,7 @@ export default function DetailedSceneCard({ scene, index, onUpdate, onDelete }: 
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState('')
   const text = (key: 'title' | 'summary' | 'location' | 'conflict' | 'notes' | typeof DETAILED_SCENE_TASK_FIELDS[number]['key'], label: string, placeholder: string, input = false, rows = 2) => (
-    <AcknowledgedTextField label={`场景${index + 1} · ${label}`} value={scene[key]} placeholder={placeholder} input={input} rows={rows}
+    <AcknowledgedTextField markdownRead={!input} label={`场景${index + 1} · ${label}`} value={scene[key]} placeholder={placeholder} input={input} rows={rows}
       onCommit={(value, expected) => onUpdate({ [key]: value }, { [key]: expected })} />
   )
   const remove = async () => {

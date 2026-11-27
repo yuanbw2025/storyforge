@@ -3,6 +3,7 @@ import { CInput, CTextarea } from './CompositionInput'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useBeforeUnload } from '../../hooks/useBeforeUnload'
 import { registerPendingDraftFlusherV1 } from '../../lib/authoring/pending-edit-coordinator'
+import MarkdownReadView from './MarkdownReadView'
 
 export interface AcknowledgedTextFieldProps {
   label: string
@@ -15,9 +16,12 @@ export interface AcknowledgedTextFieldProps {
   choices?: ReadonlyArray<{ value: string; label: string }>
   placeholder?: string
   className?: string
+  markdownRead?: boolean
 }
 
-export default function AcknowledgedTextField({ label, rows, value, onCommit, input, inputType, autoGrow, choices, placeholder, className }: AcknowledgedTextFieldProps) {
+export default function AcknowledgedTextField({ label, rows, value, onCommit, input, inputType, autoGrow, choices, placeholder, className, markdownRead = false }: AcknowledgedTextFieldProps) {
+  const markdownEnabled = markdownRead && !input && !choices
+  const [reading, setReading] = useState(true)
   const readable = value === undefined || typeof value === 'string'
   const initial = typeof value === 'string' ? value : ''
   const [draft, setDraft] = useState(initial)
@@ -73,16 +77,26 @@ export default function AcknowledgedTextField({ label, rows, value, onCommit, in
   }, [flushDraft])
   useBeforeUnload(dirty.current || saving || composing || Boolean(error))
   if (!readable) return <div role="alert" className="flex-1 text-xs text-amber-400">{label}格式异常，原数据已保留；恢复前暂停此项编辑。</div>
+  const finishReading = (retry = false) => {
+    void flushDraft(retry).then(() => {
+      if (!dirty.current && !inFlight.current && !composingRef.current && !errorRef.current) setReading(true)
+    }).catch(() => undefined)
+  }
+  if (markdownEnabled && reading && draft.length > 0 && !dirty.current && !saving && !composing && !error) {
+    return <div className="flex-1 min-w-0 text-xs text-text-primary"><MarkdownReadView value={draft} onRequestEdit={() => setReading(false)} /></div>
+  }
   const controlProps = {
     value: draft,
     onChange: (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+      if (markdownEnabled) setReading(false)
       if (!dirty.current && !inFlight.current) editCommit.current = latestCommit.current
       const text = event.target.value
       draftRef.current = text; dirty.current = text !== baseline.current || Boolean(errorRef.current); setDraft(text)
       if (timer.current) clearTimeout(timer.current)
       if (!error) timer.current = setTimeout(() => { void flushDraft().catch(() => undefined) }, 400)
     },
-    onBlur: () => { if (!error) void flushDraft().catch(() => undefined) },
+    onBlur: () => { if (!errorRef.current) finishReading() },
+    autoFocus: markdownEnabled && !reading,
     placeholder: placeholder ?? `${label}…`,
     'aria-label': label,
     className: className ?? 'w-full px-2 py-1 bg-bg-base border border-border rounded text-xs text-text-primary resize-y focus:outline-none focus:border-accent',
@@ -92,7 +106,7 @@ export default function AcknowledgedTextField({ label, rows, value, onCommit, in
       {choices ? <select {...controlProps} disabled={saving}>{choices.map(choice => <option key={choice.value} value={choice.value}>{choice.label}</option>)}</select> : input ? <CInput {...controlProps} type={inputType} /> : autoGrow ? <AutoResizeTextarea {...controlProps} minRows={rows ?? 1} maxRows={10} /> : <CTextarea {...controlProps} rows={rows} />}
       <p role={saving ? 'status' : undefined} aria-hidden={!saving} className="min-h-4 text-xs text-text-muted">{saving ? '正在保存…' : '\u00a0'}</p>
       {error && <div role="alert" className="text-xs text-red-400">{error}；输入已保留。
-        <button type="button" onClick={() => { void flushDraft(true).catch(() => undefined) }} className="ml-2 underline">重试保存{label}</button>
+        <button type="button" onClick={() => finishReading(true)} className="ml-2 underline">重试保存{label}</button>
       </div>}
     </div>
   )

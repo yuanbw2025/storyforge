@@ -122,7 +122,7 @@ export function OutlineChapterRow({
           onCommit={(value, expected) => onUpdate(ch.id!, { title: value }, { expected: { title: expected as string } })}
           className="w-full bg-transparent text-text-primary text-sm font-medium outline-none"
         />
-        <AcknowledgedTextField autoGrow label="章节摘要" rows={1}
+        <AcknowledgedTextField markdownRead autoGrow label="章节摘要" rows={1}
           value={ch.summary}
           onCommit={(value, expected) => onUpdate(ch.id!, { summary: value }, { expected: { summary: expected as string } })}
           placeholder="章节摘要（可编辑，失焦自动保存）"
