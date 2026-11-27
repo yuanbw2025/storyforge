@@ -10,6 +10,8 @@ import { CInput } from '../shared/CompositionInput'
 import { CTextarea } from '../shared/CompositionInput'
 import { useDialog } from '../shared/Dialog'
 import AcknowledgedTextField from '../shared/AcknowledgedTextField'
+import { useAuthorRecordSavesV1 } from '../shared/AuthorRecordSaveScope'
+import type { LocalSaveAckV1, LocalSaveContractV1, LocalSaveIntentV1 } from '../../lib/authoring/local-save-evidence'
 import { useBeforeUnload } from '../../hooks/useBeforeUnload'
 import { acknowledgePendingEditFailureV1, capturePendingEditFailureV1, flushPendingEditsV1, registerPendingDraftFlusherV1, type PendingEditFailureTokenV1 } from '../../lib/authoring/pending-edit-coordinator'
 import type { Project, StoryArc, StoryArcType } from '../../lib/types'
@@ -482,8 +484,12 @@ export default function StoryArcPanel({ project, worldGroupId, initialRecordTarg
             arc={activeArc}
             stages={activeStages}
             targeted={activeArc.id === initialArcId}
-            onUpdateArc={(data, expected) => updateArc(activeArc.id!, data, loadedScope ?? undefined, expected)}
-            onEditStage={edit => editStage(activeArc.id!, edit, loadedScope ?? undefined)}
+            onUpdateArc={(data, expected, confirmation) => confirmation
+              ? updateArc(activeArc.id!, data, loadedScope ?? undefined, expected, confirmation)
+              : updateArc(activeArc.id!, data, loadedScope ?? undefined, expected)}
+            onEditStage={(edit, confirmation) => confirmation
+              ? editStage(activeArc.id!, edit, loadedScope ?? undefined, confirmation)
+              : editStage(activeArc.id!, edit, loadedScope ?? undefined)}
             onCommand={action => runAuthorAction(action)}
             onDelete={() => handleDeleteArc(activeArc.id!)}
             onGenerateKeyEvents={generateKeyEvents}
@@ -581,8 +587,8 @@ function StoryArcEditor({ arc, stages, targeted, onUpdateArc, onEditStage, onCom
   arc: NonNullable<ReturnType<typeof useStoryArcStore.getState>['arcs'][0]>
   stages: StoryStage[]
   targeted: boolean
-  onUpdateArc: (data: Partial<Pick<StoryArc, 'name' | 'description' | 'type'>>, expected?: Partial<Pick<StoryArc, 'name' | 'description' | 'type'>>) => Promise<void>
-  onEditStage: (edit: StoryStageEditV1) => Promise<void>
+  onUpdateArc: (data: Partial<Pick<StoryArc, 'name' | 'description' | 'type'>>, expected?: Partial<Pick<StoryArc, 'name' | 'description' | 'type'>>, confirmation?: LocalSaveIntentV1) => Promise<void | LocalSaveAckV1>
+  onEditStage: (edit: StoryStageEditV1, confirmation?: LocalSaveIntentV1) => Promise<void | LocalSaveAckV1>
   onCommand: (action: () => Promise<void>) => Promise<void>
   onDelete: () => void | Promise<void>
   onGenerateKeyEvents: (stage: StoryStage, allStages: StoryStage[], currentKeyEvents: string[]) => Promise<void>
@@ -590,6 +596,7 @@ function StoryArcEditor({ arc, stages, targeted, onUpdateArc, onEditStage, onCom
   isGeneratingEvents: boolean
   isSortingEvents: boolean
 }) {
+  const localSave = useAuthorRecordSavesV1('storyArcs', arc)
   const handleAddStage = () => {
     const newStage: StoryStage = {
       id: nanoid(8),
@@ -597,15 +604,16 @@ function StoryArcEditor({ arc, stages, targeted, onUpdateArc, onEditStage, onCom
       description: '',
       keyEvents: [],
     }
-    void onCommand(() => onEditStage({ kind: 'add', stage: newStage }))
+    void onCommand(async () => { await onEditStage({ kind: 'add', stage: newStage }) })
   }
 
-  const handleUpdateStage = (idx: number, data: Partial<Omit<StoryStage, 'id'>>, expected?: Partial<Omit<StoryStage, 'id'>>) => {
-    return onEditStage({ kind: 'patch', stageId: stages[idx].id, patch: data, expected })
+  const handleUpdateStage = (idx: number, data: Partial<Omit<StoryStage, 'id'>>, expected?: Partial<Omit<StoryStage, 'id'>>, confirmation?: LocalSaveIntentV1) => {
+    return confirmation ? onEditStage({ kind: 'patch', stageId: stages[idx].id, patch: data, expected }, confirmation)
+      : onEditStage({ kind: 'patch', stageId: stages[idx].id, patch: data, expected })
   }
 
   const handleDeleteStage = (idx: number) => {
-    void onCommand(() => onEditStage({ kind: 'remove', stageId: stages[idx].id, expected: stages[idx] }))
+    void onCommand(async () => { await onEditStage({ kind: 'remove', stageId: stages[idx].id, expected: stages[idx] }) })
   }
 
   return (
@@ -617,8 +625,8 @@ function StoryArcEditor({ arc, stages, targeted, onUpdateArc, onEditStage, onCom
       <div className="bg-bg-surface border border-border rounded-xl p-4">
         <div className="flex items-center gap-3 mb-3">
           <span className={`w-3 h-3 rounded-full ${arc.type === 'main' ? 'bg-amber-400' : 'bg-blue-400'}`} />
-          <AcknowledgedTextField input label="故事线名称" value={arc.name}
-            onCommit={(value, expected) => onUpdateArc({ name: value }, { name: expected as string })}
+          <AcknowledgedTextField localSave={localSave('name')} input label="故事线名称" value={arc.name}
+            onCommit={(value, expected, confirmation) => confirmation ? onUpdateArc({ name: value }, { name: expected as string }, confirmation) : onUpdateArc({ name: value }, { name: expected as string })}
             className="flex-1 text-lg font-bold bg-transparent text-text-primary border-none focus:outline-none"
           />
           <span className="text-xs px-2 py-0.5 bg-bg-elevated text-text-muted rounded">
@@ -628,8 +636,8 @@ function StoryArcEditor({ arc, stages, targeted, onUpdateArc, onEditStage, onCom
             <Trash2 className="w-4 h-4" />
           </button>
         </div>
-        <AcknowledgedTextField markdownRead label="故事线整体描述" rows={3} value={arc.description}
-          onCommit={(value, expected) => onUpdateArc({ description: value }, { description: expected as string })}
+        <AcknowledgedTextField localSave={localSave('description')} markdownRead label="故事线整体描述" rows={3} value={arc.description}
+          onCommit={(value, expected, confirmation) => confirmation ? onUpdateArc({ description: value }, { description: expected as string }, confirmation) : onUpdateArc({ description: value }, { description: expected as string })}
           placeholder="故事线整体描述..."
           className="w-full h-16 p-2 bg-bg-base border border-border rounded text-sm text-text-secondary resize-y focus:outline-none focus:border-accent"
         />
@@ -670,7 +678,8 @@ function StoryArcEditor({ arc, stages, targeted, onUpdateArc, onEditStage, onCom
             stage={stage}
             index={idx}
             total={stages.length}
-            onUpdate={(data, expected) => handleUpdateStage(idx, data, expected)}
+            localSave={localSave}
+            onUpdate={(data, expected, confirmation) => handleUpdateStage(idx, data, expected, confirmation)}
             onDelete={() => handleDeleteStage(idx)}
             onGenerateKeyEvents={onGenerateKeyEvents}
             onSortEvents={onSortEvents}
@@ -692,11 +701,12 @@ function StoryArcEditor({ arc, stages, targeted, onUpdateArc, onEditStage, onCom
 
 // ── 单个阶段卡片 ──
 
-function StageCard({ stage, index, total, onUpdate, onDelete, onGenerateKeyEvents, onSortEvents, isGeneratingEvents, isSortingEvents, allStages }: {
+function StageCard({ stage, index, total, onUpdate, onDelete, onGenerateKeyEvents, onSortEvents, isGeneratingEvents, isSortingEvents, allStages, localSave }: {
   stage: StoryStage
   index: number
   total: number
-  onUpdate: (data: Partial<Omit<StoryStage, 'id'>>, expected?: Partial<Omit<StoryStage, 'id'>>) => Promise<void>
+  localSave: (field: string, entryId?: string) => LocalSaveContractV1 | undefined
+  onUpdate: (data: Partial<Omit<StoryStage, 'id'>>, expected?: Partial<Omit<StoryStage, 'id'>>, confirmation?: LocalSaveIntentV1) => Promise<void | LocalSaveAckV1>
   onDelete: () => void
   onGenerateKeyEvents: (stage: StoryStage, allStages: StoryStage[], currentKeyEvents: string[]) => Promise<void>
   onSortEvents: (stage: StoryStage, allStages: StoryStage[], currentKeyEvents: string[]) => Promise<void>
@@ -750,7 +760,7 @@ function StageCard({ stage, index, total, onUpdate, onDelete, onGenerateKeyEvent
   }
 
   const removeEvent = (i: number) => {
-    void eventAction(() => onUpdate({ keyEvents: stage.keyEvents.filter((_, idx) => idx !== i) }, { keyEvents: stage.keyEvents }))
+    void eventAction(async () => { await onUpdate({ keyEvents: stage.keyEvents.filter((_, idx) => idx !== i) }, { keyEvents: stage.keyEvents }) })
   }
 
   const handleGenerateEvents = async () => {
@@ -768,14 +778,14 @@ function StageCard({ stage, index, total, onUpdate, onDelete, onGenerateKeyEvent
     if (i === 0) return
     const newEvents = [...stage.keyEvents]
     ;[newEvents[i - 1], newEvents[i]] = [newEvents[i], newEvents[i - 1]]
-    void eventAction(() => onUpdate({ keyEvents: newEvents }, { keyEvents: stage.keyEvents }))
+    void eventAction(async () => { await onUpdate({ keyEvents: newEvents }, { keyEvents: stage.keyEvents }) })
   }
 
   const moveEventDown = (i: number) => {
     if (i === stage.keyEvents.length - 1) return
     const newEvents = [...stage.keyEvents]
     ;[newEvents[i], newEvents[i + 1]] = [newEvents[i + 1], newEvents[i]]
-    void eventAction(() => onUpdate({ keyEvents: newEvents }, { keyEvents: stage.keyEvents }))
+    void eventAction(async () => { await onUpdate({ keyEvents: newEvents }, { keyEvents: stage.keyEvents }) })
   }
 
   const handleSortEvents = async () => {
@@ -831,17 +841,17 @@ function StageCard({ stage, index, total, onUpdate, onDelete, onGenerateKeyEvent
       {expanded && (
         <div className="p-3 pt-0 space-y-3 border-t border-border">
           {/* 标题 */}
-          <AcknowledgedTextField input label="故事阶段标题"
+          <AcknowledgedTextField localSave={localSave('stages.title', stage.id)} input label="故事阶段标题"
             value={stage.title}
-            onCommit={(value, expected) => onUpdate({ title: value }, { title: expected as string })}
+            onCommit={(value, expected, confirmation) => confirmation ? onUpdate({ title: value }, { title: expected as string }, confirmation) : onUpdate({ title: value }, { title: expected as string })}
             placeholder="阶段标题"
             className="w-full px-2 py-1.5 bg-bg-base border border-border rounded text-sm font-medium text-text-primary focus:outline-none focus:border-accent"
           />
 
           {/* 描述 */}
-          <AcknowledgedTextField markdownRead label="故事阶段描述" rows={4}
+          <AcknowledgedTextField localSave={localSave('stages.description', stage.id)} markdownRead label="故事阶段描述" rows={4}
             value={stage.description}
-            onCommit={(value, expected) => onUpdate({ description: value }, { description: expected as string })}
+            onCommit={(value, expected, confirmation) => confirmation ? onUpdate({ description: value }, { description: expected as string }, confirmation) : onUpdate({ description: value }, { description: expected as string })}
             placeholder="这个阶段发生什么..."
             className="w-full h-20 p-2 bg-bg-base border border-border rounded text-sm text-text-secondary resize-y focus:outline-none focus:border-accent"
           />
@@ -849,9 +859,9 @@ function StageCard({ stage, index, total, onUpdate, onDelete, onGenerateKeyEvent
           {/* 转折点 */}
           <div>
             <label className="text-xs text-text-muted mb-1 block">转折点（可选）</label>
-            <AcknowledgedTextField input label="故事阶段转折点"
+            <AcknowledgedTextField localSave={localSave('stages.turningPoint', stage.id)} input label="故事阶段转折点"
               value={stage.turningPoint}
-              onCommit={(value, expected) => onUpdate({ turningPoint: value || undefined }, { turningPoint: expected as string | undefined })}
+              onCommit={(value, expected, confirmation) => confirmation ? onUpdate({ turningPoint: value }, { turningPoint: expected as string | undefined }, confirmation) : onUpdate({ turningPoint: value || undefined }, { turningPoint: expected as string | undefined })}
               placeholder="这个阶段的关键转折..."
               className="w-full px-2 py-1.5 bg-bg-base border border-border rounded text-xs text-text-secondary focus:outline-none focus:border-accent"
             />

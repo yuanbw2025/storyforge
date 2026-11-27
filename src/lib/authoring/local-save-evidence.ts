@@ -45,10 +45,12 @@ export type LocalSaveHistoryIdentityV1 = WorkspaceScope & { worldGroupId: number
   | { table: 'historicalTimelineEvents' | 'historicalKeywords'; field: 'description' | 'conceptNote'; recordId: number }
 )
 export interface LocalSaveRecordIdentityV1 extends WorkspaceScope {
-  table: 'characters' | 'outlineNodes'
+  table: 'characters' | 'outlineNodes' | 'detailedOutlines' | 'storyArcs'
   field: string
   recordId: number
   worldGroupId: number | null
+  /** Stable scene/stage identity, never its mutable position in an array. */
+  entryId?: string
 }
 export type LocalSaveIdentityV1 = LocalSaveWorldviewIdentityV1 | LocalSaveStoryCoreIdentityV1 | LocalSaveCreativeRuleIdentityV1 | LocalSaveHistoryIdentityV1 | LocalSaveRecordIdentityV1
 export interface LocalSaveWitnessV1 {
@@ -81,7 +83,8 @@ export interface LocalSaveContractV1 {
 export function localSaveIdentityKeyV1(identity: LocalSaveIdentityV1): string {
   return JSON.stringify([identity.projectId, identity.worldId, identity.workId,
     identity.worldGroupId, identity.table, identity.field,
-    ...('recordId' in identity ? [identity.recordId] : [])])
+    ...('recordId' in identity ? [identity.recordId] : []),
+    ...('entryId' in identity ? [identity.entryId] : [])])
 }
 export function matchingLocalSaveAckV1(ack: unknown, intent: LocalSaveIntentV1, raw: string): ack is LocalSaveAckV1 {
   const value = ack as LocalSaveAckV1 | undefined

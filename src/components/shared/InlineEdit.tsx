@@ -178,14 +178,14 @@ function InlineSaveStatus({ error, saving, retry }: { error: string; saving: boo
   </>
 }
 
-export function InlineInput({ value, onChange, placeholder, className, prefix, suffix }: {
-  value: string; onChange: InlineSave; placeholder?: string; className?: string; prefix?: string; suffix?: string
+export function InlineInput({ value, onChange, placeholder, className, prefix, suffix, localSave, label }: {
+  value: string; onChange: InlineSave; placeholder?: string; className?: string; prefix?: string; suffix?: string; localSave?: LocalSaveContractV1; label?: string
 }) {
   const readable = value == null || typeof value === 'string'
-  const editor = useInlineDraft(typeof value === 'string' ? value : '', onChange, readable)
+  const editor = useInlineDraft(typeof value === 'string' ? value : '', onChange, readable, localSave)
   if (!readable) return <InvalidInlineValue value={value} draft={editor.editing ? editor.draft : undefined} />
   if (editor.editing) return <div className="min-w-0">
-    <input value={editor.draft} disabled={editor.saving}
+    <input value={editor.draft} disabled={editor.saving && !localSave} aria-label={label}
       onCompositionStart={() => { editor.composingRef.current = true }}
       onCompositionEnd={event => { editor.composingRef.current = false; editor.change(event.currentTarget.value) }}
       onChange={event => editor.change(event.target.value)} onBlur={editor.saveFromEvent}
@@ -195,11 +195,13 @@ export function InlineInput({ value, onChange, placeholder, className, prefix, s
         if (event.key === 'Enter') { event.preventDefault(); editor.saveFromEvent() }
       }} placeholder={placeholder} autoFocus
       className={`bg-transparent border-b border-accent/50 outline-none w-full ${className || ''}`} />
-    <InlineSaveStatus error={editor.error} saving={editor.saving} retry={editor.saveFromEvent} />
+    {localSave ? <LocalSaveStatus status={editor.localStatus} error={editor.error} retry={editor.saveFromEvent} retryLabel={label ? `重试保存${label}` : undefined} />
+      : <InlineSaveStatus error={editor.error} saving={editor.saving} retry={editor.saveFromEvent} />}
   </div>
-  return <div onClick={editor.begin} className={`cursor-text min-h-[1.2em] ${className || ''} ${value ? '' : 'opacity-40'}`}>
+  const readView = <div onClick={editor.begin} className={`cursor-text min-h-[1.2em] ${className || ''} ${value ? '' : 'opacity-40'}`}>
     {value ? <>{prefix}{value}{suffix}</> : placeholder || '点击编辑…'}
   </div>
+  return localSave ? <div className="min-w-0">{readView}<LocalSaveStatus status={editor.localStatus} error={editor.error} retry={editor.saveFromEvent} /></div> : readView
 }
 
 export function InlineTextarea({ value, onChange, placeholder, className, minRows = 2, maxRows = 16, inputAreaLayout, localSave, markdownRead = false }: {

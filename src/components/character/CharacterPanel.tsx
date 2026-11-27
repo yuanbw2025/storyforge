@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import type { LocalSaveIntentV1 } from '../../lib/authoring/local-save-evidence'
 import {
   Check, Plus, Sparkles, ChevronDown, Loader2, Trash2,
 } from 'lucide-react'
@@ -133,8 +134,12 @@ export default function CharacterPanel({ project, view = 'generator', initialCha
     setSelected(id)
   }
 
-  const handleUpdate = (field: keyof Character, value: string) => {
-    if (selectedChar?.id) return updateCharacter(selectedChar.id, { [field]: value }, { scope: loadedScope ?? undefined, expected: selectedChar })
+  const handleUpdate = (field: keyof Character, value: string, confirmation?: LocalSaveIntentV1) => {
+    if (confirmation && !loadedScope) return Promise.reject(new Error('原角色作用域尚未就绪，输入已保留。'))
+    if (selectedChar?.id) return confirmation
+      ? updateCharacter(selectedChar.id, { [field]: value }, { scope: loadedScope!, expected: selectedChar, confirmation })
+      : updateCharacter(selectedChar.id, { [field]: value }, { scope: loadedScope ?? undefined, expected: selectedChar })
+    if (confirmation) return Promise.reject(new Error('原角色记录已变化，输入已保留。'))
   }
 
   const handleAIGenerate = async () => {

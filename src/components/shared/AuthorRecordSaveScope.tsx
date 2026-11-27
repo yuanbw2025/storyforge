@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import type { WorkspaceScope } from '../../lib/types'
-import { readRecordTextWitnessesV1, type RecordTextTableV1 } from '../../lib/authoring/record-text-save-evidence'
+import { readRecordTextWitnessesV1, recordTextWitnessKeyV1, type RecordTextTableV1 } from '../../lib/authoring/record-text-save-evidence'
 import type { LocalSaveContractV1, LocalSaveWitnessV1 } from '../../lib/authoring/local-save-evidence'
 
 export const AuthorRecordSaveScopeV1 = createContext<WorkspaceScope | null>(null)
@@ -20,8 +20,8 @@ export function useAuthorRecordSavesV1(table: RecordTextTableV1, row?: { id?: nu
     }).catch(() => { if (active) setState({ key, witnesses: {} }) })
     return () => { active = false }
   }, [key, projectId, worldId, workId, table, row?.id, row?.updatedAt])
-  return (field: string): LocalSaveContractV1 | undefined => {
-    const witness = state?.key === key ? state.witnesses[field] : undefined
+  return (field: string, entryId?: string): LocalSaveContractV1 | undefined => {
+    const witness = state?.key === key ? state.witnesses[recordTextWitnessKeyV1(field, entryId)] : undefined
     return witness ? { identity: witness.identity, witness } : undefined
   }
 }
