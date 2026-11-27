@@ -14,7 +14,7 @@ export interface RecordTextRowV1 {
   id?: number; projectId: number; worldId?: number; workId?: number; worldGroupId?: number | null
   ragDocumentId?: string; updatedAt: number
 }
-const prefix = { characters: 'character', outlineNodes: 'outline-node', detailedOutlines: 'detailed-outline', storyArcs: 'story-arc' } as const
+const prefix = { characters: 'character', outlineNodes: 'outline-node', detailedOutlines: 'detailed-outline', storyArcs: 'story-arc', references: 'reference' } as const
 const sceneTexts = ['title', 'summary', 'location', 'conflict', 'notes', ...DETAILED_SCENE_TASK_FIELDS.map(({ key }) => key)]
 const stageTexts = ['title', 'description', 'turningPoint']
 export const recordTextWitnessKeyV1 = (field: string, entryId?: string) => entryId === undefined ? field : JSON.stringify([field, entryId])
@@ -38,6 +38,7 @@ function addressedValue(row: RecordTextRowV1, identity: LocalSaveRecordIdentityV
 }
 export function recordAuthorTextFieldsV1(table: RecordTextTableV1) {
   return (FIELD_BY_TARGET.get(table) ?? []).filter(spec => !spec.adoptionPolicy && !spec.field.startsWith('statusProducer')
+    && (table !== 'references' || spec.field === 'note')
     && ['string', 'longtext'].includes(spec.type)).map(spec => spec.field)
 }
 export function recordTextSaveRequestV1(table: RecordTextTableV1, id: number, patch: Record<string, unknown>,
