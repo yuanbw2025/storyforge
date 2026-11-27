@@ -293,7 +293,7 @@ function TextFieldEditor({
       </div>
 
       <div className="bg-bg-surface border border-border rounded-lg p-4">
-        <InlineTextarea inputAreaLayout={inputAreaLayoutV1(resizableInputs, worldviewInputAreaFieldV1(agentField))} value={value} onChange={onChange} placeholder={field.desc} />
+        <InlineTextarea markdownRead inputAreaLayout={inputAreaLayoutV1(resizableInputs, worldviewInputAreaFieldV1(agentField))} value={value} onChange={onChange} placeholder={field.desc} />
       </div>
       <WorldviewAgentControls
         field={agentField}
@@ -387,6 +387,7 @@ function DivineFieldEditor({
             <span className="w-24 shrink-0 text-xs text-text-muted pt-0.5 text-right">信仰层级</span>
             <div className="flex-1 min-w-0">
               <InlineTextarea
+                markdownRead
                 inputAreaLayout={inputAreaLayoutV1(resizableInputs, 'world.divineRank')}
                 value={divineDesign.divineRank}
                 onChange={v => onDivineChange({ divineRank: v })}
@@ -398,6 +399,7 @@ function DivineFieldEditor({
             <span className="w-24 shrink-0 text-xs text-text-muted pt-0.5 text-right">名号与职司</span>
             <div className="flex-1 min-w-0">
               <InlineTextarea
+                markdownRead
                 inputAreaLayout={inputAreaLayoutV1(resizableInputs, 'world.divineNames')}
                 value={divineDesign.divineNames}
                 onChange={v => onDivineChange({ divineNames: v })}
@@ -409,6 +411,7 @@ function DivineFieldEditor({
             <span className="w-24 shrink-0 text-xs text-text-muted pt-0.5 text-right">规则与禁忌</span>
             <div className="flex-1 min-w-0">
               <InlineTextarea
+                markdownRead
                 inputAreaLayout={inputAreaLayoutV1(resizableInputs, 'world.divineRules')}
                 value={divineDesign.divineRules}
                 onChange={v => onDivineChange({ divineRules: v })}

@@ -195,7 +195,7 @@ function ScopedNaturalPanel({ project, activeGroupId, resizableInputs = false, c
                 resizableInputs={resizableInputs}
                 field={f}
                 value={values[f.key] ?? ''}
-                markdownRead={confirmedLocalSaves}
+                markdownRead
                 localSave={confirmedLocalSaves ? {
                   identity: { ...authorScope, table: 'worldviews', field: f.key, worldGroupId: targetWorldGroupId },
                   witness: localSaveWitnesses[f.key] ?? null,
