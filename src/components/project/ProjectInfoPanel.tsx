@@ -36,10 +36,13 @@ export default function ProjectInfoPanel({ project, onUpdate }: ProjectInfoPanel
     description: '',
     targetWordCount: 500_000,
   })
-  const [formOwner, setFormOwner] = useState<{ scope: WorkspaceScope; title: string } | null>(null)
+  const [formOwner, setFormOwner] = useState<{ scope: WorkspaceScope; title: string; code: string } | null>(null)
   const formOwnerRef = useRef<typeof formOwner>(null)
   const lastSavedRef = useRef<{ scope: WorkspaceScope; fields: typeof form; updatedAt: number } | null>(null)
+  const [confirmedForm, setConfirmedForm] = useState<typeof form | null>(null)
   const [saving, setSaving] = useState(false)
+  const [composing, setComposing] = useState(false)
+  const composingRef = useRef(false)
   const [dirty, setDirty] = useState(false)
   const [error, setError] = useState('')
   const [modeSaving, setModeSaving] = useState(false)
@@ -52,11 +55,13 @@ export default function ProjectInfoPanel({ project, onUpdate }: ProjectInfoPanel
   const formRef = useRef(form)
   const pendingCount = useRef(0)
   const saveInFlight = useRef<{ snapshot: typeof form; promise: Promise<void> } | null>(null)
-  useBeforeUnload(dirty || saving)
+  useBeforeUnload(dirty || saving || composing)
   const changeForm = (next: typeof form) => {
     formRef.current = next
     dirtyRef.current = true
     setDirty(true)
+    setConfirmedForm(null)
+    setError('')
     setForm(next)
   }
   const [showGenreDropdown, setShowGenreDropdown] = useState(false)
@@ -65,7 +70,7 @@ export default function ProjectInfoPanel({ project, onUpdate }: ProjectInfoPanel
     if (!project.id || !activeWork?.id || !activeWork.worldId || activeWork.id !== project.activeWorkId || dirtyRef.current) return
     const saved = lastSavedRef.current
     if (saved?.scope.projectId === project.id && saved.scope.workId === activeWork.id
-      && (activeWork.updatedAt ?? 0) < saved.updatedAt
+      && (activeWork.updatedAt ?? 0) <= saved.updatedAt
       && JSON.stringify([activeWork.title, activeWork.description, activeWork.genres, activeWork.targetWordCount])
         !== JSON.stringify([saved.fields.title, saved.fields.description, saved.fields.genres, saved.fields.targetWordCount])) return
     const next = {
@@ -74,14 +79,18 @@ export default function ProjectInfoPanel({ project, onUpdate }: ProjectInfoPanel
       description: activeWork.description,
       targetWordCount: activeWork.targetWordCount,
     }
-    const owner = { scope: { projectId: project.id, worldId: activeWork.worldId, workId: activeWork.id }, title: activeWork.title }
+    const owner = { scope: { projectId: project.id, worldId: activeWork.worldId, workId: activeWork.id }, title: activeWork.title, code: activeWork.code }
     formOwnerRef.current = owner
     setFormOwner(owner)
     formRef.current = next
     setForm(next)
+    // useActiveWork supplies a scoped IndexedDB liveQuery result, not an
+    // optimistic store echo. Editing invalidates this exact displayed snapshot.
+    setConfirmedForm(next)
   }, [activeWork, project.activeWorkId, project.id, dirty])
 
   const handleSave = useCallback(async () => {
+    if (composingRef.current) throw new Error('输入法仍在组合文字，请完成输入后再保存作品信息。')
     if (!dirtyRef.current) return
     const owner = formOwnerRef.current
     if (!owner) {
@@ -96,15 +105,30 @@ export default function ProjectInfoPanel({ project, onUpdate }: ProjectInfoPanel
       try {
         const savedWork = await coordinatePendingEditV1({
           key: `work-info:${owner.scope.workId}`,
-          persist: () => updateActiveWork(owner.scope.projectId, snapshot, owner.scope),
+          persist: async () => {
+            await updateActiveWork(owner.scope.projectId, snapshot, owner.scope)
+            // Keep the readback within the original serialized write so a later
+            // draft cannot overtake its evidence. Promise resolution alone is
+            // not evidence that this exact form reached the original Work.
+            const persisted = await db.works.get(owner.scope.workId)
+            if (!persisted || persisted.id !== owner.scope.workId || persisted.projectId !== owner.scope.projectId
+              || persisted.worldId !== owner.scope.worldId || persisted.code !== owner.code
+              || persisted.title !== snapshot.title || persisted.description !== snapshot.description
+              || persisted.targetWordCount !== snapshot.targetWordCount
+              || JSON.stringify(persisted.genres) !== JSON.stringify(snapshot.genres)) {
+              throw new Error('本机记录尚未确认与当前内容一致，输入已保留，请重试保存')
+            }
+            return persisted
+          },
         })
-        lastSavedRef.current = { scope: owner.scope, fields: snapshot, updatedAt: savedWork?.updatedAt ?? Date.now() }
+        lastSavedRef.current = { scope: owner.scope, fields: snapshot, updatedAt: savedWork.updatedAt }
         if (formRef.current === snapshot) {
           dirtyRef.current = false
           setDirty(false)
+          setConfirmedForm(snapshot)
         }
       } catch (cause) {
-        setError(cause instanceof Error ? cause.message : '保存失败，请重试。')
+        if (formRef.current === snapshot) setError(cause instanceof Error ? cause.message : '保存失败，请重试。')
         throw cause
       } finally {
         pendingCount.current--
@@ -120,10 +144,10 @@ export default function ProjectInfoPanel({ project, onUpdate }: ProjectInfoPanel
 
   useEffect(() => registerPendingDraftFlusherV1(handleSave), [handleSave])
   useEffect(() => {
-    if (!dirty) return
+    if (!dirty || composing) return
     const timer = setTimeout(() => { void handleSave().catch(() => undefined) }, 700)
     return () => clearTimeout(timer)
-  }, [dirty, form, handleSave])
+  }, [dirty, form, handleSave, composing])
 
   const toggleGenre = (value: string) => {
     const current = formRef.current
@@ -143,7 +167,10 @@ export default function ProjectInfoPanel({ project, onUpdate }: ProjectInfoPanel
       .join(' · ') + (genres.length > 3 ? ` +${genres.length - 3}` : '')
   }
 
-  const ownerIsActive = formOwner?.scope.projectId === project.id && formOwner?.scope.workId === activeWork?.id
+  const ownerIsActive = formOwner?.scope.projectId === project.id && formOwner?.scope.workId === project.activeWorkId
+    && formOwner?.scope.workId === activeWork?.id && formOwner?.scope.worldId === activeWork?.worldId
+  const saveStatus = composing ? 'dirty' : error ? 'failed' : saving ? 'saving' : dirty ? 'dirty'
+    : ownerIsActive && confirmedForm === form ? 'saved' : 'unconfirmed'
 
   const toggleMultiWorld = async () => {
     const owner = formOwnerRef.current
@@ -170,7 +197,7 @@ export default function ProjectInfoPanel({ project, onUpdate }: ProjectInfoPanel
         <h2 className="text-xl font-bold text-text-primary">基本信息</h2>
         <button
           onClick={() => { void handleSave().catch(() => undefined) }}
-          disabled={saving || !formOwner}
+          disabled={saving || composing || !formOwner}
           className="flex items-center gap-2 px-4 py-2 bg-accent text-white rounded-lg hover:bg-accent-hover disabled:opacity-50 transition-colors text-sm font-medium"
         >
           <Save className="w-4 h-4" />
@@ -178,13 +205,17 @@ export default function ProjectInfoPanel({ project, onUpdate }: ProjectInfoPanel
         </button>
       </div>
 
-      <p role={error ? 'alert' : 'status'} className={`mb-4 text-xs ${error ? 'text-error' : 'text-text-muted'}`}>
-        {error ? `未保存：${error}。内容仍保留，请点击保存重试。` : saving ? '正在保存…' : dirty ? '有修改，稍后自动保存；切换步骤时会先保存。' : '修改后自动保存'}
+      <p role={error ? 'alert' : 'status'} data-work-info-save-status={saveStatus}
+        title="已保存到本机表示数据库已确认；在同一浏览器、同一站点重开可保留。云同步和外部备份需分别完成。"
+        className={`mb-4 min-h-4 text-xs ${error ? 'text-error' : 'text-text-muted'}`}>
+        {composing ? '正在输入，完成后自动保存。' : error ? `未保存：${error}。内容仍保留，请点击保存重试。` : saving ? '正在保存…' : dirty ? '有修改，稍后自动保存；切换步骤时会先保存。' : saveStatus === 'saved' ? '已保存到本机' : '正在读取本机保存状态…'}
       </p>
 
       {dirty && formOwner && !ownerIsActive && <p role="status" className="mb-3 text-xs text-warning">已保留《{formOwner.title}》的改动，将先保存到该作品，再显示当前作品的信息。</p>}
 
-      <fieldset disabled={!ownerIsActive || !activeWork || activeWork.id !== project.activeWorkId} className="space-y-5">
+      <fieldset disabled={!ownerIsActive || !activeWork || activeWork.id !== project.activeWorkId} className="space-y-5"
+        onCompositionStartCapture={() => { composingRef.current = true; setComposing(true) }}
+        onCompositionEndCapture={() => { composingRef.current = false; setComposing(false) }}>
         <div>
           <label className="block text-sm text-text-secondary mb-1.5">作品名称</label>
           <input
