@@ -264,20 +264,31 @@ export const useWorldviewStore = create<WorldviewStore>((set, get) => ({
       key: `worldview:${projectId}:${targetWorldGroupId ?? 'default'}`,
       persist: async () => {
         const scope = await scopePromise
-        const list = await readOwnedRows<Worldview>(scope, 'worldviews', { owner: 'world' })
-        const target = list.find(row => (row.worldGroupId ?? null) === targetWorldGroupId)
-        const merged = mergeAuthorWorldviewObjects(target, { ...patch })
-        const result = await adopt({
-          projectId, scope, worldGroupId: targetWorldGroupId, target: 'worldviews', mode: 'replace',
-          ...(target?.id != null ? { recordId: target.id, preserveAuthorText: true } : {}),
-          data: merged,
+        const tables = scopeTransactionTables(...adoptionTransactionTablesV1('worldviews', patch, { callerOwned: true }), db.worldGroups)
+        const saved = await db.transaction('rw', tables, () => {
+          const owned = { transaction: Dexie.currentTransaction! }
+          return Dexie.Promise.resolve(Dexie.waitFor(readOwnedRows<Worldview>(scope, 'worldviews', { owner: 'world' }))).then(list => {
+            const target = list.find(row => (row.worldGroupId ?? null) === targetWorldGroupId)
+            const merged = mergeAuthorWorldviewObjects(target, { ...patch })
+            const base = { projectId, scope, worldGroupId: targetWorldGroupId, target: 'worldviews', mode: 'replace' as const, data: merged }
+            if (target?.id != null) return Dexie.Promise.resolve(adopt({ ...base, recordId: target.id, preserveAuthorText: true }, owned))
+              .then(result => { requireWritten(result, Object.keys(merged)); return target.id! })
+            // Admission first creates the registered row. Preserve the author's
+            // exact Markdown before that same transaction becomes observable.
+            return Dexie.Promise.resolve(adopt(base, owned)).then(created => {
+              requireWritten(created, Object.keys(merged))
+              if (created.written.length !== 1) throw new Error('世界设定首建记录不唯一。')
+              const id = created.written[0].id
+              return Dexie.Promise.resolve(adopt({ ...base, recordId: id, preserveAuthorText: true }, owned))
+                .then(exact => { requireWritten(exact, Object.keys(merged)); return id })
+            })
+          })
         })
-        requireWritten(result, Object.keys(merged))
         const next = (await readOwnedRows<Worldview>(scope, 'worldviews', { owner: 'world' }))
           .find(row => (row.worldGroupId ?? null) === targetWorldGroupId) ?? null
         const current = get()
         if (sameScope(current.loadedScope, scope) && (current.activeWorldGroupId === targetWorldGroupId
-          || (current.activeWorldGroupId == null && target?.id != null && current.worldview?.id === target.id))) set({ worldview: next, localSaveWitnesses: {} })
+          || (current.activeWorldGroupId == null && current.worldview?.id === saved))) set({ worldview: next, localSaveWitnesses: {} })
       },
     })
   }) as SaveWorldview,

@@ -297,7 +297,7 @@ function HumanityFieldEditor({
       </div>
 
       <div className="bg-bg-surface border border-border rounded-xl p-4">
-        <InlineTextarea inputAreaLayout={inputAreaLayoutV1(resizableInputs, worldviewInputAreaFieldV1(meta.field))} value={value} onChange={onChange} placeholder={meta.description} />
+        <InlineTextarea markdownRead inputAreaLayout={inputAreaLayoutV1(resizableInputs, worldviewInputAreaFieldV1(meta.field))} value={value} onChange={onChange} placeholder={meta.description} />
       </div>
       <WorldviewAgentControls
         field={meta.field}

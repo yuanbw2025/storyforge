@@ -237,9 +237,11 @@ export function InlineTextarea({ value, onChange, placeholder, className, minRow
     {localSave ? <LocalSaveStatus status={editor.localStatus} error={editor.error} retry={editor.saveFromEvent} />
       : <InlineSaveStatus error={editor.error} saving={editor.saving} retry={editor.saveFromEvent} />}
   </div>
-  const readView = markdownRead && localSave && typeof value === 'string' && value.length > 0
+  // Reading is presentation only. Explicit consumers may use the verified
+  // domain writer without opting into Natural's separate saved-status contract.
+  const readView = markdownRead && typeof value === 'string' && value.length > 0
     ? <div className="min-w-0 text-sm text-text-primary leading-relaxed"><MarkdownReadView
-        key={localSaveIdentityKeyV1(localSave.identity)} value={value}
+        key={localSave ? localSaveIdentityKeyV1(localSave.identity) : undefined} value={value}
         onRequestEdit={original => { if (original === value) editor.begin() }} /></div>
     : <div onClick={editor.begin} className={`text-sm cursor-text py-0.5 ${value ? 'text-text-primary leading-relaxed whitespace-pre-wrap' : 'text-text-muted/40'}`}>
     {value || placeholder || '点击编辑…'}
