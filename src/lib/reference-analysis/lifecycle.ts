@@ -1,4 +1,4 @@
-import Dexie, { type Table } from 'dexie'
+import Dexie, { type Table, type Transaction } from 'dexie'
 import { parseLegacyIdArray } from '../utils/legacy-id-array'
 import { db } from '../db/schema'
 import { sha256Text } from '../ai/chapter-memory/text-normalization'
@@ -16,6 +16,8 @@ import type {
 import { ANALYSIS_DIMENSIONS } from '../types/reference'
 import type { ChunkPlan } from '../import/chunker'
 import type { WorkspaceScope } from '../types/world-ownership'
+import { resolveHistoryWorkAuthorScopeV1 } from '../workspace/ownership'
+import { encodeReferenceSourceReaderV1, readReferenceSourceChunkV1, referenceSourcePlanV1, type ReferenceSourceReaderV1 } from './source-storage'
 import {
   assertRecordInScope,
   readOwnedRows,
@@ -44,6 +46,8 @@ export interface CreateReferenceAnalysisRunInput {
   rightsConfirmed: boolean
   sourceText?: string
   sourceChunks?: ChunkPlan[]
+  sourceReader?: ReferenceSourceReaderV1
+  signal?: AbortSignal
 }
 
 function constrainUsageScope(
@@ -65,19 +69,24 @@ async function requireReference(referenceId: number): Promise<{ ref: Reference; 
   return { ref, scope }
 }
 
-async function requireRun(runId: number): Promise<{
+async function requireRun(runId: number, transaction?: Transaction): Promise<{
   run: ReferenceAnalysisRun
   ref: Reference
   scope: WorkspaceScope
 }> {
-  const existingRecord = await db.referenceAnalysisRuns.get(runId)
+  const runs = transaction?.table<ReferenceAnalysisRun, number>(db.referenceAnalysisRuns.name) ?? db.referenceAnalysisRuns
+  const references = transaction?.table<Reference, number>(db.references.name) ?? db.references
+  const existingRecord = await runs.get(runId)
   if (!existingRecord?.id) throw new Error('分析版本不存在')
-  const scope = await resolveScopeLike(existingRecord.projectId)
-  const run = await db.referenceAnalysisRuns.get(runId)
+  const project = transaction ? await transaction.table(db.projects.name).get(existingRecord.projectId) : undefined
+  const scope = transaction
+    ? await resolveHistoryWorkAuthorScopeV1({ projectId: existingRecord.projectId, worldId: project?.activeWorldId, workId: project?.activeWorkId }, transaction)
+    : await resolveScopeLike(existingRecord.projectId)
+  const run = await runs.get(runId)
   if (!run?.id || !await assertRecordInScope(scope, 'referenceAnalysisRuns', run, { owner: 'work' })) {
     throw new Error('分析版本不存在或不属于当前作品')
   }
-  const ref = await db.references.get(run.referenceId)
+  const ref = await references.get(run.referenceId)
   if (!ref?.id || !await assertRecordInScope(scope, 'references', ref, { owner: 'work' })) {
     throw new Error('分析版本引用的参考资料不存在或越过当前作品')
   }
@@ -94,10 +103,22 @@ export async function createReferenceAnalysisRun(
   input: CreateReferenceAnalysisRunInput,
   firstStart?: ReferenceAnalysisFirstStartGuardV1,
 ): Promise<ReferenceAnalysisRun> {
+  const reader = input.sourceReader
+  input = { ...input, ...(reader ? { sourceReader: {
+    chunks: reader.chunks.map(({ index, startChar, endChar, charCount, label }) => ({ index, startChar, endChar, charCount, label })),
+    read: reader.read.bind(reader),
+  } } : {}) }
+  input.signal?.throwIfAborted()
   const { ref, scope } = await requireReference(input.referenceId)
   if (!input.sourceFilename.trim()) throw new Error('来源文件名不能为空')
   if (!input.fileHash.trim()) throw new Error('来源文件哈希不能为空')
   if (input.totalChars <= 0 || input.expectedChunks <= 0) throw new Error('来源文本或分块计划为空')
+  if (input.sourceReader && (input.depth !== 'deep' || input.sourceText != null || input.sourceChunks != null
+    || input.sourceReader.chunks.length !== input.expectedChunks)) throw new Error('逐块来源必须匹配原深层分析计划。')
+  const encoded = input.sourceReader ? await encodeReferenceSourceReaderV1(input.sourceReader, input.signal) : undefined
+  if (encoded?.chunks.some(chunk => chunk.index >= input.expectedChunks || chunk.endChar > input.totalChars))
+    throw new Error('逐块来源超出原深层分析计划。')
+  input.signal?.throwIfAborted()
 
   const existing = firstStart ? [] : (await readOwnedRows<ReferenceAnalysisRun>(scope, 'referenceAnalysisRuns', { owner: 'work' }))
     .filter(run => run.referenceId === ref.id)
@@ -126,9 +147,19 @@ export async function createReferenceAnalysisRun(
 
   const runId = await db.transaction(
     'rw',
-    [...new Set([db.referenceAnalysisRuns, db.referenceAnalysisSources, ...(firstStart?.transactionTables ?? [])])],
+    [...new Set([...(encoded ? scopeTransactionTables(db.references, db.referenceAnalysisRuns, db.referenceAnalysisSources)
+      : [db.referenceAnalysisRuns, db.referenceAnalysisSources]), ...(firstStart?.transactionTables ?? [])])],
     async () => {
       const transaction = Dexie.currentTransaction!
+      if (encoded) {
+        input.signal?.throwIfAborted()
+        await resolveHistoryWorkAuthorScopeV1(scope, transaction)
+        const project = await transaction.table(db.projects.name).get(scope.projectId)
+        const current = await transaction.table<Reference, number>(db.references.name).get(input.referenceId)
+        if (project?.activeWorldId !== scope.worldId || project?.activeWorkId !== scope.workId || !current
+          || !await assertRecordInScope(scope, 'references', current, { owner: 'work' }))
+          throw new Error('来源读取期间已切换作品，未创建分析版本。')
+      }
       let claimedImport = false
       if (firstStart) {
         if (await db.referenceAnalysisRuns.where('referenceId').equals(ref.id!).count() !== 0)
@@ -144,8 +175,8 @@ export async function createReferenceAnalysisRun(
       }
       const runs = firstStart ? transaction.table<ReferenceAnalysisRun, number>(db.referenceAnalysisRuns.name) : db.referenceAnalysisRuns
       const id = await runs.add(row) as number
-      if (input.sourceText != null || input.sourceChunks?.length) {
-        const chunks = input.sourceChunks?.length
+      if (encoded || input.sourceText != null || input.sourceChunks?.length) {
+        const chunks = encoded?.chunks ?? (input.sourceChunks?.length
           ? input.sourceChunks
           : [{
               index: 0,
@@ -154,12 +185,13 @@ export async function createReferenceAnalysisRun(
               charCount: input.sourceText!.length,
               label: '全书',
               text: input.sourceText!,
-            }]
+            }])
         const source = stampNewRecord(scope, 'referenceAnalysisSources', {
           analysisRunId: id,
           filename: row.sourceFilename,
           fileHash: row.fileHash,
           chunks,
+          ...(encoded ? { sourceStorageV1: encoded.sourceStorageV1 } : {}),
           ...(input.rightsConfirmed || (input.depth === 'deep' && claimedImport) ? {
             referencePrivateExecutionV1: input.rightsConfirmed ? 'rights-confirmed' as const : 'import-analysis-only' as const,
           } : {}),
@@ -206,25 +238,38 @@ export async function getReferenceAnalysisRunChunks(
 }
 
 export async function readReferenceAnalysisSource(runId: number): Promise<string | undefined> {
+  const chunks = await readReferenceAnalysisChunks(runId)
+  return chunks?.map(chunk => chunk.text).join('\n\n')
+}
+
+async function readOwnedReferenceSourceV1(runId: number) {
   const run = await db.referenceAnalysisRuns.get(runId)
   if (!run) return undefined
   const scope = await resolveReadScopeLike(run.projectId)
   if (!await assertRecordInScope(scope, 'referenceAnalysisRuns', run, { owner: 'work' })) return undefined
   const source = await db.referenceAnalysisSources.get(runId)
   return source && await assertRecordInScope(scope, 'referenceAnalysisSources', source, { owner: 'work' })
-    ? source.chunks.map(chunk => chunk.text).join('\n\n')
+    ? source
     : undefined
 }
 
 export async function readReferenceAnalysisChunks(runId: number): Promise<ChunkPlan[] | undefined> {
-  const run = await db.referenceAnalysisRuns.get(runId)
-  if (!run) return undefined
-  const scope = await resolveReadScopeLike(run.projectId)
-  if (!await assertRecordInScope(scope, 'referenceAnalysisRuns', run, { owner: 'work' })) return undefined
-  const source = await db.referenceAnalysisSources.get(runId)
-  return source && await assertRecordInScope(scope, 'referenceAnalysisSources', source, { owner: 'work' })
-    ? source.chunks
-    : undefined
+  const source = await readOwnedReferenceSourceV1(runId)
+  if (!source) return undefined
+  const chunks: ChunkPlan[] = []
+  for (const plan of source.chunks) chunks.push((await readReferenceSourceChunkV1(source, plan.index))!)
+  return chunks
+}
+
+/** Runtime plans contain metadata only; decode the selected source on demand. */
+export async function readReferenceAnalysisChunkPlanV1(runId: number) {
+  const source = await readOwnedReferenceSourceV1(runId)
+  return source ? referenceSourcePlanV1(source) : undefined
+}
+
+export async function readReferenceAnalysisChunkV1(runId: number, index: number) {
+  const source = await readOwnedReferenceSourceV1(runId)
+  return source ? readReferenceSourceChunkV1(source, index) : undefined
 }
 
 export interface ReferenceChunkRunLinkV1 {
@@ -243,9 +288,9 @@ function localSourceTable() {
   return db.table<LocalReferenceSource, number>(db.referenceAnalysisSources.name)
 }
 
-async function hasConfirmedImportChunk(scope: WorkspaceScope, ref: Reference, run: ReferenceAnalysisRun, chunk: ChunkPlan) {
+async function hasConfirmedImportChunk(scope: WorkspaceScope, ref: Reference, run: ReferenceAnalysisRun, chunk: ChunkPlan, transaction?: Transaction) {
   if (ref.importSessionId == null || run.sourceKind !== 'unknown' || run.usageScope !== 'analysis-only') return false
-  const session = await db.importSessions.get(ref.importSessionId)
+  const session = await (transaction?.table(db.importSessions.name) ?? db.importSessions).get(ref.importSessionId)
   if (!session || session.importTarget !== 'reference' || session.analysisDepth !== 'deep' || session.status !== 'done' ||
     session.referenceAnalysisStartedAt == null || session.publishedReferenceId !== ref.id || session.fileHash !== run.fileHash ||
     session.projectId !== scope.projectId || session.targetScope?.projectId !== scope.projectId ||
@@ -257,30 +302,39 @@ async function hasConfirmedImportChunk(scope: WorkspaceScope, ref: Reference, ru
   if (!original || original.status !== 'done' || original.index !== chunk.index ||
     original.startChar !== chunk.startChar || original.endChar !== chunk.endChar || original.charCount !== chunk.charCount ||
     link?.runId == null || !receipt || receipt.runId !== link.runId || receipt.verifierSetVersion !== 'document-import-terminal-v1') return false
-  const parser = await db.agentRuns.get(link.runId)
+  const parser = await (transaction?.table(db.agentRuns.name) ?? db.agentRuns).get(link.runId)
   if (!parser || parser.projectId !== scope.projectId || parser.workId !== scope.workId ||
     parser.terminalReceiptHash !== receipt.receiptHash || parser.contractHash !== receipt.contractHash) return false
-  const [sourceHash, validReceipt] = await Dexie.waitFor(Promise.all([
+  const [sourceHash, validReceipt] = await Promise.all([
     sha256Text(chunk.text),
     import('../agent/run/verification-receipt').then(module => module.verifyVerificationReceiptIntegrityV1(receipt)),
-  ]))
+  ])
   return validReceipt && original.sourceTextHash === sourceHash
 }
 
 /** Only the physical Harness link lives on the existing private source.
  * Attempt state, exact response and usage remain in the Harness event ledger. */
-export async function readReferenceChunkAuthorityV1(scope: WorkspaceScope, runId: number, chunkIndex: number) {
-  const { run, ref, scope: actual } = await requireRun(runId)
+export function readReferenceChunkAuthorityV1(scope: WorkspaceScope, runId: number, chunkIndex: number) {
+  const transaction = Dexie.currentTransaction
+  const reading = readReferenceChunkAuthorityInScopeV1(scope, runId, chunkIndex, transaction)
+  // Keep the entire authority operation alive, not just the Blob read. Native
+  // Blob/crypto continuations must not let the caller's write commit early.
+  return transaction ? Dexie.waitFor(reading) : reading
+}
+
+async function readReferenceChunkAuthorityInScopeV1(scope: WorkspaceScope, runId: number, chunkIndex: number, transaction?: Transaction) {
+  const { run, ref, scope: actual } = await requireRun(runId, transaction)
   if (scope.projectId !== actual.projectId || scope.worldId !== actual.worldId || scope.workId !== actual.workId)
     throw new Error('参考分析不属于当前作品。')
-  const source = await localSourceTable().get(runId)
-  const chunk = source?.chunks.find(row => row.index === chunkIndex)
-  if (!source || source.fileHash !== run.fileHash || !chunk
+  const source = await (transaction?.table<LocalReferenceSource, number>(db.referenceAnalysisSources.name) ?? localSourceTable()).get(runId)
+  if (!source || source.fileHash !== run.fileHash
     || !await assertRecordInScope(actual, 'referenceAnalysisSources', source, { owner: 'work' }))
     throw new Error('参考分析原文已变化、丢失或切换作品。')
+  const chunk = await readReferenceSourceChunkV1(source, chunkIndex, false)
+  if (!chunk) throw new Error('参考分析原文分块已丢失。')
   const confirmed = source.referencePrivateExecutionV1 === 'rights-confirmed' && run.rightsConfirmed
   const importedAnalysisOnly = source.referencePrivateExecutionV1 === 'import-analysis-only' &&
-    await hasConfirmedImportChunk(actual, ref, run, chunk)
+    await hasConfirmedImportChunk(actual, ref, run, chunk, transaction)
   if (!confirmed && !importedAnalysisOnly)
     throw new Error('旧版本没有可核实的请求授权，不能续发。请核对后新建分析版本。')
   const latest = [...(source.durableChunkRunsV1 ?? [])].reverse().find(row => row.chunkIndex === chunkIndex)
@@ -292,7 +346,7 @@ export async function writeReferenceChunkRunLinkV1(
   expected: ReferenceChunkRunLinkV1 | undefined, next: ReferenceChunkRunLinkV1,
 ): Promise<void> {
   const sources = localSourceTable()
-  await db.transaction('rw', scopeTransactionTables(db.referenceAnalysisRuns, db.references, db.importSessions, db.agentRuns, sources), async () => {
+  await db.transaction('rw', scopeTransactionTables(db.referenceAnalysisRuns, db.references, db.importSessions, db.agentRuns, sources), async transaction => {
     const current = await readReferenceChunkAuthorityV1(scope, runId, chunk.index)
     const latest = current.latest
     if (current.chunk.text !== chunk.text || current.chunk.startChar !== chunk.startChar ||
@@ -308,7 +362,7 @@ export async function writeReferenceChunkRunLinkV1(
         throw new Error('参考分析 Harness 与原请求凭据不匹配。')
       links[links.findIndex(row => row.claimKey === latest.claimKey)] = next
     }
-    if (await sources.update(runId, { durableChunkRunsV1: links }) !== 1) throw new Error('参考分析原文已删除。')
+    if (await sources.update.bind(transaction.table<LocalReferenceSource, number>(sources.name))(runId, { durableChunkRunsV1: links }) !== 1) throw new Error('参考分析原文已删除。')
   })
 }
 

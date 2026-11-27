@@ -217,6 +217,8 @@ export interface ReferenceAnalysisSource {
   workId: number
   filename: string
   fileHash: string
+  /** New streamed originals preserve exact UTF-16 code units in local Blobs. */
+  sourceStorageV1?: 'utf16le-blob-chunks'
   chunks: Array<{
     index: number
     startChar: number
@@ -224,6 +226,8 @@ export interface ReferenceAnalysisSource {
     charCount: number
     label?: string
     text: string
+    textBlobV1?: Blob
+    textHashV1?: string
   }>
   createdAt: number
 }
