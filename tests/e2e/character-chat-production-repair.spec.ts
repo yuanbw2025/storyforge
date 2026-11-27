@@ -15,7 +15,7 @@ for (const failure of ['opening', 'review-output-limit'] as const) test(failure 
     const review = prompt.includes('开场的语义审查者')
     const limited = failure === 'review-output-limit' && review && requests.length === 2
     if (review) {
-      expect(body.max_tokens).toBe(10_000)
+      expect(body.max_tokens).toBeUndefined()
       expect(prompt).not.toContain('REJECTED_REVIEW_NOT_SOURCE')
       expect(prompt).not.toContain('storyforge.product-production.repair-feedback')
     }

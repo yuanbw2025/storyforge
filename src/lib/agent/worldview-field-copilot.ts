@@ -335,14 +335,8 @@ export function resolveWorldviewFieldOutputBudgetV1(input: {
   if (!capability) throw new Error(`世界基座字段 ${input.targetField} 缺少可生成能力声明。`)
   const capacity = getModelCapacityV1(input.config)
   const modelCapTokens = capacity.confidence !== 'fallback' && capacity.outputLimitSource !== 'policy' ? capacity.outputLimit : 0
-  const authorConfigCapTokens = Math.max(0, input.config.maxTokens)
-  const requestedTokens = input.requestedMaxTokens ?? authorConfigCapTokens
-  if (!Number.isSafeInteger(requestedTokens) || requestedTokens < 0) throw new Error('世界基座输出长度必须是非负整数 token；0 表示自动。')
-  const knownCaps = [modelCapTokens, authorConfigCapTokens].filter(value => value > 0)
-  const effectiveCapTokens = knownCaps.length ? Math.min(...knownCaps) : 0
-  return { version: 1, source: input.requestedMaxTokens == null ? 'default' : 'author-custom', requestedTokens,
-    effectiveMaxTokens: requestedTokens > 0 ? Math.min(requestedTokens, effectiveCapTokens || Infinity) : effectiveCapTokens,
-    effectiveCapTokens, modelCapTokens, authorConfigCapTokens,
+  return { version: 1, source: 'default', requestedTokens: 0,
+    effectiveMaxTokens: modelCapTokens, effectiveCapTokens: modelCapTokens, modelCapTokens, authorConfigCapTokens: 0,
     schemaCapTokens: 0, skillCapTokens: 0, longOutputMode: 'service-capacity' }
 
 }

@@ -57,7 +57,7 @@ test('a tiny legacy policy value does not cap the complete JSON envelope', async
   })
   const { result, deliveredTokens } = await runCompression(page, 8)
   expect(requests).toHaveLength(1)
-  expect(requests[0].max_tokens).toBeGreaterThan(8)
+  expect(requests[0].max_tokens).not.toBe(8)
   expect(result.compression).toMatchObject({ outcome: 'verified', attempts: 1, requiredAnchorCount: 3, coveredAnchorCount: 3 })
   expect(deliveredTokens).toBeLessThanOrEqual(1000)
 })

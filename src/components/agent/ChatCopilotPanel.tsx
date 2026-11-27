@@ -70,7 +70,6 @@ export default function ChatCopilotPanel({
   const [mobilePane, setMobilePane] = useState<'dialogue' | 'draft'>('dialogue')
   const [elapsed, setElapsed] = useState(0)
   const [showCompanionSettings, setShowCompanionSettings] = useState(false)
-  const [overflowTranscript, setOverflowTranscript] = useState('')
   const companionVisible = useCompanionStore((state) => state.preferences.visible)
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const followLatest = useRef(true)
@@ -81,13 +80,12 @@ export default function ChatCopilotPanel({
     copilot.loading, copilot.busy, latestReply,
     (text) => {
       const combined = [copilot.authorRequest.trim(), text].filter(Boolean).join('\n')
-      if (combined.length <= 2000) copilot.setAuthorRequest(combined)
-      else setOverflowTranscript(text)
+      copilot.setAuthorRequest(combined)
     },
   )
   const pose = companionPose(voice.state.phase, copilot.busy, copilot.pendingCandidates.length > 0, !!(copilot.error || voice.state.error))
   const recording = ['requesting', 'listening', 'transcribing'].includes(voice.state.phase)
-  useEffect(() => { setOverflowTranscript(''); setExtractSource(null) }, [project.id, activeWork?.id, worldGroupId])
+  useEffect(() => { setExtractSource(null) }, [project.id, activeWork?.id, worldGroupId])
   const latestTasks = useMemo(() => {
     const result = new Map<string, { taskId: string; instruction: string; status: string; error?: string }>()
     const latestPlan = [...copilot.events]
@@ -404,12 +402,6 @@ export default function ChatCopilotPanel({
                 {voice.state.phase !== 'idle' && <button type="button" onClick={voice.cancel}>{recording ? '放弃本次语音' : '停止朗读'}</button>}
               </div>
             )}
-            {overflowTranscript && <div className="companion-voice-status">
-              <p>输入框空间不足，识别文字暂存在这里，请先整理输入框。</p>
-              <textarea aria-label="暂存的语音识别文字" value={overflowTranscript} onChange={(e) => setOverflowTranscript(e.target.value)} rows={2} />
-              <button type="button" disabled={copilot.busy || copilot.authorRequest.length + overflowTranscript.length + 1 > 2000} onClick={() => { copilot.setAuthorRequest([copilot.authorRequest, overflowTranscript].filter(Boolean).join('\n')); setOverflowTranscript('') }}>加入输入框</button>
-              <button type="button" onClick={() => setOverflowTranscript('')}>放弃这段识别文字</button>
-            </div>}
             <div className="mb-2 flex flex-wrap gap-2 text-xs">
               <label>交流方式 <select aria-label="交流方式" value={discussionMode} disabled={copilot.busy} onChange={event => setDiscussionMode(event.target.value as 'plan' | 'free')} className="rounded border border-border bg-bg-base p-1"><option value="plan">讨论与执行计划</option><option value="free">自由讨论 / 试写</option></select></label>
               {discussionMode === 'free' && <label>参考资料 <select aria-label="讨论参考资料" value={discussionSource} disabled={copilot.busy} onChange={event => setDiscussionSource(event.target.value as typeof discussionSource)} className="rounded border border-border bg-bg-base p-1"><option value="none">对话与作品概况</option><option value="worldview">世界设定与词条</option><option value="characters">角色档案</option><option value="story-core">故事核心</option></select></label>}
@@ -419,7 +411,6 @@ export default function ChatCopilotPanel({
               aria-label="告诉主 Agent 你的目标"
               value={copilot.authorRequest}
               disabled={copilot.loading || copilot.busy}
-              maxLength={2000}
               rows={2}
               onChange={(event) => copilot.setAuthorRequest(event.target.value)}
               onKeyDown={(event) => {
@@ -544,6 +535,7 @@ export default function ChatCopilotPanel({
                 payload={candidate.payload}
                 value={candidate.event.content}
                 disabled={copilot.busy}
+                onCommit={() => copilot.flushCandidateDraft(candidate.event.id!)}
                 onChange={(draft) => {
                   void copilot.updateCandidate(candidate.event.id!, draft)
                 }}

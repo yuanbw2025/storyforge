@@ -71,7 +71,7 @@ test('节点全文审校→共享选题修订→刷新→采纳，分步骤回�
   await expect(page.locator('.tiptap-editor')).not.toContainText('正文到此结束')
   await expect(page.locator('.tiptap-editor strong')).toHaveText('金额一百二十。')
   expect(calls).toHaveLength(3)
-  expect(calls.every(row => row.temperature === 0 && row.max_tokens === 3200 && row.stream === false && row.response_format.type === 'json_object')).toBe(true)
+  expect(calls.every(row => row.temperature === 0 && row.max_tokens === undefined && row.stream === false && row.response_format.type === 'json_object')).toBe(true)
 })
 
 test('节点评审503只有一次实际请求，刷新保留失败，不写正文或自动重发', async ({ page }) => {
@@ -108,7 +108,7 @@ test('全文报告连入独立修订节点：作者勾选→一次修订复核�
   await expect(page.locator('.tiptap-editor strong')).toHaveText('金额一百二十。')
   await expect(page.locator('.tiptap-editor')).toContainText('陈禾签字。')
   await expect(page.locator('.tiptap-editor')).not.toContainText('正文到此结束')
-  expect(calls.every(row => row.temperature === 0 && row.max_tokens === 3200)).toBe(true)
+  expect(calls.every(row => row.temperature === 0 && row.max_tokens === undefined)).toBe(true)
 })
 
 test('独立修订节点拒绝同一正式候选：刷新只读回决定，不写原稿或重发模型', async ({ page }) => {

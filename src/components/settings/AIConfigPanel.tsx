@@ -463,40 +463,8 @@ function AIConfigPanelFull({ showDeveloperTools }: { showDeveloperTools: boolean
               {!supportsTemperature && <p className="mt-1 text-xs text-text-secondary">该型号不支持温度调整；已保留当前数值供切换型号后使用。</p>}
             </div>
             <div>
-              <label className="block text-sm text-text-secondary mb-1.5">
-                Max Tokens:
-                {config.maxTokens === 0
-                  ? <span className="text-accent font-normal ml-1">不限制（模型最大）</span>
-                  : <><span className="ml-1">{config.maxTokens}</span><span className="text-text-muted font-normal ml-1">（≈{Math.round(config.maxTokens * 0.6)}字）</span></>
-                }
-              </label>
-              <div className="flex items-center gap-2">
-                <label className="flex items-center gap-1.5 text-xs text-text-secondary whitespace-nowrap cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={config.maxTokens === 0}
-                    onChange={(e) => setConfig({ maxTokens: e.target.checked ? 0 : 8192 })}
-                    className="accent-accent"
-                  />
-                  不限
-                </label>
-                {config.maxTokens > 0 && (
-                  <input
-                    type="range"
-                    min={1024}
-                    max={65536}
-                    step={1024}
-                    value={config.maxTokens}
-                    onChange={(e) => setConfig({ maxTokens: Number(e.target.value) })}
-                    className="w-full accent-accent"
-                  />
-                )}
-              </div>
-              {config.maxTokens > 0 && (
-                <div className="flex justify-between text-[10px] text-text-muted mt-0.5">
-                  <span>1K</span><span>16K</span><span>32K</span><span>64K</span>
-                </div>
-              )}
+              <p className="text-sm text-text-secondary">输出长度由模型服务自动安排。</p>
+              <p className="mt-1 text-xs text-text-muted">需要指定内容字数时，请在具体创作任务中设置篇幅。</p>
             </div>
           </div>
 

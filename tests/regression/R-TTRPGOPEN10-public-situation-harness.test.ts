@@ -48,7 +48,7 @@ describe('R-TTRPGOPEN10 original public request transport and recoverable candid
       expect(init?.method).toBe('POST')
       expect(String(url)).toBe('https://public-wire.example.invalid/v1/chat/completions')
       const body = JSON.parse(String(init?.body))
-      expect(body.messages).toEqual(prepared.messages); expect(body.max_tokens).toBe(4000); expect(body.stream).toBe(false)
+      expect(body.messages).toEqual(prepared.messages); expect(body).not.toHaveProperty('max_tokens'); expect(body.stream).toBe(false)
       expect(JSON.stringify(body)).not.toContain('PRIVATE-HARNESS-'); expect(body).not.toHaveProperty('tools')
       return new Response(JSON.stringify({ choices: [{ message: { content: output } }], usage: { prompt_tokens: 200, completion_tokens: 1000, total_tokens: 1200 } }),
         { status: 200, headers: { 'Content-Type': 'application/json' } })

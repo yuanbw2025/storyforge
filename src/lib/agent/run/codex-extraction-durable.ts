@@ -447,6 +447,7 @@ function contract(
     executionBindings: [{ stepId: CODEX_EXTRACTION_STEP_ID_V1, ...createAgentSkillExecutionBindingV1(skill) }],
     ...(requestBinding ? { runtimeBindingHash: requestBinding.bindingHash } : {}),
     budget: {
+      ...(requestBinding?.settings.requested.maxTokens === 0 ? { serviceCapacityOnly: true } : {}),
       maxModelCalls, maxToolCalls: 0,
       maxInputTokens: maxModelCalls * (requestBinding?.inputBudgetTokens ?? 8_000),
       maxOutputTokens: maxModelCalls * (requestBinding?.outputBudgetTokens ?? 4_000),

@@ -292,7 +292,7 @@ test('a malformed action review never exposes the unapproved reply or coordinato
         calls++;
         const request = route.request().postDataJSON();
         const reviewing = JSON.stringify(request.messages).includes('本次持久化行动候选');
-        expect(request.max_tokens).toBe(reviewing ? 8000 : 4000);
+        expect(request.max_tokens).toBeUndefined();
         const output = reviewing ? '幕后：铜印就在柜台底下。这不是合法 JSON。' : chatActionResponseFixture(route, {kind: 'attempt', text: '沈禾已经答应陪同搜查。', goalKey: 'find-seal', evidenceFactKeys: ['lost'], audienceKeys: ['guard', 'player'], waitingForPlayer: true, newFacts: [], disclosures: [], threadUpdates: [], goalStatus: null});
         await route.fulfill({contentType: 'application/json', body: JSON.stringify({choices: [{message: {role: 'assistant', content: output}, finish_reason: 'stop'}]})});
     });

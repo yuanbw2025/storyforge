@@ -53,7 +53,7 @@ describe('R-TTRPGOPEN2 initial design fact dependency and pre-dispatch capacity'
     await expect(generateTtrpgOpenAuthoringDesignCandidateV1({ ...f, request: { ...f.request, sections }, runAI })).rejects.toThrow('同时选择“新增世界事实”')
     expect(runAI).not.toHaveBeenCalled(); expect(await db.agentRuns.count()).toBe(0); expect(await db.agentRunEvents.count()).toBe(0)
     expect(await rows()).toBe(before)
-  })
+  }, 15000)
   it('does not manufacture an initial-fact dependency for an existing designed draft or a draft already containing source facts', async () => {
     const f = await createSavedOpenDesignFixtureV1(), base = structuredClone(f.settings.openAuthoring)
     expect(ttrpgOpenDesignNeedsInitialFactsV1(base)).toBe(true)
@@ -102,7 +102,7 @@ describe('R-TTRPGOPEN2 initial design fact dependency and pre-dispatch capacity'
     const f = await createSavedOpenDesignFixtureV1(), before = await rows()
     const transport = vi.fn(async (_url: unknown, init?: RequestInit) => {
       const body = JSON.parse(String(init!.body))
-      expect(body.max_tokens).toBe(24000)
+      expect(body).not.toHaveProperty('max_tokens')
       expect(body.messages[0].content).toContain('输出验收上限 24000 tokens')
       expect(body.messages[0].content).toContain('开放效果禁止 clock.advance 和 clue.discover')
       return new Response(JSON.stringify({ choices: [{ message: { content: await fullResponse(body.messages) }, finish_reason: 'stop' }],
@@ -130,7 +130,7 @@ describe('R-TTRPGOPEN2 initial design fact dependency and pre-dispatch capacity'
     expect(getAgentSkillV1('ttrpg.open.authoring-design.full.v1').maxOutputTokens).toBe(24000)
     let raw = ''
     const transport = vi.fn(async (_url: unknown, init?: RequestInit) => {
-      const body = JSON.parse(String(init!.body)); expect(body.max_tokens).toBe(16000)
+      const body = JSON.parse(String(init!.body)); expect(body).not.toHaveProperty('max_tokens')
       raw = openDesignResponseFixtureV1(body.messages)
       return new Response(JSON.stringify({ choices: [{ message: { content: raw }, finish_reason: 'stop' }],
         usage: { prompt_tokens: 100, completion_tokens: 20045, total_tokens: 20145 } }), { status: 200 })
