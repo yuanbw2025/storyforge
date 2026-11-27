@@ -4,6 +4,8 @@ import { FIELD_REGISTRY } from '../../lib/registry/field-registry'
 import { MORAL_AXIS_LABELS, ORDER_AXIS_LABELS, ROLE_WEIGHT_LABELS } from '../../lib/character/character-axes'
 import type { MasterCandidatePayload } from '../../lib/agent/orchestrator'
 import { inputAreaLayoutV1, type InputAreaFieldV1 } from '../../lib/input-area-layout'
+import CandidateMarkdownField from './CandidateMarkdownField'
+import { flushPendingEditsV1 } from '../../lib/authoring/pending-edit-coordinator'
 
 const ENUM_LABELS: Record<string, Record<string, string>> = {
   roleWeight: ROLE_WEIGHT_LABELS,
@@ -17,6 +19,7 @@ export default function CandidateDraftEditor({
   value,
   disabled,
   onChange,
+  onCommit,
   resizableInputs = false,
   inputAreaField,
 }: {
@@ -24,10 +27,16 @@ export default function CandidateDraftEditor({
   value: string
   disabled: boolean
   onChange: (value: string) => void
+  onCommit?: () => Promise<void>
   resizableInputs?: boolean
   inputAreaField?: InputAreaFieldV1
 }) {
   const [raw, setRaw] = useState(false)
+  const [editError, setEditError] = useState('')
+  const afterSync = (action: () => void) => {
+    setEditError('')
+    void flushPendingEditsV1().then(action).catch(cause => setEditError(cause instanceof Error ? cause.message : '候选草稿尚未同步。'))
+  }
   const textField = useMemo(() => {
     if (payload.skillId !== 'world-origin.story-core') return null
     try {
@@ -85,17 +94,27 @@ export default function CandidateDraftEditor({
   }
   return (
     <div>
+      {editError && <p role="alert" className="text-xs text-error">{editError} 输入已保留。</p>}
       {(parsed || textField) && (
         <button
           type="button"
           className="mb-2 text-xs text-accent"
-          onClick={() => setRaw((current) => !current)}
+          onClick={() => afterSync(() => setRaw((current) => !current))}
         >
           {raw ? '返回内容编辑' : '查看原始结构'}
         </button>
       )}
       {textField && !raw ? (
-        <CTextarea
+        onCommit ? <CandidateMarkdownField value={textField.value} disabled={disabled} onCommit={onCommit}>
+          <CTextarea
+            inputAreaLayout={inputAreaLayoutV1(resizableInputs, inputAreaField, 'candidate')}
+            aria-label={`${payload.label}候选内容`}
+            value={textField.value}
+            disabled={disabled}
+            onChange={event => onChange(JSON.stringify({ ...textField, value: event.target.value }, null, 2))}
+            className="min-h-40 w-full resize-y rounded border border-border p-3 text-sm leading-7"
+          />
+        </CandidateMarkdownField> : <CTextarea
           inputAreaLayout={inputAreaLayoutV1(resizableInputs, inputAreaField, 'candidate')}
           aria-label={`${payload.label}候选内容`}
           value={textField.value}
@@ -113,6 +132,13 @@ export default function CandidateDraftEditor({
               {Object.entries(row).map(([key, text]) => {
                 const spec = FIELD_REGISTRY.find((item) => item.target === table && item.field === key)!
                 const label = spec.labels?.[0] ?? key
+                const textarea = <CTextarea
+                  aria-label={`${label} · 候选 ${index + 1}`}
+                  value={text}
+                  rows={key === 'title' || key === 'name' ? 1 : 3}
+                  onChange={(event) => changeField(index, key, event.target.value)}
+                  className="mt-1 w-full resize-y rounded border border-border p-2 text-sm leading-6"
+                />
                 const field = (
                   <label className="block text-xs text-text-secondary">
                     <span>{label}</span>
@@ -130,13 +156,9 @@ export default function CandidateDraftEditor({
                         ))}
                       </select>
                     ) : (
-                      <CTextarea
-                        aria-label={`${label} · 候选 ${index + 1}`}
-                        value={text}
-                        rows={key === 'title' || key === 'name' ? 1 : 3}
-                        onChange={(event) => changeField(index, key, event.target.value)}
-                        className="mt-1 w-full resize-y rounded border border-border p-2 text-sm leading-6"
-                      />
+                      spec.type === 'longtext' && onCommit
+                        ? <CandidateMarkdownField value={text} disabled={disabled} onCommit={onCommit}>{textarea}</CandidateMarkdownField>
+                        : textarea
                     )}
                   </label>
                 )
@@ -153,7 +175,7 @@ export default function CandidateDraftEditor({
                 <button
                   type="button"
                   className="text-xs text-text-muted"
-                  onClick={() =>
+                  onClick={() => afterSync(() =>
                     onChange(
                       JSON.stringify(
                         parsed.rows.filter((_, at) => at !== index),
@@ -161,7 +183,7 @@ export default function CandidateDraftEditor({
                         2,
                       ),
                     )
-                  }
+                  )}
                 >
                   移除此项候选
                 </button>

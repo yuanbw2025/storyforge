@@ -838,6 +838,7 @@ export function useMasterCopilot(input: {
     let failureStage: HarnessFailureClassV1 = 'candidate'
     try {
       const draftKey = candidateDraftKey(candidate.event.id)
+      await flushPendingEditsV1()
       await flushCandidateDraftV1(candidateDraftKey(candidate.event.id))
       const persistedEvents = await readAgentEvents(conversationId, workspaceScope)
       const visible = visibleCandidateDrafts.get(draftKey)
@@ -1078,6 +1079,7 @@ export function useMasterCopilot(input: {
     resume,
     stop,
     updateCandidate,
+    flushCandidateDraft: (eventId: number) => flushCandidateDraftV1(candidateDraftKey(eventId)),
     readVisibleCandidateDraft: (eventId?: number) => eventId == null || conversationId == null
       ? undefined : visibleCandidateDrafts.get(candidateDraftKey(eventId)),
     discardVisibleCandidateDraft,

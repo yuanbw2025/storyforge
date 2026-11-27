@@ -337,11 +337,13 @@ function FieldEditor({
               </span>
             </div>
             <CandidateDraftEditor
+              key={candidate.event.id}
               resizableInputs={resizableInputs}
               inputAreaField={`story.${field.key}`}
               payload={candidate.payload}
               value={candidate.event.content}
               disabled={copilot.busy}
+              onCommit={() => copilot.flushCandidateDraft(candidate.event.id!)}
               onChange={content => {
                 void copilot.updateCandidate(candidate.event.id!, content)
               }}
