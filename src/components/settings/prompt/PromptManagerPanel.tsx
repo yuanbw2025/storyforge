@@ -45,24 +45,28 @@ export default function PromptManagerPanel({ project }: Props = {}) {
   /** 切换题材包：把同 moduleKey 下属于该 genre 的模板设为激活 */
   const handleGenrePackChange = async (genreId: string) => {
     setGenrePack(genreId)
-    if (genreId === 'general') {
-      // 默认包：把没 genres 字段或含 'general' 的 system 模板激活
-      const candidates = configurableTemplates.filter(t =>
-        t.scope === 'system' && (!t.genres || t.genres.length === 0 || t.genres.includes('general'))
-      )
-      const seenModuleKeys = new Set<string>()
-      for (const t of candidates) {
-        if (!seenModuleKeys.has(t.moduleKey)) {
-          seenModuleKeys.add(t.moduleKey)
-          if (!t.isActive) await setActive(t.id!)
+    try {
+      if (genreId === 'general') {
+        // 默认包：把没 genres 字段或含 'general' 的 system 模板激活
+        const candidates = configurableTemplates.filter(t =>
+          t.scope === 'system' && (!t.genres || t.genres.length === 0 || t.genres.includes('general'))
+        )
+        const seenModuleKeys = new Set<string>()
+        for (const t of candidates) {
+          if (!seenModuleKeys.has(t.moduleKey)) {
+            seenModuleKeys.add(t.moduleKey)
+            if (!t.isActive) await setActive(t.id!, { expectedModuleKey: t.moduleKey })
+          }
+        }
+      } else {
+        // 题材包：找到该 genre 的模板批量激活
+        const packTpls = configurableTemplates.filter(t => t.genres?.includes(genreId))
+        for (const t of packTpls) {
+          if (!t.isActive) await setActive(t.id!, { expectedModuleKey: t.moduleKey })
         }
       }
-    } else {
-      // 题材包：找到该 genre 的模板批量激活
-      const packTpls = configurableTemplates.filter(t => t.genres?.includes(genreId))
-      for (const t of packTpls) {
-        if (!t.isActive) await setActive(t.id!)
-      }
+    } catch (cause) {
+      toast.error(`题材包切换未完成，部分模板可能已切换；请核对模板列表。${cause instanceof Error ? cause.message : '激活失败。'}`)
     }
   }
 
