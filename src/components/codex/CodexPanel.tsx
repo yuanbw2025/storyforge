@@ -74,7 +74,7 @@ export default function CodexPanel({ project, fixedDomain, fixedCategoryKeys, em
   const worldGroups = useWorldGroupStore(s => s.groups)
   const projectId = project.id!
   const {
-    categories, entries, loadAll, loading, loadError, loadedScope,
+    categories, entries, loadAll, loading, loadError, loadedScope, localSaveWitnesses,
     addCategory, deleteCategory, setCategoryHidden, updateCategory,
     addEntry, updateEntry, deleteEntry,
   } = useCodexStore()
@@ -784,6 +784,7 @@ export default function CodexPanel({ project, fixedDomain, fixedCategoryKeys, em
               allCategories={categories}
               allEntries={scopedEntries}
               nameDuplicate={typeof activeEntry.name === 'string' && !!activeEntry.name && dupNames.has(activeEntry.name.trim())}
+              localSave={localSaveWitnesses && loadedScope ? { scope: loadedScope, witness: localSaveWitnesses[activeEntry.id!] ?? null } : undefined}
               onChange={(patch, expected) => updateEntry(activeEntry.id!, patch, { scope: loadedScope!, expected })}
             />
           ) : (
