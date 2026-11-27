@@ -383,3 +383,38 @@ it('hides the previous group while the selected rules cannot load and recovers o
   expect(useWorldRulesStore.getState().profile?.worldGroupId).toBe(f.otherId)
   expect((await db.worldRulesProfiles.get(useWorldRulesStore.getState().profile!.id!))?.globalNote).toBe(draft)
 })
+
+it('050 binds successful feedback to the original committed World, partition, UID and complete rule content', async () => {
+  const { matchesWorldRulesLocalSaveV1 } = await import('../../src/stores/world-rules')
+  const f = await fixture(), initial = useWorldRulesStore.getState().localSaveEvidence
+  expect(matchesWorldRulesLocalSaveV1(f.profile, f.scope, initial)).toBe(true)
+  await useWorldRulesStore.getState().updateEntry('era.period', 'historicalAnchors', draft)
+  await useWorldRulesStore.getState().updateEntry('era.period', 'fictionalAdaptations', ' 架空原文\r\n🌋  ')
+  await useWorldRulesStore.getState().updateGlobalNote(' 全局作者说明\r\né  ')
+  const state = useWorldRulesStore.getState(), actual = (await db.worldRulesProfiles.get(f.profile.id!))!
+  expect(matchesWorldRulesLocalSaveV1(actual, f.scope, state.localSaveEvidence)).toBe(true)
+  expect(matchesWorldRulesLocalSaveV1({ ...actual, globalNote: '未提交输入' }, f.scope, state.localSaveEvidence)).toBe(false)
+  expect(matchesWorldRulesLocalSaveV1(actual, { ...f.scope, worldId: f.scope.worldId + 1 }, state.localSaveEvidence)).toBe(false)
+  db.close(); await db.open(); await useWorldRulesStore.getState().loadProfile(f.scope)
+  expect(useWorldRulesStore.getState().profile).toEqual(actual)
+  expect(matchesWorldRulesLocalSaveV1(actual, f.scope, useWorldRulesStore.getState().localSaveEvidence)).toBe(true)
+})
+it('050 retains a known committed draft as unconfirmed when native postcommit readback fails, then recovers on explicit retry', async () => {
+  const Dexie = (await import('dexie')).default
+  const { matchesWorldRulesLocalSaveV1 } = await import('../../src/stores/world-rules')
+  const f = await fixture(), original = db.worldRulesProfiles.get.bind(db.worldRulesProfiles)
+  const fault = vi.spyOn(db.worldRulesProfiles, 'get').mockImplementation(key => {
+    if (!Dexie.currentTransaction && key === f.profile.id) return Promise.reject(new Error('postcommit rule readback failure'))
+    return original(key)
+  })
+  await expect(useWorldRulesStore.getState().updateGlobalNote(draft)).rejects.toThrow('postcommit rule readback failure')
+  fault.mockRestore()
+  const failed = useWorldRulesStore.getState()
+  expect(failed.dirty).toBe(true); expect(failed.profile?.globalNote).toBe(draft)
+  expect(matchesWorldRulesLocalSaveV1(failed.profile!, f.scope, failed.localSaveEvidence)).toBe(false)
+  expect((await db.worldRulesProfiles.get(f.profile.id!))?.globalNote).toBe(draft)
+  await useWorldRulesStore.getState()._persist()
+  expect(useWorldRulesStore.getState().dirty).toBe(false)
+  expect(matchesWorldRulesLocalSaveV1(useWorldRulesStore.getState().profile!, f.scope, useWorldRulesStore.getState().localSaveEvidence)).toBe(true)
+  expect(await db.worldRulesProfiles.count()).toBe(1)
+})
