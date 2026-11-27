@@ -1,5 +1,13 @@
 # Changelog
 
+## November 27, 2026 · Persistent inspiration templates and prose fixes
+
+- **Reverse inspiration:** save separate single-/multiworld versions, parameters and temperature per work; follow defaults, fix versions, save-and-use, restore defaults and resolve unmatched text drafts. See [planning](/en/features/longform/planning), [templates](/en/guides/using-prompts) (#581 groundwork, #682 UI/request wiring).
+- **Prose:** authors can keep the later duplicated portion before adoption; Markdown generation/continuation commits before session synchronization; long-chapter input reuses unchanged fragments. See [writing](/en/features/longform/writing) (#668/#671/#677).
+- **Maps/review:** admit sources with registered empty evidence while rejecting missing/clipped content; consistency review retains the actual service-capacity snapshot. See [maps](/en/features/longform/worlds-maps), [continuity](/en/features/longform/continuity) (#670/#672).
+
+Review covers 17 mainline merges from `965a53a0` through `9ec67ee7`. #665/#666/#667/#669/#673/#674/#676/#678/#680 align engineering types/tests/generated documentation; #679 archives traffic, not extra product capabilities. See [compatibility](/en/updates/compatibility) and [development](/en/updates/development-status) for releases/unmerged work.
+
 ## November 25, 2026 · Prose editing, complete material and import review
 
 - **Prose editing:** independent longform gains Markdown preview/source; new empty chapters default to preview and existing chapters retain rich text. Markdown modes share undo history, large pastes require confirmation, committed external prose synchronizes and selection AI still requires adoption. See [writing](/en/features/longform/writing) (#591/#603/#609/#612/#620). #594 is prototype groundwork and #616 path evidence, not additional complete products.

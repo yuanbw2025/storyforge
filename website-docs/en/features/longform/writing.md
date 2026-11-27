@@ -1,5 +1,11 @@
 # Longform: outlines, scene beats, and prose
 
+## November 27: duplicated-prose review and Markdown adoption
+
+When a model repeats prose around a reasoning separator, the full response now remains a reviewable candidate. Do not adopt the duplicated whole: compare both portions, use the offered Keep later portion action to create an author-revised candidate, then explicitly adopt. Reload retains the original response; selecting a portion adds no model request. Incomplete replies/other validation failures retain their actual status. Based on #668.
+
+Generation/continuation candidates in Markdown preview/source first pass existing version checks and the adoption transaction, then synchronize the current session. They no longer silently return because a rich-text reference is absent. Failures retain originals/candidates; resolve the message before retrying. Long-chapter input caches unchanged fragments to reduce whole-document reparsing per key; save, undo/redo and formatting retain their rules. Based on #671/#677.
+
 ## November 25: three editing modes and prose length
 
 Independent longform chapters offer Rich text, Live preview and Markdown source. New empty chapters default to preview; existing nonempty chapters retain rich text. Short fiction, world narratives and unresolved ownership do not admit this switch. Source and preview share undo history; switching to rich text first saves the draft and starts a new undo segment. If saving fails, retain the draft and resolve the message before switching. Headings support levels one through six.

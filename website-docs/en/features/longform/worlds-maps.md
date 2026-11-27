@@ -1,5 +1,9 @@
 # Multiple worlds, locations, and maps
 
+## November 27: maps admit verified empty sources
+
+When geography, codex or location records do not yet exist, sources explicitly confirmed empty by the registered assembler may be omitted rather than mistaken for truncation. Missing nonempty sources, absent empty-source evidence and actual clipping still reject before model dispatch. Inspect material/errors rather than inventing records to bypass messages. Source, candidate and map-save flows remain. Based on #670.
+
 ## November 25: exact comparison and complete map sources
 
 Worldview expansion/polish candidates offer Previous/Next change, Copy original/Copy candidate and Locate in candidate. Expand collapsed ranges before selecting, or copy a whole side. Exact comparison uses the frozen adoption baseline. Invalid sources, display limits or computation failures retain full drafts with an explicit fallback rather than truncating formal content. Text differences do not verify facts; development records retain bounded performance evidence rather than treating merge as all-device acceptance. Based on #525.

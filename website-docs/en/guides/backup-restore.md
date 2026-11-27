@@ -1,5 +1,9 @@
 # Saving, backup, and recovery
 
+## November 27: inspiration configuration follows existing backup lifecycles
+
+Fixed inspiration-template content snapshots/parameters follow the existing Work-owned inspiration-workspace lifecycle. Import validates configuration structure/content hash before writes. Legacy rows without configuration remain readable; corrupt configuration retains originals and rejects explicitly instead of substituting a global template with the same ID. Temporary text is a local UI draft, not a fixed template or formal backup configuration. Database remains v16/backup v20 without a new format migration. Based on #581/#682.
+
 ## November 25: large revision-draft recovery
 
 Checkpoints may reference complete artifacts for large whole-chapter revisions; small drafts and historical tasks retain inline forms. Recovery verifies run registration, full hash and byte length. Missing, clipped or replaced artifacts fail explicitly instead of returning partial prose. Complete backup/import retains reference evidence through registered lifecycles; formats remain database v16/backup v20. Preserve backups/candidates/errors rather than editing hashes or clearing data. Based on #621/#622; #662 aligns a validation matrix, not another format upgrade.
