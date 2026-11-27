@@ -11,6 +11,8 @@ interface Props {
   totalChars: number
   chunks: ChunkPlan[]
   chunkSize: number
+  automaticChunking?: boolean
+  onAutomaticChunkingChange?: (automatic: boolean) => void
   /** 本地检测到的分卷结构 */
   volumeDetect?: VolumeDetectResult | null
   /** 单块估算用时（秒），给总时预估用 */
@@ -35,6 +37,7 @@ interface Props {
  */
 export default function ImportConfirmModal({
   filename, totalChars, chunks, chunkSize,
+  automaticChunking = false, onAutomaticChunkingChange,
   volumeDetect,
   estSecondsPerChunk = 35,
   worldGroups = [],
@@ -106,7 +109,7 @@ export default function ImportConfirmModal({
             <div className="text-xs text-text-muted mb-1">文件</div>
             <div className="text-sm text-text-primary font-medium break-all">{filename}</div>
             <div className="text-xs text-text-muted mt-1">
-              {totalChars.toLocaleString()} 字符 · 预计拆成 {stats.totalChunks} 块
+              {totalChars.toLocaleString()} 字符 · {automaticChunking ? '开始前自动核对分块数量' : `预计拆成 ${stats.totalChunks} 块`}
             </div>
           </div>
 
@@ -159,8 +162,11 @@ export default function ImportConfirmModal({
             </div>
           )}
 
-          {/* chunkSize 调节 */}
-          <div>
+          {onAutomaticChunkingChange && <label className="flex items-start gap-2 text-xs text-text-secondary">
+            <input type="checkbox" checked={automaticChunking} onChange={event => onAutomaticChunkingChange(event.target.checked)} className="mt-0.5 accent-[var(--color-accent)]" />
+            <span><strong className="text-text-primary">自动分块（推荐）</strong><br />按当前连接可用容量核对完整请求，保留全部原文，优先在章节或段落之间划分。</span>
+          </label>}
+          {!automaticChunking && <div>
             <div className="flex items-center justify-between mb-1.5">
               <label className="text-xs text-text-secondary flex items-center gap-1">
                 <Gauge className="w-3 h-3" /> 每块字符数
@@ -181,10 +187,10 @@ export default function ImportConfirmModal({
               <span>5 万（推荐）</span>
               <span>8 万（更快、易被截断）</span>
             </div>
-          </div>
+          </div>}
 
           {/* 预估卡片 */}
-          <div className="grid grid-cols-3 gap-2">
+          {!automaticChunking && <div className="grid grid-cols-3 gap-2">
             <EstCard
               icon={Timer} label="预计耗时"
               value={fmtDuration(stats.totalSeconds)}
@@ -200,7 +206,7 @@ export default function ImportConfirmModal({
               value={`¥${stats.estRmbLow.toFixed(2)} ~ ${stats.estRmbHigh.toFixed(2)}`}
               hint="因模型定价而异"
             />
-          </div>
+          </div>}
 
           {/* 行为说明 */}
           <div className="bg-accent/5 border border-accent/30 rounded-lg p-3 space-y-1.5 text-xs text-text-secondary leading-relaxed">
@@ -339,7 +345,7 @@ export default function ImportConfirmModal({
             onClick={() => onConfirm('project', targetWorldGroupId)}
             className="flex items-center gap-1.5 px-4 py-2 bg-accent text-white text-sm rounded hover:bg-accent-hover"
           >
-            <Wand2 className="w-4 h-4" /> 导入当前项目（{stats.totalChunks} 块）
+            <Wand2 className="w-4 h-4" /> 导入当前项目（{automaticChunking ? '自动分块' : `${stats.totalChunks} 块`}）
           </button>
           <button
             onClick={onCancel}

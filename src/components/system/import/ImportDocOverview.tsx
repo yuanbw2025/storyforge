@@ -36,7 +36,7 @@ export function useCsvGridViewV1() {
   return snap
 }
 
-export function ImportDocIntro({ chunkSize }: { chunkSize: number }) {
+export function ImportDocIntro({ chunkSize, automaticChunking = false }: { chunkSize: number; automaticChunking?: boolean }) {
   const textLayerNotice = useTextLayerNoticeV1()
   const csvGrid = useCsvGridViewV1()
   return (
@@ -45,7 +45,7 @@ export function ImportDocIntro({ chunkSize }: { chunkSize: number }) {
       {csvGrid && <CsvPreviewCardV1 grid={csvGrid} />}
       <h2 className="text-xl font-bold text-text-primary mb-1">📥 AI 分块文档解析</h2>
       <p className="text-sm text-text-muted">
-        上传任意一份文档（设定集、成品小说、大纲草稿……甚至千万字长篇），AI 自动分块串行解析
+        上传文档（设定集、成品小说、大纲草稿等），AI 分块串行解析
         <span className="text-accent">世界观 / 角色 / 大纲章节 / Codex 实体候选</span>。
         开始解析前先选择写入<strong>当前项目</strong>还是<strong>项目参考</strong>；
         每块结果先由你审查、修改并确认。项目导入的词条可在最后单独审查。
@@ -65,7 +65,8 @@ export function ImportDocIntro({ chunkSize }: { chunkSize: number }) {
           ))}
         </div>
         <div className="mt-2 text-[11px] text-text-muted leading-relaxed">
-          ⚠️ 大文档会自动按「章节边界」或「段落 / 字符数」切块，每块约 {chunkSize.toLocaleString()} 字，AI 串行处理。<br />
+          {automaticChunking ? '自动分块会按当前连接可用容量核对完整请求，优先按章节或段落划分，AI 串行处理。'
+            : <>文档按「章节边界」或「段落 / 字符数」切块，每块约 {chunkSize.toLocaleString()} 字，AI 串行处理。</>}<br />
           🔍 扫描件或图片型 PDF 没有可复制文本层时不会进入解析：结果会明确提示「未识别到可复制文本，已保留原件」，原件仍可查看/下载，补上可复制文本后再开始。<br />
           ✨ <strong>上传后原文会自动存档到浏览器本地 IndexedDB</strong>，存档成功后，回到原世界和作品可以续跑；存档缺失时须重新上传同一文件。
         </div>

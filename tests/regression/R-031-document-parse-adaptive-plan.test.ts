@@ -90,6 +90,12 @@ describe('031-F physical complete-request feasibility', () => {
 })
 
 describe('031-F opt-in exact UTF-16 range planner', () => {
+  it('keeps heading-prefixed leading blanks with real content instead of emitting an empty semantic source', () => {
+    const text = '  \r\n第一章 巨章\r\n' + '海'.repeat(300) + '\r\n尾部　 '
+    const chunks = planAdaptiveDocumentParseChunksV1(text, chunk => chunk.charCount <= 37)
+    coverage(text, chunks)
+    expect(chunks.every(chunk => chunk.text.trim().length > 0)).toBe(true)
+  })
   it.each([
     '  \r\n第一章 巨章\r\n' + '海'.repeat(3001) + '\r\n第二章 尾声\r\n余音  \r\n',
     '前言'.repeat(500) + '\r\n\r\n' + '段落'.repeat(1000) + '\n\n尾部  ',

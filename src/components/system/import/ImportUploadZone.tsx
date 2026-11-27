@@ -9,6 +9,7 @@ interface Props {
   fileError: string | null
   extractInfo: string | null
   chunkSize: number
+  automaticChunking?: boolean
   previewPlans: ChunkPlan[] | null
   onFile: (e: React.ChangeEvent<HTMLInputElement>) => void
   onRawTextChange: (text: string) => void
@@ -26,6 +27,7 @@ export default function ImportUploadZone({
   fileError,
   extractInfo,
   chunkSize,
+  automaticChunking = false,
   previewPlans,
   onFile,
   onRawTextChange,
@@ -68,10 +70,12 @@ export default function ImportUploadZone({
       <textarea
         value={rawText}
         onChange={e => onRawTextChange(e.target.value)}
-        placeholder="把文档内容粘贴在这里，或上方点「上传文件」——AI 会自己判断是设定集 / 成品小说 / 大纲，哪怕千万字也没事。"
+        placeholder="把文档内容粘贴在这里，或上方点「上传文件」——支持设定集、成品小说与大纲，解析后由你审查确认。"
         rows={10}
         className="w-full px-3 py-2 bg-bg-base border border-border rounded text-sm text-text-primary font-mono resize-y focus:outline-none focus:border-accent"
       />
+
+      {automaticChunking && rawText.trim() && <p className="mt-2 text-xs text-text-muted">已读取 {rawText.length.toLocaleString()} 字符，将在开始前自动分块。</p>}
 
       {/* 预切块预览 */}
       {previewPlans && previewPlans.length > 0 && (

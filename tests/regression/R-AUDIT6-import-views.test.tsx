@@ -69,6 +69,8 @@ function ImportPreparationHarness() {
   return createElement('div', null,
     createElement('button', { onClick: () => preparation.handleRawTextChange('第一章\n镜海之门开启。') }, '载入粘贴文本'),
     createElement('button', { onClick: preparation.prepareConfirmation }, '准备解析'),
+    createElement('button', { onClick: () => preparation.handleAutomaticChunkingChange(false) }, '切换手动分块'),
+    createElement('span', { 'data-testid': 'mode' }, preparation.automaticChunking ? 'automatic' : 'manual'),
     createElement('span', { 'data-testid': 'state' }, preparation.showConfirm
       ? `${preparation.plans?.length}|${preparation.previewPlans?.length}|${preparation.sourceBlob().filename}`
       : 'closed'),
@@ -237,6 +239,11 @@ describe('AUDIT-6 · 文档导入视图', () => {
     const prepare = Array.from(host.querySelectorAll('button')).find(button => button.textContent === '准备解析')!
     await act(async () => load.click())
     await act(async () => prepare.click())
+    expect(host.querySelector('[data-testid="mode"]')?.textContent).toBe('automatic')
+    expect(host.querySelector('[data-testid="state"]')?.textContent).toBe('1|undefined|粘贴内容.txt')
+    const manual = Array.from(host.querySelectorAll('button')).find(button => button.textContent === '切换手动分块')!
+    await act(async () => manual.click())
+    expect(host.querySelector('[data-testid="mode"]')?.textContent).toBe('manual')
     expect(host.querySelector('[data-testid="state"]')?.textContent).toBe('1|1|粘贴内容.txt')
   })
 })

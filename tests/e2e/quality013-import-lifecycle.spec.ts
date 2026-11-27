@@ -307,3 +307,54 @@ test('022 browser restores the exact paid candidate and waits for a visible auth
         fixture: 'isolated browser database; synthetic transport only', confirmedChunk: 0 }) })
   } finally { await context.close() }
 })
+
+test('031 actual new import automatically fits a complete source and recovers its frozen ranges without another POST', async ({ browser, baseURL }) => {
+  const { context, forbidden, submissions } = await isolated(browser, baseURL, JSON.stringify({ worldview: { worldOrigin: '港口源于潮水。' } }))
+  const page = await context.newPage()
+  try {
+    await page.goto('./')
+    await installBrowserServiceCapacityFixtureV1(page, { provider: 'custom', baseUrl: 'https://quality022.invalid/v1', model: 'synthetic-import-model' }, 65536)
+    const projectId = await page.evaluate(async () => {
+      const load = new Function('path', 'return import(path)') as <T>(path: string) => Promise<T>
+      const { createWorkspace } = await load<typeof import('../../src/lib/workspace/create-workspace')>('/storyforge/src/lib/workspace/create-workspace.ts')
+      const created = await createWorkspace({ name: '031 自动分块验收', description: '', status: 'drafting', genres: [], targetWordCount: 100000 }, { kind: 'novel', novelProfile: 'long' })
+      return created.scope.projectId
+    })
+    await page.goto(`./workspace/${projectId}`)
+    await expect(page.locator('[data-workspace-ready=longform]')).toBeVisible({ timeout: 15000 })
+    await page.evaluate(async () => {
+      const load = new Function('path', 'return import(path)') as <T>(path: string) => Promise<T>
+      const { useAIConfigStore } = await load<typeof import('../../src/stores/ai-config')>('/storyforge/src/stores/ai-config.ts')
+      useAIConfigStore.setState({ config: { provider: 'custom', model: 'synthetic-import-model', baseUrl: 'https://quality022.invalid/v1',
+        apiKey: 'synthetic-test-only', temperature: 0, maxTokens: 0 }, presets: [], taskRoutes: {}, rememberApiKey: false })
+    })
+    expect(await openLongformLeaf(page, '文档解析')).toBe(true)
+    const area = page.getByPlaceholder(/^把文档内容粘贴在这里/)
+    await area.fill('  \r\n第一章 巨章\r\n' + '潮水与灯塔。'.repeat(14000) + '\r\n😀尾部　 ')
+    const entered = await area.inputValue()
+    await page.getByRole('button', { name: '开始解析', exact: true }).click()
+    await expect(page.getByRole('checkbox', { name: /自动分块/ })).toBeChecked()
+    await expect(page.locator('input[type="range"]:visible')).toHaveCount(0)
+    await page.getByRole('button', { name: '导入当前项目（自动分块）', exact: true }).click()
+    const dialog = page.getByRole('dialog', { name: '审查导入候选' })
+    await expect(dialog).toBeVisible({ timeout: 20000 })
+    expect(submissions).toHaveLength(1)
+    const read = () => page.evaluate(async projectId => {
+      const load = new Function('path', 'return import(path)') as <T>(path: string) => Promise<T>
+      const { db } = await load<typeof import('../../src/lib/db/schema')>('/storyforge/src/lib/db/schema.ts')
+      const { getChunkText } = await load<typeof import('../../src/lib/import/chunk-text-registry')>('/storyforge/src/lib/import/chunk-text-registry.ts')
+      const session = (await db.importSessions.where('projectId').equals(projectId).toArray())[0]
+      return { session, texts: session.chunks.map(chunk => getChunkText(session.id!, chunk.index)), formalCount: await db.worldviews.count() }
+    }, projectId)
+    const before = await read()
+    expect(before.session.totalChunks).toBeGreaterThan(1)
+    expect(before.texts.join('')).toBe(entered); expect(before.formalCount).toBe(0)
+    expect(JSON.parse(submissions[0]).messages.some((message: { content: string }) => message.content.includes(before.texts[0]))).toBe(true)
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await expect(page.getByText('已从本地存档恢复原文', { exact: true })).toBeVisible({ timeout: 15000 })
+    await expect.poll(read).toEqual(before)
+    await page.getByRole('button', { name: '查看详情', exact: true }).click()
+    await expect(dialog).toBeVisible()
+    expect(submissions).toHaveLength(1); expect(forbidden).toEqual([])
+  } finally { await context.close() }
+})

@@ -219,7 +219,7 @@ export function quickHash(text: string): string {
 }
 
 
-/** Opt-in foundation for NEW plans only. Legacy chunkDocument/recovery stays unchanged.
+/** Opt-in planner for NEW sessions only. Legacy chunkDocument and paid plan identity stay unchanged.
  * Offsets are UTF-16 code units into the exact decoded string, NOT file byte offsets.
  * No gaps, trimming or overlap. fits must inspect the whole actual rendered request.
  * Binary probing is conservative: nonmonotonic estimates have no maximum-size guarantee.
@@ -278,7 +278,10 @@ export function planAdaptiveDocumentParseChunksV1(
       }
       const chapterEnd = lastAtMost(chapters, best), paragraphEnd = lastAtMost(paragraphs, best)
       const preferred = chapterEnd > start ? chapterEnd : paragraphEnd > start ? paragraphEnd : best
-      if (preferred > start && safeEnd(preferred) === preferred && fits(make(start, preferred, index), upperTotal)) best = preferred
+      // A heading after leading blank lines is not a standalone document
+      // block. Keep those exact blanks attached to the following content.
+      if (preferred > start && text.slice(start, preferred).trim().length > 0
+        && safeEnd(preferred) === preferred && fits(make(start, preferred, index), upperTotal)) best = preferred
     }
     const chunk = make(start, best, index)
     if (best <= start || !fits(chunk, upperTotal)) throw new Error('文档解析请求框架已变化；分块计划未生效。')

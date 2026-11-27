@@ -76,7 +76,7 @@ export interface ImportSession {
   totalChars: number
   /** 拆成多少 chunk */
   totalChunks: number
-  /** 每个 chunk 的目标字符数（用户可调） */
+  /** 旧手动计划的目标字符数；自动计划为最大块长度的展示值，恢复以冻结区间和摘要为准。 */
   chunkSize: number
   /** chunk 列表（按顺序） */
   chunks: ChunkState[]

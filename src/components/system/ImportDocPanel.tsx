@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { chunkDocument, quickHash } from '../../lib/import/chunker'
+import { quickHash } from '../../lib/import/chunker'
+import { planNewDocumentImportV1 } from '../../lib/import/document-import-plan'
+import { recoverFrozenImportSourceV1 } from '../../lib/import/frozen-source-recovery'
 import {
   runSession, pausePipeline, cancelPipeline, isPipelineRunning, cancelPausedDocumentImportV1,
   readPendingDocumentImportV1, runPublishedReferenceAnalysisV1,
@@ -71,13 +73,15 @@ export default function ImportDocPanel({ project, onNavigate }: Props) {
   const [referenceDuplicates, setReferenceDuplicates] = useState<ReferenceDuplicateItemV1[]>([])
   const recovery = useImportSessionRecovery(project.id!, project.activeWorldId, project.activeWorkId)
   const previewTargetScope = useRef<WorkspaceScope | null>(null)
+  const admittingSession = useRef(false)
   const {
     filename, rawText, fileError, loadingFile, extractInfo, plans, chunkSize,
     showConfirm, volumeDetect, previewPlans, handleFile, handleRawTextChange,
     prepareConfirmation, handleChunkSizeChange, closeConfirm, sourceBlob,
+    automaticChunking, handleAutomaticChunkingChange,
   } = source
   const previewIdentity = useMemo(() => ({ projectId: project.id, worldId: project.activeWorldId, workId: project.activeWorkId,
-    filename, rawText, targetWorldGroupId }), [project.id, project.activeWorldId, project.activeWorkId, filename, rawText, targetWorldGroupId])
+    filename, rawText, targetWorldGroupId, automaticChunking, chunkSize }), [project.id, project.activeWorldId, project.activeWorkId, filename, rawText, targetWorldGroupId, automaticChunking, chunkSize])
   const currentPreviewIdentity = useRef(previewIdentity)
   currentPreviewIdentity.current = previewIdentity
   const {
@@ -216,11 +220,13 @@ export default function ImportDocPanel({ project, onNavigate }: Props) {
 
   // ── 在 Confirm Modal 里确认：创建 session 并启动 ───────────
   const handleConfirmStart = async (importTarget: ImportTarget, selectedWorldGroupId?: number | null, depth?: import('../../lib/types').ReferenceAnalysisDepth) => {
-    if (!plans) return
+    if (!plans || admittingSession.current) return
     if (importTarget === 'project' && project.enableMultiWorld && selectedWorldGroupId == null) {
       toast.error('请先选择本次导入要写入的目标世界。')
       return
     }
+    admittingSession.current = true
+    const identity = currentPreviewIdentity.current
     closeConfirm()
     // 提示属于本次预览；确认后按已有 adopt/reference 链走，不需要再留在界面上。
     setSameNameConflicts([])
@@ -234,21 +240,30 @@ export default function ImportDocPanel({ project, onNavigate }: Props) {
       const targetScope = previewTargetScope.current
       if (!targetScope || targetScope.projectId !== project.id)
         throw new ImportSessionAuthorityError('请在当前世界和作品重新预览并确认导入。')
+      const originalSource = sourceBlob()
+      const admittedPlans = automaticChunking ? await planNewDocumentImportV1({ scope: targetScope, text: rawText,
+        importTarget, targetWorldGroupId: importTarget === 'project' ? selectedWorldGroupId ?? null : null }) : plans
+      if (currentPreviewIdentity.current !== identity || previewTargetScope.current !== targetScope)
+        throw new ImportSessionAuthorityError('原文、分块设置或目标已经变化；请重新预览并确认导入。')
+      if (!admittedPlans.length) throw new ImportSessionAuthorityError('没有可供解析的原文。')
+      useImportStatusStore.getState().pushActivity('info', `本次${automaticChunking ? '自动' : '手动'}分为 ${admittedPlans.length} 块${automaticChunking ? '，原文已完整保留' : ''}。`)
       const chunks: ChunkState[] = []
-      for (const plan of plans) {
+      for (const plan of admittedPlans) {
         chunks.push({ index: plan.index, startChar: plan.startChar, endChar: plan.endChar,
           charCount: plan.charCount, label: plan.label, status: 'pending', attempts: 0,
           sourceTextHash: await hashImportChunkTextV1(plan.text) })
       }
       const fileHash = quickHash(rawText)
+      if (currentPreviewIdentity.current !== identity || previewTargetScope.current !== targetScope)
+        throw new ImportSessionAuthorityError('原文、分块设置或目标已经变化；请重新预览并确认导入。')
       const sessionData: Omit<ImportSession, 'id' | 'createdAt' | 'updatedAt'> = {
         projectId: project.id!,
         targetScope,
         filename: filename || '未命名文档',
         fileHash,
         totalChars: rawText.length,
-        totalChunks: plans.length,
-        chunkSize,
+        totalChunks: admittedPlans.length,
+        chunkSize: automaticChunking ? admittedPlans.reduce((largest, plan) => Math.max(largest, plan.charCount), 1) : chunkSize,
         chunks,
         merged: { worldview: {}, characters: [], outline: [], codexCandidates: [] },
         rollingContext: '',
@@ -260,12 +275,12 @@ export default function ImportDocPanel({ project, onNavigate }: Props) {
 
       const sessionId = await useImportSessionStore.getState().create(sessionData)
       createdSessionId = sessionId
-      registerChunkTexts(sessionId, plans.map(p => ({ index: p.index, text: p.text })))
+      registerChunkTexts(sessionId, admittedPlans.map(p => ({ index: p.index, text: p.text })))
 
       // 存原文 Blob —— 优先用原始 File（保留 Word/PDF 原格式，下次恢复一致）
       // 如果用户是粘贴文本，退化为 text/plain Blob
       try {
-        const { blob: fileBlob, filename: saveName } = sourceBlob()
+        const { blob: fileBlob, filename: saveName } = originalSource
         await useImportSessionStore.getState().saveBlob(sessionId, saveName, fileBlob, fileHash)
       } catch (err) {
         if (err instanceof ImportSessionUnavailableError) throw err
@@ -283,6 +298,8 @@ export default function ImportDocPanel({ project, onNavigate }: Props) {
       await runAndReview(sessionId)
     } catch (error) {
       reportImportFailure('无法开始导入', error, createdSessionId)
+    } finally {
+      admittingSession.current = false
     }
   }
 
@@ -407,17 +424,9 @@ export default function ImportDocPanel({ project, onNavigate }: Props) {
       toast.error('上传文件与原导入文件不同。请上传原文件，或为新文件另开导入。')
       return
     }
-    const p = chunkDocument(rawText, { targetChars: session.chunkSize })
-    if (p.length !== session.totalChunks) {
-      toast.error(`重新切块得到 ${p.length} 块，与原任务的 ${session.totalChunks} 块不一致，无法续跑。建议清理该任务后重新开始解析。`)
-      return
-    }
     try {
       const frozen = await readImportSessionAuthorityV1(id, project.id!, session)
-      for (const chunk of p) {
-        if (frozen.chunks[chunk.index]?.sourceTextHash !== await hashImportChunkTextV1(chunk.text))
-          throw new ImportSessionAuthorityError('上传文件与原分块内容不同；请另开导入。')
-      }
+      const p = await recoverFrozenImportSourceV1(rawText, frozen)
       await readImportSessionAuthorityV1(id, project.id!, frozen)
       registerChunkTexts(id, p.map(c => ({ index: c.index, text: c.text })))
       // 普通持久化失败仍可用本次内存原文；父根已删必须停止。
@@ -598,7 +607,7 @@ export default function ImportDocPanel({ project, onNavigate }: Props) {
       />
 
       {/* 标题 + 介绍 */}
-      <ImportDocIntro chunkSize={chunkSize} />
+      <ImportDocIntro chunkSize={chunkSize} automaticChunking={automaticChunking} />
 
       {/* 未完成会话提示 */}
       {unfinished && phase === 'idle' && (
@@ -661,6 +670,7 @@ export default function ImportDocPanel({ project, onNavigate }: Props) {
           fileError={fileError}
           extractInfo={extractInfo}
           chunkSize={chunkSize}
+          automaticChunking={automaticChunking}
           previewPlans={previewPlans}
           onFile={handleFile}
           onRawTextChange={handleRawTextChange}
@@ -687,6 +697,8 @@ export default function ImportDocPanel({ project, onNavigate }: Props) {
           totalChars={rawText.length}
           chunks={plans}
           chunkSize={chunkSize}
+          automaticChunking={automaticChunking}
+          onAutomaticChunkingChange={handleAutomaticChunkingChange}
           volumeDetect={volumeDetect}
           worldGroups={project.enableMultiWorld ? worldGroups : []}
           targetWorldGroupId={targetWorldGroupId}
