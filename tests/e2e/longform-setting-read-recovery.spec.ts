@@ -34,7 +34,9 @@ for (const module of ['世界起源', '自然环境', '人文环境', '故事设
     const boundary = page.locator('fieldset[aria-label="设定读取保护"]')
     await expect(boundary).toHaveAttribute('disabled', '')
     await expect(boundary).toHaveAttribute('inert', '')
-    await expect(page.locator('div.cursor-text:visible').first().click({ timeout: 350 })).rejects.toThrow()
+    const protectedEditor = boundary.getByRole('button', { name: '编辑源码', exact: true }).or(boundary.locator('div.cursor-text:visible')).first()
+    await expect(protectedEditor).toBeVisible()
+    await expect(protectedEditor.click({ timeout: 350 })).rejects.toThrow()
     const state = await page.evaluate(async recordId => {
       const imp = new Function('p', 'return import(p)') as (p: string) => Promise<any>
       const [{ db }, { useWorldviewStore }] = await Promise.all([imp('/storyforge/src/lib/db/schema.ts'), imp('/storyforge/src/stores/worldview.ts')])
@@ -47,7 +49,7 @@ for (const module of ['世界起源', '自然环境', '人文环境', '故事设
     await expect(boundary).not.toHaveAttribute('disabled', '')
     await expect(boundary).not.toHaveAttribute('inert', '')
     await openLongformLeaf(page, '世界起源')
-    await expect(page.locator('div.cursor-text:visible').first()).toHaveText('读取失败也不能改写的正式世界来源')
+    await expect(page.locator('[data-markdown-body]:visible').first()).toHaveText('读取失败也不能改写的正式世界来源')
     expect(errors).toEqual([])
   })
 }

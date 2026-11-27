@@ -21,13 +21,13 @@ async function origin(page: Page, value?: string) {
   await openLongformLeaf(page, '世界起源')
   await page.locator('.worldview-origin-nav').getByRole('button', { name: '世界来源', exact: true }).click()
   if (value !== undefined) {
-    await page.locator('div.cursor-text:visible').first().click()
+    await page.getByRole('button', { name: '编辑源码', exact: true }).or(page.locator('div.cursor-text:visible')).first().click()
     const input = page.locator('textarea:visible').first()
     await input.fill(value)
     await page.getByRole('heading', { name: /世界来源/ }).click()
     await expect(input).not.toBeVisible()
   }
-  return page.locator('div.cursor-text:visible').first()
+  return page.locator('[data-markdown-body]:visible, div.cursor-text:visible').first()
 }
 async function read(page: Page, id: number) {
   return page.evaluate(async id => {
