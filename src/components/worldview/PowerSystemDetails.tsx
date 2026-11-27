@@ -1,3 +1,5 @@
+import { useAuthorRecordSavesV1 } from '../shared/AuthorRecordSaveScope'
+import type { LocalSaveIntentV1 } from '../../lib/authoring/local-save-evidence'
 import { inputAreaLayoutV1 } from '../../lib/input-area-layout'
 import { useWorldviewStore } from '../../stores/worldview'
 import { useWorldGroupStore } from '../../stores/world-group'
@@ -16,17 +18,19 @@ export default function PowerSystemDetails({ project, initialRecordId, resizable
   resizableInputs?: boolean
   initialRecordId?: number | null
 }) {
-  const { powerSystem, savePowerSystem, loading } = useWorldviewStore()
+  const { powerSystem, savePowerSystem, loading, loadError, loadedScope } = useWorldviewStore()
   const activeGroupId = useWorldGroupStore(state => state.activeGroupId)
   const worldGroupId = project.enableMultiWorld ? activeGroupId : (powerSystem?.worldGroupId ?? null)
-  const record = powerSystem && powerSystem.projectId === project.id
+  const ready = !loading && !loadError && loadedScope != null && loadedScope.projectId === project.id && loadedScope.worldId === project.activeWorldId && loadedScope.workId === project.activeWorkId
+  const record = ready && powerSystem && powerSystem.projectId === project.id
     && (powerSystem.worldGroupId ?? null) === worldGroupId ? powerSystem : null
   useInitialRecordTarget(initialRecordId, record?.id === initialRecordId)
-  const save = (patch: Partial<PowerSystem>) => savePowerSystem({
+  const localSave = useAuthorRecordSavesV1('powerSystems', record)
+  const save = (patch: Partial<PowerSystem>, confirmation?: LocalSaveIntentV1) => savePowerSystem({
     projectId: project.id!, worldGroupId, ...patch,
-  }, { projectId: project.id!, worldId: project.activeWorldId!, workId: project.activeWorkId! })
+  }, { projectId: project.id!, worldId: project.activeWorldId!, workId: project.activeWorkId! }, confirmation)
   return <fieldset
-    disabled={loading || (project.enableMultiWorld && activeGroupId == null)}
+    disabled={!ready || (project.enableMultiWorld && activeGroupId == null)}
     aria-label="力量体系规则明细"
     {...initialRecordTargetAttributes(record?.id === initialRecordId, record?.id)}
     className={`mt-6 space-y-4 rounded-lg border border-border p-4 ${record?.id === initialRecordId ? INITIAL_RECORD_TARGET_CLASS : ''}`}
@@ -34,7 +38,7 @@ export default function PowerSystemDetails({ project, initialRecordId, resizable
     <legend className="px-2 text-base font-semibold">规则明细</legend>
     <p className="text-xs text-text-muted">在同一处维护体系名称、等级与约束。已有明细原样保留；若与上方概述不一致，请核对后修改。</p>
     <div><h3 className="mb-1 text-sm font-medium">体系名称</h3>
-      <InlineInput value={record?.name ?? ''} onChange={name => save({ name })} placeholder="如：灵气修炼体系、魔法等级…"/>
+      <InlineInput value={record?.name ?? ''} localSave={localSave('name')} onChange={(name, intent) => save({ name }, intent)} placeholder="如：灵气修炼体系、魔法等级…"/>
     </div>
     {([
       ['description', '体系描述', '简述力量体系的核心原理…'],
@@ -42,7 +46,7 @@ export default function PowerSystemDetails({ project, initialRecordId, resizable
       ['rules', '体系规则', '修炼条件、突破瓶颈、禁忌…'],
     ] as const).map(([key, label, placeholder]) => <div key={key}>
       <h3 className="mb-1 text-sm font-medium">{label}</h3>
-      <InlineTextarea markdownRead inputAreaLayout={inputAreaLayoutV1(resizableInputs, `power.${key}`)} value={record?.[key] ?? ''} onChange={value => save({ [key]: value })} placeholder={placeholder}/>
+      <InlineTextarea markdownRead inputAreaLayout={inputAreaLayoutV1(resizableInputs, `power.${key}`)} value={record?.[key] ?? ''} localSave={localSave(key)} onChange={(value, intent) => save({ [key]: value }, intent)} placeholder={placeholder}/>
     </div>)}
   </fieldset>
 }
