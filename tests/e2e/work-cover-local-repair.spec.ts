@@ -58,7 +58,7 @@ test('two pages share actual IDB/Web Lock; one intent/root/result settles before
     const path = '/storyforge/src/lib/work-cover/repair.ts', { repairSavedWorkCoverImageV1 } = await import(path)
     const testWindow = window as unknown as Record<string, any>
     const original = navigator.locks.request.bind(navigator.locks)
-    navigator.locks.request = ((name: string, options: LockOptions, callback: LockGrantedCallback) => original(name, options, async lock => {
+    navigator.locks.request = ((name: string, options: LockOptions, callback: LockGrantedCallback<unknown>) => original(name, options, async lock => {
       testWindow.holdingRepair = true
       await new Promise<void>(resolve => { testWindow.releaseRepairStart = resolve })
       const result = await callback(lock)
@@ -79,7 +79,7 @@ test('two pages share actual IDB/Web Lock; one intent/root/result settles before
   await expect.poll(() => page.evaluate(() => Boolean((window as any).repairSettledInsideLock))).toBe(true)
   const committed = await state(second, input)
   expect(committed).toMatchObject({ assets: 1, phase: 'candidate-ready', sourceState: 'failed', raw: false, cover: '' })
-  expect(committed.runs.map(run => run.status).sort()).toEqual(['completed', 'failed'])
+  expect(committed.runs.map((run: { status: string }) => run.status).sort()).toEqual(['completed', 'failed'])
   expect(await second.evaluate(async () => (await navigator.locks.query()).pending?.length)).toBe(1)
   await page.evaluate(() => (window as any).releaseRepairEnd())
   const ids = await Promise.all([page.evaluate(() => (window as any).repairPromise), second.evaluate(() => (window as any).repairPromise)])
@@ -153,7 +153,7 @@ test('large raster UI adoption returns success, rolls back after receipt fault, 
       expectedDraftRevision: draft.revision, expectedWorkUpdatedAt: work.updatedAt, assetId: draft.selectedAssetId })
     const before = { work: await db.works.get(work.id), draft: await db.workCoverDrafts.get(draft.id) }
     const add = db.workCoverAdoptions.add.bind(db.workCoverAdoptions)
-    db.workCoverAdoptions.add = async row => { await add(row); throw Error('fixture-adoption-after-receipt') }
+    db.workCoverAdoptions.add = async (row: Parameters<typeof import('../../src/lib/db/schema').db.workCoverAdoptions.add>[0]) => { await add(row); throw Error('fixture-adoption-after-receipt') }
     let error = ''
     try { await adoptWorkCoverV1(input.scope, confirmation) } catch (cause) { error = String(cause) }
     finally { db.workCoverAdoptions.add = add }

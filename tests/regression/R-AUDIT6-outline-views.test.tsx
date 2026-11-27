@@ -139,7 +139,7 @@ describe('AUDIT-6 · 大纲纯视图拆分', () => {
       onChapterDragStart: vi.fn(),
       onChapterDragEnd: vi.fn(),
     }))
-    const openSource = async () => { await act(async () => [...host.querySelectorAll('[data-markdown-read-view] button')].find(button => button.textContent === '编辑源码')!.click()) }
+    const openSource = async () => { await act(async () => [...host.querySelectorAll<HTMLButtonElement>('[data-markdown-read-view] button')].find(button => button.textContent === '编辑源码')!.click()) }
     await openSource()
     let textarea = host.querySelector('textarea')!
 

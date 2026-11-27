@@ -6,28 +6,39 @@ import { basename, join } from 'node:path'
 const areas = new Set(['home', 'longform', 'short', 'world', 'script', 'comic', 'motion', 'ttrpg', 'chat', 'town', 'avg', 'adventure', 'settings', 'community', 'workshop', 'player', 'other'])
 const actions = new Set(['navigate', 'button', 'submit', 'save', 'generate', 'adopt', 'dismiss', 'retry', 'import', 'export', 'play', 'stop'])
 
+/** @param {unknown} value
+ * @param {number} now */
 export function boundedContext(value, now = Date.now()) {
+  const input = value && typeof value === 'object' ? value : {}
+  const enabled = 'enabled' in input && input.enabled === true
+  const trail = 'trail' in input && Array.isArray(input.trail) ? input.trail : []
   return {
-    enabled: value?.enabled === true,
-    trail: Array.isArray(value?.trail) ? value.trail.slice(-20).flatMap(row => {
+    enabled,
+    trail: trail.slice(-20).flatMap((/** @type {unknown} */ row) => {
+      if (!row || typeof row !== 'object' || !('at' in row) || !('area' in row) || !('action' in row)) return []
       const at = typeof row?.at === 'string' ? Date.parse(row.at) : NaN
       // Keep a bounded future timestamp as evidence, without changing production validation.
       return Number.isFinite(at) && at >= now - 300_000 && at <= now + 5000
-        && areas.has(row.area) && actions.has(row.action)
+        && typeof row.area === 'string' && areas.has(row.area) && typeof row.action === 'string' && actions.has(row.action)
         ? [{ at: new Date(at).toISOString(), area: row.area, action: row.action }] : []
-    }) : [],
+    }),
   }
 }
 
+/** @param {string} path */
 async function fileContext(path) {
   try {
     if ((await stat(path)).size > 65536) return { state: 'oversize' }
     return { state: 'read', context: boundedContext(JSON.parse(await readFile(path, 'utf8')).context) }
   } catch (error) {
-    return { state: 'unavailable', code: ['ENOENT', 'EACCES', 'EPERM', 'EBUSY'].includes(error?.code) ? error.code : 'OTHER' }
+    const code = error && typeof error === 'object' && 'code' in error ? error.code : undefined
+    return { state: 'unavailable', code: typeof code === 'string' && ['ENOENT', 'EACCES', 'EPERM', 'EBUSY'].includes(code) ? code : 'OTHER' }
   }
 }
 
+/** @param {import('playwright').ElectronApplication} app
+ * @param {import('playwright').Page} page
+ * @param {string} directory */
 export async function preserveDiagnosticSmokeEvidence(app, page, directory) {
   if (!/^storyforge-client-smoke-[a-zA-Z0-9]+$/.test(basename(directory))) throw new Error('Evidence requires an isolated smoke profile')
   const renderer = await page.evaluate(() => {

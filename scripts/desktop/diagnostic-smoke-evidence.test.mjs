@@ -14,5 +14,8 @@ test('failure evidence keeps only closed metadata and bounded times, including s
 })
 
 test('failure evidence refuses real profiles before using browser or filesystem', async () => {
-  await assert.rejects(preserveDiagnosticSmokeEvidence(undefined, undefined, '/users/author/profile'), /isolated smoke profile/)
+  // Deliberately invalid dependencies prove the profile guard runs before either is used.
+  const absentApp = /** @type {import('playwright').ElectronApplication} */ (/** @type {unknown} */ (undefined))
+  const absentPage = /** @type {import('playwright').Page} */ (/** @type {unknown} */ (undefined))
+  await assert.rejects(preserveDiagnosticSmokeEvidence(absentApp, absentPage, '/users/author/profile'), /isolated smoke profile/)
 })

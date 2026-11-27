@@ -584,7 +584,7 @@ test('050 Character and outline native record feedback survives quota retry, lin
     const charId = await useCharacterStore.getState().addCharacter({ projectId: scope.projectId, name: '原角色', roleWeight: 'main', moralAxis: 'neutral', orderAxis: 'neutral', shortDescription: '', appearance: '', personality: '', background: '旧背景', profile: '', motivation: '', abilities: '', relationships: '旧关系', arc: '' })
     const volumeId = await useOutlineStore.getState().addNode({ projectId: scope.projectId, parentId: null, type: 'volume', title: '原卷名', summary: '旧卷摘要', order: 0 }, scope)
     const nodeId = await useOutlineStore.getState().addNode({ projectId: scope.projectId, parentId: volumeId, type: 'chapter', title: '原章名', summary: '旧章摘要', order: 0 }, scope)
-    const chapterId = await db.chapters.add(stampNewRecord(scope, 'chapters', { projectId: scope.projectId, outlineNodeId: nodeId, title: '原章名', content: '正文不变', wordCount: 4, status: 'draft' as const, createdAt: Date.now(), updatedAt: Date.now() }, { owner: 'work' }))
+    const chapterId = await db.chapters.add(stampNewRecord(scope, 'chapters', { projectId: scope.projectId, outlineNodeId: nodeId, title: '原章名', content: '正文不变', wordCount: 4, status: 'draft' as const, order: 0, notes: '', createdAt: Date.now(), updatedAt: Date.now() }, { owner: 'work' }))
     return { charId, volumeId, nodeId, chapterId }
   }, scope)
   await page.goto(`./workspace/${scope.projectId}?module=characters-main`)

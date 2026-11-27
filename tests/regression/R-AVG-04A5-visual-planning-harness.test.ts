@@ -96,6 +96,7 @@ async function setup(options: { processing?:boolean;secondImage?:boolean; fenced
   vi.stubGlobal('fetch', imageFetcher)
   const fixture = await avgVisualPlanningFixtureV4(), { owner, source } = fixture
   const brief = structuredClone(fixture.brief)
+  if (brief.avgVisualPlanning?.scope.version !== 1) throw new Error('V4 fixture must retain its V1 visual scope')
   if(options.secondImage){
     const old=brief.avgVisualPlanning!.scope,{sourceInputHash:_hash,aspectRatio:_ratio,...draftScope}=old
     const extra=structuredClone(draftScope.templates[0]);extra.parameters.requirementKey+='-reference';extra.parameters.assetKey+='-reference'
@@ -110,6 +111,7 @@ async function setup(options: { processing?:boolean;secondImage?:boolean; fenced
     const data = await deterministicRegionMapPngV1({ width: 32, height: 32, palette: ['#112233', '#445566', '#778899'] })
     const asset = await importAvgMediaV1({ scope: owner.scope, data, mimeType: 'image/png', kind: 'background', name: '原创工程风格参考',
       license: '原创工程参考，仅用于本测试声明用途', altText: '工程色块', characterTag: '' })
+    if (brief.avgVisualPlanning!.scope.version !== 1) throw new Error('V4 fixture must retain its V1 visual scope')
     const { sourceInputHash: _hash, aspectRatio: _ratio, ...unhashed } = brief.avgVisualPlanning!.scope
     unhashed.templates[0].allowedReferenceKeys = unhashed.templates[0].requiredReferenceKeys = ['design-reference']
     unhashed.referenceCatalog = [{ referenceKey: 'design-reference', reference: { assetKey: asset.assetKey, assetVersion: asset.version,

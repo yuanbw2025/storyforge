@@ -35,7 +35,7 @@ async function save(identity: LocalSaveHistoryIdentityV1, text = raw, confirmati
   confirmation ??= await intent(identity)
   const scope = { projectId: identity.projectId, worldId: identity.worldId, workId: identity.workId }
   if (identity.table === 'histories') return useHistoryStore.getState().saveForHistoryAuthorV1({
-    origin: { version: 1, kind: 'work', scope }, selection: { kind: 'partition', worldGroupId: identity.worldGroupId }, patch: { [identity.field]: text }, confirmation,
+    origin: { version: 1, kind: 'work', scope }, selection: { kind: 'partition', worldGroupId: identity.worldGroupId }, patch: identity.field === 'overview' ? { overview: text } : { eraSystem: text }, confirmation,
   })
   return identity.table === 'historicalTimelineEvents'
     ? useHistoricalStore.getState().updateEvent(identity.recordId, { [identity.field]: text }, scope, confirmation)
@@ -78,6 +78,7 @@ it.each(['histories', 'historicalTimelineEvents', 'historicalKeywords'] as const
 
 it('preserves unrelated changes while rejecting stale fields, fabricated hashes, record swaps and wrong World partitions', async () => {
   const { identities, eventId, scope } = await fixture(), identity = identities[2]
+  if (identity.table !== 'historicalTimelineEvents') throw new Error('Fixture requires the native timeline event identity')
   const expected = await intent(identity)
   await useHistoricalStore.getState().updateEvent(eventId, { location: '保留地点' }, scope)
   await save(identity, raw, expected)
@@ -86,7 +87,7 @@ it('preserves unrelated changes while rejecting stale fields, fabricated hashes,
   const forged = await intent(identity); forged.expected.valueHash = 'forged'
   await expect(save(identity, '伪造', forged)).rejects.toThrow('字段已变化')
   const swapped = await intent(identity)
-  swapped.expected.identity = { ...identity, table: 'historicalTimelineEvents', recordId: eventId + 100 }
+  swapped.expected.identity = { ...identity, recordId: eventId + 100 }
   await expect(save(identity, '错记录', swapped)).rejects.toThrow('记录凭据无效')
   const wrongGroup = await intent(identity); wrongGroup.expected.identity = { ...identity, worldGroupId: 999 }
   await expect(save(identity, '错分区', wrongGroup)).rejects.toThrow('分区不一致')

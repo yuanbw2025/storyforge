@@ -38,7 +38,7 @@ it('scans a 192 MiB original through bounded slices and reads the exact final ra
     },
     text() { throw Error('whole-file decode forbidden') },
     arrayBuffer() { throw Error('whole-file buffer forbidden') },
-  } as Blob
+  } as unknown as Blob
   const source = await openImportBlobTextSourceV1(instrumented, { onProgress: read => { readBytes = read } })
   expect(readBytes).toBe(size); expect(maxRead).toBeLessThanOrEqual(65539)
   expect(source.preview.length).toBe(IMPORT_TEXT_PREVIEW_CHARS_V1)

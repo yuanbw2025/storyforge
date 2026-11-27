@@ -129,7 +129,7 @@ it('050 an acknowledged draft keeps a new IME tail dirty while the old native re
   await act(async () => root.render(<Harness />))
   for (let i = 0; i < 100 && !host.querySelector('[data-local-save-status]'); i++) await act(async () => { await new Promise(resolve => setTimeout(resolve, 5)) })
   await click('编辑源码'); const area = await input('第一稿')
-  let saving!: Promise<void>
+  let saving!: ReturnType<typeof flushPendingEditsV1>
   await act(async () => { saving = flushPendingEditsV1(); await reached })
   await act(async () => area.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true })))
   await input('第一稿中文尾字')

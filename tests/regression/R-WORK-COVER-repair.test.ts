@@ -63,12 +63,12 @@ describe('035 saved local response repair', () => {
             if (raw && JSON.parse(raw).phase === 'candidate-ready') throw new Error('fixture-result-fault')
             return updateBuffer(key, changes)
           })
-          : vi.spyOn(db.workCoverAssets, 'add').mockImplementation(async row => {
-            const id = await addAsset(row), blob = (await db.mediaBlobObjects.get(row.blobObjectId))!
+          : vi.spyOn(db.workCoverAssets, 'add').mockImplementation(row => addAsset(row).then(async id => {
+            const blob = (await db.mediaBlobObjects.get(row.blobObjectId))!
             const data = blob.data!.slice(0); new Uint8Array(data)[0] ^= 1
             await db.mediaBlobObjects.update(blob.id!, { data }) // Keep the claimed hash/metadata unchanged.
             return id
-          })
+          }))
     try { await expect(repairSavedWorkCoverImageV1(f.input)).rejects.toThrow() } finally { spy.mockRestore() }
     expect(await db.workCoverAssets.count()).toBe(0); expect(await db.mediaBlobObjects.count()).toBe(0)
     const original = (await db.workCoverResponseBuffers.get(f.buffer.id!))!

@@ -259,5 +259,5 @@ it('ordinary write witness refresh never publishes a late result into another wo
   expect(useWorldviewStore.getState().loadedScope).toEqual(other.scope)
   expect(useWorldviewStore.getState().worldview).toBeNull()
   expect(useWorldviewStore.getState().localSaveWitnesses).toEqual(current)
-  expect((await row()).worldId).toBe(scope.worldId)
+  expect(await row()).toMatchObject({ worldId: scope.worldId })
 })

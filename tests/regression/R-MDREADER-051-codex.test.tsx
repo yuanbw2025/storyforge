@@ -18,9 +18,9 @@ afterEach(async () => {
 })
 async function fixture() {
   const { scope } = await seedCurrentWorkspace()
-  const categoryId = await useCodexStore.getState().addCategory({ projectId: scope.projectId, worldId: scope.worldId, domain: 'humanity', parentId: null,
+  const categoryId = await useCodexStore.getState().addCategory({ projectId: scope.projectId, domain: 'humanity', parentId: null,
     name: '地方知识', fieldSchema: stringifyFieldSchema([{ key: 'memo', label: '长文', type: 'longtext' }, { key: 'code', label: '代号', type: 'text' }, { key: 'count', label: '数量', type: 'number' }]), hidden: false, order: 0 })
-  const id = await useCodexStore.getState().addEntry({ projectId: scope.projectId, worldId: scope.worldId, categoryId, name: '# 字面名称', icon: '', summary: '# 单行简介',
+  const id = await useCodexStore.getState().addEntry({ projectId: scope.projectId, categoryId, name: '# 字面名称', icon: '', summary: '# 单行简介',
     description: raw, fields: stringifyEntryFields({ memo: '# 自定义长文\r\n\r\n保留全文。  ', code: '# 字面代号', count: '7' }), refs: '{}', tags: '[]', importance: 3, order: 0 })
   const category = (await db.codexCategories.get(categoryId))!, entry = (await db.codexEntries.get(id))!
   const host = document.createElement('div'); document.body.append(host); const root = createRoot(host); mounted.push({ host, root })

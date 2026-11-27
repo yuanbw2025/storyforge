@@ -36353,36 +36353,6 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-AVG-04A5-professional-scope-draft.test.ts\",\"TS2322\",\"Type '{ templates: AvgVisualRequirementTemplateV1[]; version: 2; revision: number; schema: \\\"storyforge.avg.visual-planning-scope\\\"; batchKey: string; referenceCatalog: Array<{ referenceKey: string; reference: AvgMediaReferenceV1; }>; }' is not assignable to type 'AvgVisualPlanningDraftV5'.\\n  Types of property 'referenceCatalog' are incompatible.\\n    Type '{ referenceKey: string; reference: AvgMediaReferenceV1; }[]' is not assignable to type '{ referenceKey: string; reference: AvgMediaReferenceV2; }[]'.\\n      Type '{ referenceKey: string; reference: AvgMediaReferenceV1; }' is not assignable to type '{ referenceKey: string; reference: AvgMediaReferenceV2; }'.\\n        Types of property 'reference' are incompatible.\\n          Type 'AvgMediaReferenceV1' is missing the following properties from type 'AvgMediaReferenceV2': schema, version, contentPolicy\",\"409c69999661228e806b5a46bb7d4963ba16edb0cc7673054b5651b259d3bcee\",7,8]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-AVG-04A5-professional-scope-draft.test.ts",
-        "code": "TS2322",
-        "message": "Type '{ templates: AvgVisualRequirementTemplateV1[]; version: 2; revision: number; schema: \"storyforge.avg.visual-planning-scope\"; batchKey: string; referenceCatalog: Array<{ referenceKey: string; reference: AvgMediaReferenceV1; }>; }' is not assignable to type 'AvgVisualPlanningDraftV5'.\n  Types of property 'referenceCatalog' are incompatible.\n    Type '{ referenceKey: string; reference: AvgMediaReferenceV1; }[]' is not assignable to type '{ referenceKey: string; reference: AvgMediaReferenceV2; }[]'.\n      Type '{ referenceKey: string; reference: AvgMediaReferenceV1; }' is not assignable to type '{ referenceKey: string; reference: AvgMediaReferenceV2; }'.\n        Types of property 'reference' are incompatible.\n          Type 'AvgMediaReferenceV1' is missing the following properties from type 'AvgMediaReferenceV2': schema, version, contentPolicy",
-        "anchor": "409c69999661228e806b5a46bb7d4963ba16edb0cc7673054b5651b259d3bcee",
-        "line": 70,
-        "column": 7,
-        "start": 5590,
-        "length": 8
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/regression/R-AVG-04A5-professional-scope-draft.test.ts\",\"TS2322\",\"Type '{ version: 2; revision: number; schema: \\\"storyforge.avg.visual-planning-scope\\\"; templates: AvgVisualRequirementTemplateV1[]; batchKey: string; referenceCatalog: Array<{ referenceKey: string; reference: AvgMediaReferenceV1; }>; }' is not assignable to type 'AvgVisualPlanningDraftV5'.\\n  Types of property 'referenceCatalog' are incompatible.\\n    Type '{ referenceKey: string; reference: AvgMediaReferenceV1; }[]' is not assignable to type '{ referenceKey: string; reference: AvgMediaReferenceV2; }[]'.\\n      Type '{ referenceKey: string; reference: AvgMediaReferenceV1; }' is not assignable to type '{ referenceKey: string; reference: AvgMediaReferenceV2; }'.\\n        Types of property 'reference' are incompatible.\\n          Type 'AvgMediaReferenceV1' is missing the following properties from type 'AvgMediaReferenceV2': schema, version, contentPolicy\",\"c5f98654c10f2b45d0acbe2a114ad37b1f0b93190ff2c8ee71ad56a201d29a59\",133,8]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-AVG-04A5-professional-scope-draft.test.ts",
-        "code": "TS2322",
-        "message": "Type '{ version: 2; revision: number; schema: \"storyforge.avg.visual-planning-scope\"; templates: AvgVisualRequirementTemplateV1[]; batchKey: string; referenceCatalog: Array<{ referenceKey: string; reference: AvgMediaReferenceV1; }>; }' is not assignable to type 'AvgVisualPlanningDraftV5'.\n  Types of property 'referenceCatalog' are incompatible.\n    Type '{ referenceKey: string; reference: AvgMediaReferenceV1; }[]' is not assignable to type '{ referenceKey: string; reference: AvgMediaReferenceV2; }[]'.\n      Type '{ referenceKey: string; reference: AvgMediaReferenceV1; }' is not assignable to type '{ referenceKey: string; reference: AvgMediaReferenceV2; }'.\n        Types of property 'reference' are incompatible.\n          Type 'AvgMediaReferenceV1' is missing the following properties from type 'AvgMediaReferenceV2': schema, version, contentPolicy",
-        "anchor": "c5f98654c10f2b45d0acbe2a114ad37b1f0b93190ff2c8ee71ad56a201d29a59",
-        "line": 67,
-        "column": 133,
-        "start": 5345,
-        "length": 8
-      }
-    },
-    {
       "identity": "[\"typescript\",\"tests/regression/R-AVG-04A5-proposal-reuse-contract.test.ts\",\"TS2322\",\"Type 'AvgVisualPlanningBrief' is not assignable to type 'AvgVisualPlanningBriefV4'.\\n  Type 'AvgVisualPlanningBriefV5' is not assignable to type 'AvgVisualPlanningBriefV4'.\\n    Types of property 'version' are incompatible.\\n      Type '5' is not assignable to type '4'.\",\"a5a48726cb212b74486f1f54fe3212777bc682645f1d6392a6278e13a97fddc4\",63,17]",
       "count": 1,
       "diagnostic": {
@@ -38258,36 +38228,6 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-AVG-04A5-visual-planning-harness.test.ts\",\"TS2345\",\"Argument of type '{ schema: \\\"storyforge.avg.visual-planning-scope\\\"; version: 1; batchKey: string; revision: number; templates: AvgVisualRequirementTemplateV1[]; referenceCatalog: { ...; }[]; } | { ...; }' is not assignable to parameter of type 'Omit<AvgVisualPlanningScopeV1, \\\"aspectRatio\\\" | \\\"sourceInputHash\\\">'.\\n  Type '{ version: 2; referenceCatalog: { referenceKey: string; reference: AvgMediaReferenceV2; }[]; revision: number; schema: \\\"storyforge.avg.visual-planning-scope\\\"; templates: AvgVisualRequirementTemplateV1[]; batchKey: string; }' is not assignable to type 'Omit<AvgVisualPlanningScopeV1, \\\"aspectRatio\\\" | \\\"sourceInputHash\\\">'.\\n    Types of property 'version' are incompatible.\\n      Type '2' is not assignable to type '1'.\",\"09f06224eb10a0d3bc1a7bda956769aa28a4834e367734b2c29e9e61a6166554\",75,8]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-AVG-04A5-visual-planning-harness.test.ts",
-        "code": "TS2345",
-        "message": "Argument of type '{ schema: \"storyforge.avg.visual-planning-scope\"; version: 1; batchKey: string; revision: number; templates: AvgVisualRequirementTemplateV1[]; referenceCatalog: { ...; }[]; } | { ...; }' is not assignable to parameter of type 'Omit<AvgVisualPlanningScopeV1, \"aspectRatio\" | \"sourceInputHash\">'.\n  Type '{ version: 2; referenceCatalog: { referenceKey: string; reference: AvgMediaReferenceV2; }[]; revision: number; schema: \"storyforge.avg.visual-planning-scope\"; templates: AvgVisualRequirementTemplateV1[]; batchKey: string; }' is not assignable to type 'Omit<AvgVisualPlanningScopeV1, \"aspectRatio\" | \"sourceInputHash\">'.\n    Types of property 'version' are incompatible.\n      Type '2' is not assignable to type '1'.",
-        "anchor": "09f06224eb10a0d3bc1a7bda956769aa28a4834e367734b2c29e9e61a6166554",
-        "line": 118,
-        "column": 75,
-        "start": 11348,
-        "length": 8
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/regression/R-AVG-04A5-visual-planning-harness.test.ts\",\"TS2345\",\"Argument of type '{ schema: \\\"storyforge.avg.visual-planning-scope\\\"; version: 1; batchKey: string; revision: number; templates: AvgVisualRequirementTemplateV1[]; referenceCatalog: { ...; }[]; } | { ...; }' is not assignable to parameter of type 'Omit<AvgVisualPlanningScopeV1, \\\"aspectRatio\\\" | \\\"sourceInputHash\\\">'.\\n  Type '{ version: 2; referenceCatalog: { referenceKey: string; reference: AvgMediaReferenceV2; }[]; revision: number; schema: \\\"storyforge.avg.visual-planning-scope\\\"; templates: AvgVisualRequirementTemplateV1[]; batchKey: string; }' is not assignable to type 'Omit<AvgVisualPlanningScopeV1, \\\"aspectRatio\\\" | \\\"sourceInputHash\\\">'.\\n    Types of property 'version' are incompatible.\\n      Type '2' is not assignable to type '1'.\",\"9ac3d3cdf173a54e644fb92d595a26897be29dc0b3b20f3d9c65f60f7c691ba3\",73,10]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-AVG-04A5-visual-planning-harness.test.ts",
-        "code": "TS2345",
-        "message": "Argument of type '{ schema: \"storyforge.avg.visual-planning-scope\"; version: 1; batchKey: string; revision: number; templates: AvgVisualRequirementTemplateV1[]; referenceCatalog: { ...; }[]; } | { ...; }' is not assignable to parameter of type 'Omit<AvgVisualPlanningScopeV1, \"aspectRatio\" | \"sourceInputHash\">'.\n  Type '{ version: 2; referenceCatalog: { referenceKey: string; reference: AvgMediaReferenceV2; }[]; revision: number; schema: \"storyforge.avg.visual-planning-scope\"; templates: AvgVisualRequirementTemplateV1[]; batchKey: string; }' is not assignable to type 'Omit<AvgVisualPlanningScopeV1, \"aspectRatio\" | \"sourceInputHash\">'.\n    Types of property 'version' are incompatible.\n      Type '2' is not assignable to type '1'.",
-        "anchor": "9ac3d3cdf173a54e644fb92d595a26897be29dc0b3b20f3d9c65f60f7c691ba3",
-        "line": 105,
-        "column": 73,
-        "start": 10239,
-        "length": 10
-      }
-    },
-    {
       "identity": "[\"typescript\",\"tests/regression/R-AVG-04A5-visual-planning-harness.test.ts\",\"TS2345\",\"Argument of type 'ArrayBuffer | null' is not assignable to parameter of type 'ArrayBuffer'.\\n  Type 'null' is not assignable to type 'ArrayBuffer'.\",\"94d3ce1c748b35d6767edc1748e1dae417c964716284c1d64d6cd376a72311f0\",36,56]",
       "count": 1,
       "diagnostic": {
@@ -39665,36 +39605,6 @@
         "column": 5,
         "start": 480,
         "length": 9
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/regression/R-CF20260703-6-character-dimension-draft.test.tsx\",\"TS2769\",\"No overload matches this call.\\n  The last overload gave the following error.\\n    Type '(patch: Partial<Character>) => number' is not assignable to type '(patch: Partial<Character>, expected?: Partial<Character> | undefined) => void | Promise<void>'.\\n      Type 'number' is not assignable to type 'void | Promise<void>'.\",\"857323d0228deb888bb799c3a6db825cc425b93f9c4542bf229f784fa4161b1a\",85,8]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-CF20260703-6-character-dimension-draft.test.tsx",
-        "code": "TS2769",
-        "message": "No overload matches this call.\n  The last overload gave the following error.\n    Type '(patch: Partial<Character>) => number' is not assignable to type '(patch: Partial<Character>, expected?: Partial<Character> | undefined) => void | Promise<void>'.\n      Type 'number' is not assignable to type 'void | Promise<void>'.",
-        "anchor": "857323d0228deb888bb799c3a6db825cc425b93f9c4542bf229f784fa4161b1a",
-        "line": 47,
-        "column": 85,
-        "start": 1479,
-        "length": 8
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/regression/R-CF20260703-6-character-dimension-draft.test.tsx\",\"TS2769\",\"No overload matches this call.\\n  The last overload gave the following error.\\n    Type '(patch: Partial<Character>) => number' is not assignable to type '(patch: Partial<Character>, expected?: Partial<Character> | undefined) => void | Promise<void>'.\\n      Type 'number' is not assignable to type 'void | Promise<void>'.\",\"dfff6bc5c634086dc7d0aa1e72088e91906f4cf4612a57e49c849e2414b3881b\",9,8]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-CF20260703-6-character-dimension-draft.test.tsx",
-        "code": "TS2769",
-        "message": "No overload matches this call.\n  The last overload gave the following error.\n    Type '(patch: Partial<Character>) => number' is not assignable to type '(patch: Partial<Character>, expected?: Partial<Character> | undefined) => void | Promise<void>'.\n      Type 'number' is not assignable to type 'void | Promise<void>'.",
-        "anchor": "dfff6bc5c634086dc7d0aa1e72088e91906f4cf4612a57e49c849e2414b3881b",
-        "line": 59,
-        "column": 9,
-        "start": 1953,
-        "length": 8
       }
     },
     {
@@ -48080,21 +47990,6 @@
         "column": 32,
         "start": 13454,
         "length": 43
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/regression/R-HARNESS31-story-core-panel-ui.test.tsx\",\"TS2339\",\"Property 'click' does not exist on type 'Element'.\",\"dbc597f746da38c6f88da2969ce312a24cf976fcaca387fd8f24003941bf9e5e\",41,5]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-HARNESS31-story-core-panel-ui.test.tsx",
-        "code": "TS2339",
-        "message": "Property 'click' does not exist on type 'Element'.",
-        "anchor": "dbc597f746da38c6f88da2969ce312a24cf976fcaca387fd8f24003941bf9e5e",
-        "line": 169,
-        "column": 41,
-        "start": 5450,
-        "length": 5
       }
     },
     {

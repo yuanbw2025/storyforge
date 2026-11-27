@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPendingEditsV1, resetPendingEditCoordinatorForTestsV1 } from '../../src/lib/authoring/pending-edit-coordinator'
 import type { Project } from '../../src/lib/types'
+import Dexie from 'dexie'
 import { db } from '../../src/lib/db/schema'
 
 const mocks = vi.hoisted(() => ({
@@ -25,7 +26,7 @@ function readDescription() {
 }
 async function type(label: string, value: string) {
   if (label === '作品简介' && !host.querySelector('[aria-label="作品简介"]')) {
-    await act(async () => [...host.querySelectorAll('[data-markdown-read-view] button')].find(button => button.textContent === '编辑源码')!.click())
+    await act(async () => [...host.querySelectorAll<HTMLButtonElement>('[data-markdown-read-view] button')].find(button => button.textContent === '编辑源码')!.click())
   }
   await act(async () => {
     const input = host.querySelector<HTMLInputElement | HTMLTextAreaElement>(`[aria-label="${label}"]`)!
@@ -41,9 +42,9 @@ beforeEach(() => {
   mocks.work = { id: 11, projectId: 1, worldId: 7, title: '雾港', description: '', genres: ['other'], targetWordCount: 300000 }
   // These draft scheduling cases mock readback as well as the writer. Actual
   // IndexedDB evidence and dishonest writer results are covered in R-050.
-  vi.spyOn(db.works, 'get').mockImplementation(async () => {
-    const last = mocks.update.mock.calls.at(-1) as unknown as [number, object, { projectId: number; workId: number; worldId: number }]
-    return last ? { ...mocks.work, ...last[1], ...last[2], id: last[2].workId, updatedAt: Date.now() } : mocks.work
+  vi.spyOn(db.works, 'get').mockImplementation(() => {
+    const last = mocks.update.mock.calls[mocks.update.mock.calls.length - 1] as unknown as [number, object, { projectId: number; workId: number; worldId: number }]
+    return Dexie.Promise.resolve(last ? { ...mocks.work, ...last[1], ...last[2], id: last[2].workId, updatedAt: Date.now() } : mocks.work)
   })
   host = document.createElement('div'); document.body.append(host); root = createRoot(host)
 })

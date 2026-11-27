@@ -181,14 +181,14 @@ describe('SFQA-122 · actual world editors', () => {
     const work = await addCurrentWorkFixtureV1({ projectId: made.scope.projectId, worldId: world.id!, create: { title: '另一Work', kind: 'novel', novelProfile: 'long' } })
     const nextProject = { ...made.project, activeWorldId: world.id!, activeWorkId: work.id!, enableMultiWorld: false }
     let releaseSave: () => void = () => undefined
-    let pendingSave: Promise<void> | null = null
+    let pendingSave: ReturnType<ReturnType<typeof useGeographyStore.getState>['save']> | null = null
     if (heldSave) {
       const gate = new Promise<void>(resolve => { releaseSave = resolve })
       const originalSave = useGeographyStore.getState().save
-      vi.spyOn(useGeographyStore.getState(), 'save').mockImplementation((...args) => {
+      vi.spyOn(useGeographyStore.getState(), 'save').mockImplementation(((...args: Parameters<typeof originalSave>) => {
         pendingSave = gate.then(() => originalSave(...args))
         return pendingSave
-      })
+      }) as typeof originalSave)
     }
     try {
       await render('geography', made.project)

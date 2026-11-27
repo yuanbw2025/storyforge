@@ -63,7 +63,7 @@ describe('AVG professional family source draft prepares only exact prospective c
 
 describe('retiring an exact visual scope clears only its unused item proposals',()=>{
   it('freezes the V5 expression source after exact unused item declarations are retired',async()=>{
-    const first=avgProfessionalFamilyScopeFixtureV4('v5-retired'),planning={...first.planning,version:2 as const}
+    const first=avgProfessionalFamilyScopeFixtureV4('v5-retired'),planning={...first.planning,version:2 as const,referenceCatalog:[]}
     const original=structuredClone(first.workspace),prepared=await prepareAvgVisualPlanningSourceDraftV5({workspace:first.workspace,planning})
     expect(prepared.scope.sourceInputHash).not.toBe(await hashAvgMediaSourceInputV1(original))
     const before=structuredClone(prepared.workspace),next=await prepareAvgVisualPlanningSourceDraftV5({workspace:prepared.workspace,

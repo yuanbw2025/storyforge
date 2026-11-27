@@ -2411,7 +2411,7 @@ test('外部文档词条先形成带证据候选，作者确认后才进入 Code
     '临渊城扼守海峡，常住十万人，万舟汇聚，是北境最大的贸易港。',
   )
   await page.getByRole('button', { name: '开始解析', exact: true }).click()
-  await page.getByRole('button', { name: /导入当前项目（1 块）/ }).click()
+  await page.getByRole('button', { name: '导入当前项目（自动分块）', exact: true }).click()
 
   const chunkReview = page.getByRole('dialog', { name: '审查导入候选' })
   await expect(chunkReview.getByRole('heading', { name: '审查第 1 块' })).toBeVisible()

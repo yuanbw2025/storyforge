@@ -21,7 +21,7 @@ beforeEach(async () => {
 afterEach(() => { expect(fetch).not.toHaveBeenCalled(); vi.restoreAllMocks(); vi.unstubAllGlobals(); db.close() })
 async function fixture(kind: Kind) {
   const { scope } = await seedCurrentWorkspace('规划文字保存')
-  const table = kind === 'scene' ? 'detailedOutlines' : 'storyArcs'
+  const table = kind === 'scene' ? 'detailedOutlines' as const : 'storyArcs' as const
   const field = kind === 'scene' ? 'scenes.summary' : kind === 'stage' ? 'stages.description' : 'description'
   const entryId = kind === 'arc' ? undefined : 'stable-one'
   let id: number

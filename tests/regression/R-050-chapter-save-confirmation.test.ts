@@ -53,10 +53,7 @@ it('rejects an actual zero-row update when the target disappears between its rea
     assertChapterEditorSavedV1(before, await db.chapters.get(id), { content: draft.html, wordCount: 5 })
   })
   drafts.stage({ chapterId: id, html: '<p>不能丢的新稿。</p>', plainText: '不能丢的新稿。' })
-  vi.spyOn(db.chapters, 'update').mockImplementationOnce(async (key, patch) => {
-    await db.chapters.delete(key as number)
-    return original(key as number, patch)
-  })
+  vi.spyOn(db.chapters, 'update').mockImplementationOnce((key, patch) => db.chapters.delete(key as number).then(() => original(key as number, patch)))
   await expect(drafts.flush()).rejects.toThrow('目标已不存在')
   expect(drafts.hasPending()).toBe(true); expect(await db.chapters.get(id)).toBeUndefined()
   expect(store.getState().currentChapter?.content).toBe(before.content)

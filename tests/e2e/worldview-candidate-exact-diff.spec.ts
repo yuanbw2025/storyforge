@@ -202,11 +202,11 @@ test('054 actual candidate review: exact middle insertions, native editor, 14 th
     await page.goto(`./workspace/${ids.scope.projectId}?module=worldview-origin&originField=origin`)
     await expect(page.getByText('StoryForge',{exact:true}).first()).toBeVisible({timeout:60000})
     // Bind the one real review body to the fixture's actual durable candidate.
-    // Its immediate owner is the action section; ancestor sections are excluded.
+    // Bind the nearest real action section, preserving any save-status wrapper.
     const reviewBody=page.locator('.worldview-review-v2[data-review-session]')
     await expect(reviewBody).toHaveCount(1)
     await expect.poll(async()=>JSON.parse((await reviewBody.getAttribute('data-review-session'))??'null')).toEqual(ids.viewIdentity)
-    const review=reviewBody.locator('..')
+    const review=reviewBody.locator('xpath=ancestor::section[1]')
     await expect(review).toHaveCount(1);expect(await review.evaluate(element=>element.tagName)).toBe('SECTION')
     await expect(review.getByRole('heading',{name:'待确认 · 世界来源候选',exact:true})).toHaveCount(1)
     const diff=review.getByRole('region',{name:'原文与候选精确对照'})
