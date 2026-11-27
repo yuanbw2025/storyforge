@@ -157,7 +157,10 @@ export function useIncrementalInspiration(
     if (!draftLoaded.current) return
     const timer = setTimeout(() => {
       try {
+        const saved = JSON.parse(localStorage.getItem(draftKey) || '{}')
+        if (!saved || typeof saved !== 'object' || Array.isArray(saved)) return
         localStorage.setItem(draftKey, JSON.stringify({
+          ...saved,
           inspiration,
           action,
           userHint,
