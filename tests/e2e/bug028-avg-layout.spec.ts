@@ -19,13 +19,15 @@ async function settled(page: Page) {
 }
 async function navigate(page: Page, route: string) {
   const primary = AVG_PRIMARY_NAV.find(([id]) => id === avgPrimaryForPage(route))!
-  const menu = page.getByRole('navigation', { name: 'AVG 页面导航', exact: true })
+  // Navigation closes the mobile drawer. Inspect its retained selection after
+  // the click without requiring the deliberately hidden drawer to stay open.
+  const menu = page.getByRole('navigation', { name: 'AVG 页面导航', exact: true, includeHidden: true })
   if (!await menu.isVisible()) await page.getByRole('button', { name: 'AVG 目录', exact: true }).click()
-  const primaryButton = menu.getByRole('button', { name: primary[1], exact: true })
+  const primaryButton = menu.getByRole('button', { name: primary[1], exact: true, includeHidden: true })
   await primaryButton.click()
   await expect(primaryButton).toHaveAttribute('aria-current', 'page')
   if (route !== primary[2]) {
-    const contents = page.getByRole('navigation', { name: 'AVG 内容导航', exact: true })
+    const contents = page.getByRole('navigation', { name: 'AVG 内容导航', exact: true, includeHidden: true })
     await expect(contents).toBeAttached()
     if (!await contents.isVisible()) await page.getByRole('button', { name: primary[0] === 'player' ? '游玩目录' : '制作目录', exact: true }).click()
     await contents.getByRole('button', { name: AVG_PAGES.find(([id]) => id === route)![1], exact: true }).click()
