@@ -53,7 +53,7 @@ test('player-host explicitly shares and delegates once, saves without admission,
   const input = await seed(page), rawInput = '  这一次共同调查 e\u0301。\n'; let sends = 0
   await page.route('**/common-desk-native/v1/chat/completions', async route => {
     sends++; const wire = route.request().postDataJSON()
-    expect(JSON.stringify(wire)).not.toContain('NATIVE-COMMON-DESK-PRIVATE-'); expect(wire.max_tokens).toBe(8000)
+    expect(JSON.stringify(wire)).not.toContain('NATIVE-COMMON-DESK-PRIVATE-'); expect(wire.max_tokens).toBeUndefined()
     expect(JSON.stringify(wire.messages)).toContain('这一次共同调查')
     await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ choices: [{ message: { content: await body(page, input) } }], usage: { prompt_tokens: 200, completion_tokens: 1000, total_tokens: 1200 } }) })
   })

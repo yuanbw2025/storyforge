@@ -341,7 +341,7 @@ export default function ReviewPanel(props: Props) {
       {/* 内容区 */}
       <div className="p-4 max-h-[50vh] overflow-y-auto">
         {activeTab !== 'consistency' && <label className="mb-3 block text-xs">本轮评审补充要求（可选）
-          <textarea aria-label="本轮评审补充要求" maxLength={16000} rows={3} className="mt-1 w-full rounded border border-border bg-bg-base p-2" value={reviewAuthorRequest} disabled={qualityRunning || revisionBusy} placeholder="写下你担心的问题、评审重点或希望保留的写法。" onChange={event => setReviewRequests(value => ({ ...value, [reviewRequestKey]: { source: reviewRequestSource, text: event.target.value } }))} />
+          <textarea aria-label="本轮评审补充要求" rows={3} className="mt-1 w-full rounded border border-border bg-bg-base p-2" value={reviewAuthorRequest} disabled={qualityRunning || revisionBusy} placeholder="写下你担心的问题、评审重点或希望保留的写法。" onChange={event => setReviewRequests(value => ({ ...value, [reviewRequestKey]: { source: reviewRequestSource, text: event.target.value } }))} />
         </label>}
         {activeTab === 'consistency' && (
           <div className="mb-3 flex gap-2">
@@ -418,7 +418,7 @@ export default function ReviewPanel(props: Props) {
             <p className="text-xs text-text-muted">默认只允许修改问题所在段落。你可以增加相关段落，并保护要保留的原句；本轮再调用最多两次模型，先看修订与复核结果，再确认写回。</p>
             <QualityRevisionScopeControls chapterText={chapterContent} extraParagraphs={extraParagraphs} protectedText={protectedText} disabled={revisionBusy} setExtraParagraphs={setExtraParagraphs} setProtectedText={setProtectedText} />
             <label className="block text-xs">本轮修稿要求（可选）
-              <textarea aria-label="本轮修稿要求" maxLength={16000} rows={3} className="mt-1 w-full rounded border border-border bg-bg-base p-2" value={revisionAuthorRequest} disabled={revisionBusy || qualityRunning} placeholder="说明选中问题要怎样修改，以及要保留的动作、人物表达或收尾。" onChange={event => setRevisionRequests(value => ({ ...value, [revisionRequestKey]: event.target.value }))} />
+              <textarea aria-label="本轮修稿要求" rows={3} className="mt-1 w-full rounded border border-border bg-bg-base p-2" value={revisionAuthorRequest} disabled={revisionBusy || qualityRunning} placeholder="说明选中问题要怎样修改，以及要保留的动作、人物表达或收尾。" onChange={event => setRevisionRequests(value => ({ ...value, [revisionRequestKey]: event.target.value }))} />
             </label>
             <button className="rounded bg-accent px-3 py-2 text-xs text-white disabled:opacity-50" disabled={revisionBusy || qualityRunning || !selectedIssues.length} onClick={() => void handleRevision()}>{revisionBusy ? '修订与复核中…' : '生成修订并复核'}</button>
           </div>}

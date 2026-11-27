@@ -7,6 +7,23 @@ const settings = describeResolvedAIRequestSettingsV1(resolveRequestConfig({ ...u
 const issue = (quote: string, start: number | null, end: number | null) => ({ dimension: 'causality', confidence: 'uncertain', quote, start, end, reason: '付款过程没有写出，却直接记为已收款。', suggestion: '核对付款过程，保持金额和签字人。' })
 
 describe('LFQ7 · 全章输入、真实引文与阅读建议合同', () => {
+  it('完整接受长要求、长引文和超过旧条数的报告，并可按原件回读验签', async () => {
+    const chapterText = '完整且可核验的原文。'.repeat(160), authorRequest = '保留作者的实际要求。'.repeat(1800)
+    const request = await buildWholeChapterQualityReviewRequestV1({mode: 'quality', chapterTitle: '长报告', chapterText, registeredContext: '', authorRequest})
+    expect(request.messages[1].content).toContain(authorRequest)
+    const longText = '需要逐项解释的依据。'.repeat(420)
+    const issues = Array.from({length: 45}, () => ({...issue(chapterText, 0, chapterText.length), reason: longText, suggestion: longText}))
+    const raw = {summary: longText, strengths: Array.from({length: 25}, () => longText), issues}
+    const parse = (value: unknown) => parseWholeChapterQualityReviewV1({raw: JSON.stringify(value), mode: 'quality', chapterText, targetTextHash: request.targetTextHash, messages: request.messages, settings, responseCompletion: 'complete'})
+    const report = await parse(raw)
+    expect(report.summary).toBe(longText)
+    expect(report.strengths).toEqual(raw.strengths)
+    expect(report.issues).toHaveLength(45)
+    expect(report.issues[44]).toMatchObject({quote: chapterText, reason: longText, suggestion: longText})
+    expect(await verifyWholeChapterQualityReviewV1(report, chapterText, request.messages)).toBe(true)
+    await expect(parse({...raw, issues: [...issues, {...issues[0], quote: '原文里不存在的引文'}]})).rejects.toThrow('引文')
+  })
+
   it('登记资料与作者计划先交接，再核对实际完整正文，避免以计划自证结算', async () => {
     const chapterText = '她实际回听了三次。\n计数器仍写消耗两次。'
     const registeredContext = '计划只回听两次，但尚未执行。'

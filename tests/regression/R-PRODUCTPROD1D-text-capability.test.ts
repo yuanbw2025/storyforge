@@ -46,7 +46,7 @@ it('keeps a provider schema rejection terminal instead of resending as JSON obje
     expect(request).toHaveBeenCalledOnce()
     const body = JSON.parse(request.mock.calls[0][1]!.body as string)
     expect(body.response_format.type).toBe('json_schema')
-    expect(body.max_tokens).toBe(2000)
+    expect(body).not.toHaveProperty('max_tokens')
   } finally {request.mockRestore()}
 })
 
@@ -64,7 +64,7 @@ it('preserves schema output and explicit thinking settings in the same productio
     }, {resolveConfig: () => ({...configured, model: 'agnes-3.0-flash'})})
     expect(request).toHaveBeenCalledOnce()
     expect(JSON.parse(String(request.mock.calls[0][1]?.body))).toMatchObject({
-      model: 'agnes-3.0-flash', max_tokens: 2000,
+      model: 'agnes-3.0-flash',
       response_format: {type: 'json_schema', json_schema: schema},
       chat_template_kwargs: {enable_thinking: false},
     })
@@ -243,7 +243,7 @@ describe('R-PRODUCTPROD-1D · reuse existing text provider configuration', () =>
     ['agnes', 'agnes-2.5-pro', 'disabled', undefined],
     ['custom', 'agnes-3.0-flash', 'disabled', undefined],
     ['deepseek', 'deepseek-v4-pro', 'disabled', undefined],
-  ] as const)('有限 JSON 生产请求保留输出预算，思考扩展按 provider/model 显式适配：%s/%s/%s', async (
+  ] as const)('JSON 生产请求使用服务输出容量，思考扩展按 provider/model 显式适配：%s/%s/%s', async (
     provider, model, thinkingMode, expectedAgnesThinking,
   ) => {
     const config: AIConfig = { ...configured, provider, model }
@@ -264,7 +264,8 @@ describe('R-PRODUCTPROD-1D · reuse existing text provider configuration', () =>
       }, { resolveConfig: () => config })
       expect(fetchProvider).toHaveBeenCalledTimes(1)
       const body = JSON.parse(String(fetchProvider.mock.calls[0]![1]?.body))
-      expect(body).toMatchObject({ model, max_tokens: 2_673, response_format: { type: 'json_object' } })
+      expect(body).toMatchObject({ model, response_format: { type: 'json_object' } })
+      expect(body.max_tokens).toBe(provider === 'agnes' && model === 'agnes-2.5-flash' ? 65_500 : undefined)
       expect(body.chat_template_kwargs).toEqual(expectedAgnesThinking === undefined
         ? undefined : { enable_thinking: expectedAgnesThinking })
       expect(body.thinking).toEqual(provider === 'deepseek' ? { type: 'disabled' } : undefined)

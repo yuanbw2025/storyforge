@@ -58,7 +58,7 @@ for (const audience of ['party', 'private'] as const) test(`${audience}: actual 
   const f = await seed(page, audience, audience === 'party'); let sends = 0
   await page.route('**/entity-model-desk-native/v1/chat/completions', async route => {
     sends++; const wire = route.request().postDataJSON(), messages = JSON.stringify(wire.messages)
-    expect(wire.max_tokens).toBe(4000); expect(wire.model).toBe('entity-model-desk-native')
+    expect(wire.max_tokens).toBeUndefined(); expect(wire.model).toBe('entity-model-desk-native')
     for (const forbidden of ['ENTITY-MODEL-GM-TEMPLATE-CANARY', 'ENTITY-MODEL-NPC-SECRET-CANARY', 'ENTITY-MODEL-FRONT-SECRET-CANARY', '明确咨询并审查可实例化对象']) expect(messages).not.toContain(forbidden)
     if (audience === 'party') expect(messages).not.toContain('ENTITY-MODEL-PRIVATE-TEMPLATE-CANARY')
     await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ choices: [{ message: { content: JSON.stringify({ proposals: [f.proposal] }) } }], usage: { prompt_tokens: 200, completion_tokens: 100, total_tokens: 300 } }) })

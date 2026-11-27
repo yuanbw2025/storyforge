@@ -201,11 +201,12 @@ it('preserves cumulative usage above the historical Run forecast without rejecti
   expect((await readChatActionOutputBudgetV1(f.scope, generated.snapshot))!.accountedOutputTokens).toBe(9000)
 })
 
-it('keeps a user output limit below the frozen step allowance and retains the actual overspend', async () => {
+it('ignores the old API output cap while retaining actual usage', async () => {
   const f = await start(), run = codexBudgetInput(f, [1001, 100, 100])
   run.request.aiConfig.maxTokens = 1000
-  await expect(generateInteractionRuntimeCandidateV1(run.request)).rejects.toThrow('超出 1000 预算')
-  expect(run.transport).toHaveBeenCalledTimes(1)
+  const generated = await generateInteractionRuntimeCandidateV1(run.request)
+  expect(run.transport).toHaveBeenCalledTimes(3)
+  expect((await readChatActionOutputBudgetV1(f.scope, generated.snapshot))!.accountedOutputTokens).toBeGreaterThan(1000)
 })
 
 it('rejects a duplicate usage receipt instead of choosing whichever receipt would pass', async () => {
@@ -401,7 +402,7 @@ it('rejects stale retained choice evidence before resuming without executing the
   expect(await readProductRuntimeState(f.sessionId)).toEqual(after)
 })
 
-it('preserves the author output setting and strict provider schema without frozen Skill caps', async () => {
+it('uses automatic service output and the strict provider schema without legacy caps', async () => {
   vi.spyOn(navigator, 'locks', 'get').mockReturnValue({request: async (_name: string, _options: unknown, callback: (lock: object) => unknown) => callback({})} as unknown as LockManager)
   const chat = vi.spyOn(ai, 'chat').mockImplementation(async messages => JSON.stringify(messages[0].content.startsWith('这是尚未发生的角色行动选择草稿')
     ? chatActionChoiceFixture(messages, choice) : JSON.stringify(messages).includes('本次持久化行动候选') ? chatActionReviewOutputFixture() : chatActionOutcomeFixture(messages, action)))
@@ -409,7 +410,7 @@ it('preserves the author output setting and strict provider schema without froze
   const {runAI: _runAI, runReviewAI: _runReviewAI, ...request} = run.request
   const generated = await generateInteractionRuntimeCandidateV1({...request, aiConfig: {provider: 'agnes', baseUrl: 'https://invalid.example/v1', model: 'agnes-2.5-flash', apiKey: 'fixture-only', temperature: .2, maxTokens: 9000}})
   expect(chat).toHaveBeenCalledTimes(3)
-  expect(chat.mock.calls.map(call => call[1].maxTokens)).toEqual([9000, 9000, 9000])
+  expect(chat.mock.calls.map(call => call[1].maxTokens)).toEqual([0, 0, 0])
   expect(chat.mock.calls[0][5]?.jsonSchema).toMatchObject({name: 'chat_action_choice_v4', strict: true})
   const counted = (await readChatActionChoiceInputBudgetV1(f.scope, generated.snapshot))!
   for (const [index, call] of chat.mock.calls.entries()) {

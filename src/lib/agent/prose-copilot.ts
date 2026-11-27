@@ -414,9 +414,8 @@ function buildProseMessages(input: ProseCopilotInput) {
 
 function proseRequestOverridesV1(request: ChapterPromptRequestV1, supplied: ProseCopilotInput['generationOverrides']) {
   const temperature = supplied?.temperature ?? request.modelOverride?.temperature
-  // Only an explicit author limit or the author's own template override caps
-  // the wire output; without one, dispatch follows the bound connection's
-  // evidenced model capacity instead of a fixed application quota.
+  // Keep legacy overrides in the input evidence. The shared client ignores
+  // their output ceilings and dispatches using the actual service capacity.
   const maxTokens = supplied?.maxTokens ?? request.modelOverride?.maxTokens
   return {
     ...(maxTokens == null ? {} : { maxTokens }),
@@ -598,7 +597,7 @@ export async function prepareProseCopilot(input: {
   }
   const worldGroupId = project.enableMultiWorld ? input.worldGroupId : null
   const request = input.authorRequest.trim()
-  if (request.length < 2 || request.length > 2000) throw new Error('正文要求长度必须在 2–2000 字符之间。')
+  if (request.length < 2) throw new Error('正文要求至少需要 2 个字符。')
   if (/重写|改写|覆盖|替换.{0,6}正文/.test(affirmativeAuthorActionsV1(request))) {
     throw new Error('主 Agent 正文领域当前不覆盖已有手稿；请使用正文编辑器的对照改写能力。')
   }

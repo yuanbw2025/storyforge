@@ -416,7 +416,7 @@ export async function executeContextGatewayV1(
   // A V2 chapter collects its finite selected material before preparing the
   // complete model request. Legacy fallback windows are not service evidence.
   const prepared = !materialPolicy && !proseTask && input.modelConfig ? await prepareModelCapacityV1(input.modelConfig) : undefined
-  const physicalInput = prepared?.modelCapacity ? serviceInputBudgetV1(prepared.modelCapacity, prepared.maxTokens) : null
+  const physicalInput = prepared?.modelCapacity ? serviceInputBudgetV1(prepared.modelCapacity) : null
   const modelBudget = prepared?.modelCapacity && physicalInput != null ? {
     capacity: prepared.modelCapacity,
     inputBudget: physicalInput,

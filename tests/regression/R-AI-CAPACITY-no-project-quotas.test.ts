@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { chat, streamChat } from '../../src/lib/ai/client'
+import { chat, streamChat, resolveRequestConfig } from '../../src/lib/ai/client'
 import { resetModelCapacityForTestsV1 } from '../../src/lib/ai/model-capacity'
-import { estimateTokens } from '../../src/lib/ai/context-budget'
 import { useAIConfigStore } from '../../src/stores/ai-config'
 import { assembleContext } from '../../src/lib/registry/assemble-context'
 import { db } from '../../src/lib/db/schema'
@@ -40,26 +39,40 @@ describe('current AI requests have no project text/output quotas', () => {
     const reply = '完整正文。'.repeat(41_000) + '末尾校验'
     const bodies = transport(reply, undefined, streaming)
     let received = ''
-    if (streaming) for await (const delta of streamChat(messages, config(), undefined, undefined, { category: 'capacity.closeout', contextOverflowPolicy: 'reject' })) received += delta
-    else received = await chat(messages, config(), { category: 'capacity.closeout', contextOverflowPolicy: 'reject' })
+    if (streaming) for await (const delta of streamChat(messages, config(32), undefined, undefined, { category: 'capacity.closeout', contextOverflowPolicy: 'reject' })) received += delta
+    else received = await chat(messages, config(32), { category: 'capacity.closeout', contextOverflowPolicy: 'reject' })
     expect(received).toBe(reply)
     expect(bodies).toHaveLength(1)
     expect(bodies[0].messages).toEqual(messages)
     expect(bodies[0]).not.toHaveProperty('max_tokens')
   })
 
-  it('preserves an explicit author output limit on an unknown connection', async () => {
-    const bodies = transport('作者设置生效')
-    await chat([{ role: 'user', content: '生成设定' }], config(32_000))
-    expect(bodies[0].max_tokens).toBe(32_000)
+  it('ignores saved global/preset and per-call token limits while preserving routing and temperature', async () => {
+    const cfg = config(32), preset = {...config(64), model: 'legacy-preset-model'}
+    useAIConfigStore.setState({config: cfg, presets: [{id: 'legacy', name: '旧预设', config: preset}], taskRoutes: {creation: 'legacy'}})
+    const meta = {category: 'chapter.content', configOverrides: {maxTokens: 16, temperature: .2}}
+    const bodies = transport('完整生成')
+    await chat([{role: 'user', content: '生成完整设定'}], cfg, meta)
+    expect(bodies[0]).not.toHaveProperty('max_tokens')
+    expect(resolveRequestConfig(cfg, meta).config).toMatchObject({model: preset.model, temperature: .2, maxTokens: 0})
+    expect(cfg.maxTokens).toBe(32)
+    expect(preset.maxTokens).toBe(64)
   })
 
-  it('uses actual remaining service space instead of a half-window or 8192 policy', async () => {
+  it('lets the service manage output when only its context window is evidenced', async () => {
     const messages: ChatMessage[] = [{ role: 'user', content: '完整证据。'.repeat(2_000) }]
     const bodies = transport('完整回答', 100_000)
-    await chat(messages, config())
-    expect(bodies[0].max_tokens).toBe(100_000 - estimateTokens(JSON.stringify(messages)))
-    expect(bodies[0].max_tokens).toBeGreaterThan(50_000)
+    await chat(messages, config(64))
+    expect(bodies[0]).not.toHaveProperty('max_tokens')
+    expect(bodies[0].messages).toEqual(messages)
+  })
+
+  it('uses an evidenced service output limit rather than a saved small API limit', async () => {
+    const cfg: AIConfig = {...config(64), provider: 'agnes', model: 'agnes-2.5-flash', baseUrl: 'https://apihub.agnes-ai.com/v1'}
+    const bodies = transport('完整结果')
+    await chat([{role: 'user', content: '按任务完成内容'}], cfg)
+    expect(bodies[0].max_tokens).toBe(65_500)
+    expect(cfg.maxTokens).toBe(64)
   })
 
   it('still rejects an actually evidenced small service window before a POST', async () => {
@@ -102,7 +115,8 @@ describe('current AI requests have no project text/output quotas', () => {
     const automatic = resolveWorldviewFieldOutputBudgetV1({ config: config(), targetField: 'races', skillMaxOutputTokens: 6_000 })
     expect(automatic).toMatchObject({ effectiveMaxTokens: 0, schemaCapTokens: 0, skillCapTokens: 0, longOutputMode: 'service-capacity' })
     const explicit = resolveWorldviewFieldOutputBudgetV1({ config: config(), targetField: 'races', skillMaxOutputTokens: 6_000, requestedMaxTokens: 64_000 })
-    expect(explicit.effectiveMaxTokens).toBe(64_000)
+    expect(explicit.effectiveMaxTokens).toBe(0)
+    expect(explicit.authorConfigCapTokens).toBe(0)
     expect(parseWorldviewFieldOutputBudgetV1(explicit)).toEqual(explicit)
     expect(parseWorldviewFieldOutputBudgetV1({ version: 1, source: 'default', requestedTokens: 8_000,
       effectiveMaxTokens: 4_000, effectiveCapTokens: 4_000, modelCapTokens: 4_000, authorConfigCapTokens: 4_000,

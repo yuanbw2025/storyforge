@@ -146,7 +146,7 @@ test('the default full blank design keeps five sections and author-reviewed sour
   let requests = 0
   await page.route('**/fixture-design-ui/v1/chat/completions', async route => {
     requests++
-    expect(route.request().postDataJSON().max_tokens).toBe(24000)
+    expect(route.request().postDataJSON().max_tokens).toBeUndefined()
     const messages = route.request().postDataJSON().messages, output = JSON.parse(response(f, messages, true))
     const keys = JSON.parse(messages[1].content.match(/【实际读取资源闭集】([^\n]+)/)![1])
     for (const proposal of output.proposals) {

@@ -8,6 +8,7 @@ import {
 import { chat } from '../../src/lib/ai/client'
 import { AgentTeamBudgetTracker } from '../../src/lib/agent/team-budget'
 import { db } from '../../src/lib/db/schema'
+import { appendAgentEvent, getOrCreateAgentConversation } from '../../src/lib/agent/conversations'
 import type { Project } from '../../src/lib/types'
 import { useAIConfigStore } from '../../src/stores/ai-config'
 import { putCurrentWorkspaceFixtureV1 } from '../helpers/current-workspace'
@@ -67,12 +68,26 @@ describe('B10d · 主 Agent 计划/重规划派发不再带固定输出配额', 
     expect(chat).toHaveBeenCalledOnce()
     // 旧实现在这条多任务规划调用上注入固定 maxTokens: 1_800；整卷/全书的逐章
     // 任务计划超过该额度时被截断，JSON 解析失败后退回每领域一任务的确定性
-    // 小计划，形成事实上的章数配额。新实现按连接配置执行（作者显式上限或
-    // 容量自动），wire 输出不带应用固定配额。
+    // 小计划，形成事实上的章数配额。新实现由模型服务安排输出，
+    // wire 输出不带应用固定配额。
     const overrides = seenMeta[0]!.configOverrides
     expect(overrides?.maxTokens).toBeUndefined()
     expect(overrides?.temperature).toBe(0.2)
     expect(plan.tasks.map(task => task.id)).toEqual(['world', 'hero', 'prose-1', 'prose-2'])
+  })
+
+  it('长本轮要求不再被上游48000字符会谈配额拒绝，末尾完整交给规划调用', async () => {
+    await putCurrentWorkspaceFixtureV1(project)
+    const request = '建立潮汐世界，设计守灯人主角，然后逐章写完前两章正文。' + '保留原稿里的基础设定与作者边界。'.repeat(4000) + '【长要求最后一条】'
+    const conversation = await getOrCreateAgentConversation({projectId: project.id!, worldGroupId: null, purpose: 'long-planning-request'})
+    await appendAgentEvent({projectId: project.id!, conversationId: conversation.id!, kind: 'message', role: 'user', content: request})
+    vi.mocked(chat).mockImplementation(async messages => {
+      expect(messages.map(message => message.content).join('\n')).toContain(request)
+      return planJson
+    })
+    const plan = await createMasterAgentPlan({projectId: project.id!, worldGroupId: null, conversationId: conversation.id!, request, budget: new AgentTeamBudgetTracker('service-capacity')})
+    expect(chat).toHaveBeenCalledOnce()
+    expect(plan.tasks).toHaveLength(4)
   })
 
   it('自由讨论自动输出不再注入专用固定上限', async () => {

@@ -97,10 +97,11 @@ describe('045 actual routed extraction request', () => {
       expect(body.response_format).toBeUndefined(); expect(body.chat_template_kwargs).toBeUndefined()
     }
     const binding = (generated.candidate.plan as any).requestBinding
-    expect(binding.settings).toMatchObject({ provider: routed.provider, model: routed.model, requested: { maxTokens: 4000 } })
-    expect(binding.outputBudgetTokens).toBe(body.max_tokens)
+    expect(binding.settings).toMatchObject({ provider: routed.provider, model: routed.model, requested: { maxTokens: 0 } })
+    expect(binding.outputBudgetTokens).toBe(4000)
+    expect(binding.settings.parameters.max_tokens).toBe(body.max_tokens)
     expect(generated.snapshot.contract.runtimeBindingHash).toBe(binding.bindingHash)
-    expect(generated.snapshot.contract.budget.maxOutputTokens).toBe(body.max_tokens)
+    expect(generated.snapshot.contract.budget).toMatchObject({serviceCapacityOnly: true, maxOutputTokens: binding.outputBudgetTokens})
     expect(JSON.stringify(generated.candidate.plan)).not.toContain(global.apiKey)
     expect(JSON.stringify(generated.candidate.plan)).not.toContain(routed.apiKey)
     expect(await db.codexEntries.count()).toBe(0)
@@ -149,16 +150,16 @@ describe('045 actual routed extraction request', () => {
     expect((await readRecoverableCodexExtractionV1({ scope: fixture.scope }))?.safeToResume).toBe(false)
   })
 
-  it('uses the actual routed bounded output consistently in wire, description and contract', async () => {
+  it('ignores the old routed API ceiling and records the actual service limit separately from the legacy forecast', async () => {
     const fixture = await seed(agnes, { ...gemini, maxTokens: 512 }), wire = transport()
     const generated = await generateCodexExtractionCandidateV1(fixture)
     const binding = generated.candidate.plan.requestBinding!
-    expect(wire.posts[0].body.max_tokens).toBe(512)
-    expect(binding.settings.parameters.max_tokens).toBe(512)
+    expect(wire.posts[0].body.max_tokens).toBe(8192)
+    expect(binding.settings.parameters.max_tokens).toBe(8192)
     expect(binding.settings.modelCapacity?.model).toBe(gemini.model)
-    expect(binding.outputBudgetTokens).toBe(512)
+    expect(binding.outputBudgetTokens).toBe(4000)
     expect(generated.snapshot.contract.budget.maxInputTokens).toBe(binding.inputBudgetTokens)
-    expect(generated.snapshot.contract.budget.maxOutputTokens).toBe(512)
+    expect(generated.snapshot.contract.budget.maxOutputTokens).toBe(4000)
   })
 
   it.each([401, 402, 429])('does not retry observed HTTP %s or expose the provider body', async status => {

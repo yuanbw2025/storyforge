@@ -60,7 +60,8 @@ export async function prepareCodexExtractionRequestV1(input: {
   if (input.previous && capacity.bindingHash !== input.previous.settings.modelCapacity?.bindingHash) throw new CodexExtractionRequestChangedErrorV1()
   const outputBudgetTokens = Math.min(CODEX_EXTRACTION_OUTPUT_LIMIT_V1,
     modelInputBudgetV1(capacity, initial.config.maxTokens).outputBudget)
-  const resolution = { ...initial, config: { ...capacityConfig, modelCapacity: capacity, maxTokens: outputBudgetTokens } }
+  // Keep V1 accounting forecasts readable; API settings no longer cap new output.
+  const resolution = { ...initial, config: { ...capacityConfig, modelCapacity: capacity, maxTokens: 0 } }
   const responseOptions = codexEntryTransportOptionsV1(resolution.config, input.fields, input.policy) ?? null
   const body = {
     version: 'codex-extraction-request-binding-v1' as const,
@@ -87,7 +88,8 @@ export async function parseCodexExtractionRequestBindingV1(value: unknown, field
     || typeof row.bindingHash !== 'string' || !/^[a-f0-9]{64}$/.test(row.bindingHash)) throw new Error('词条拆分的冻结模型绑定无效。')
   const settings = parseProseRequestSettingsV1(row.settings), capacity = settings.modelCapacity
   if (!capacity || settings.stream || !Number.isSafeInteger(row.outputBudgetTokens) || row.outputBudgetTokens < 1
-    || row.outputBudgetTokens > CODEX_EXTRACTION_OUTPUT_LIMIT_V1 || settings.requested.maxTokens !== row.outputBudgetTokens
+    || row.outputBudgetTokens > CODEX_EXTRACTION_OUTPUT_LIMIT_V1
+    || (settings.requested.maxTokens !== 0 && settings.requested.maxTokens !== row.outputBudgetTokens)
     || row.inputBudgetTokens !== Math.min(CODEX_EXTRACTION_INPUT_LIMIT_V1, modelInputBudgetV1(capacity, row.outputBudgetTokens).inputBudget)
     || canonicalStringify(row.responseOptions) !== canonicalStringify(codexEntryTransportOptionsV1(settings, fields, policy) ?? null)) throw new Error('词条拆分的冻结参数与预算不一致。')
   const { bindingHash, ...body } = row

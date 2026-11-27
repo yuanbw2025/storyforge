@@ -92,7 +92,7 @@ test('native actual formal HTTP transport sends only common bodies once and resu
   await page.route('**/public-wire-native/v1/chat/completions', async route => {
     sends++
     const body = route.request().postDataJSON()
-    expect(body.messages).toEqual(wire.messages); expect(body.max_tokens).toBe(4000)
+    expect(body.messages).toEqual(wire.messages); expect(body.max_tokens).toBeUndefined()
     expect(JSON.stringify(body)).not.toContain('NATIVE-PRIVATE-WIRE-')
     await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ choices: [{ message: { content: wire.response } }],
       usage: { prompt_tokens: 200, completion_tokens: 1000, total_tokens: 1200 } }) })

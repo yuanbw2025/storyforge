@@ -30,7 +30,7 @@ async function provider(page: Page, malformedReview = false, strictChoice = fals
       expect(validate(JSON.parse(chatActionResponseFixture(route, choice)))).toBe(true)
       expect(validate(JSON.parse(chatActionResponseFixture(route, {...choice, directions: [{...choice.directions[0], kind: 'own-action'}]})))).toBe(false)
     }
-    expect(request.max_tokens).toBe(step === 'choice' ? 2000 : step === 'review' ? 8000 : 4000)
+    expect(request.max_tokens).toBeUndefined()
     if (step !== 'review') expect(prompt).not.toContain('掌柜把铜印留在柜台下')
     if (step === 'expression') expect(prompt).toContain(privateDraft)
     const output = step === 'choice' ? choice : step === 'expression' ? action

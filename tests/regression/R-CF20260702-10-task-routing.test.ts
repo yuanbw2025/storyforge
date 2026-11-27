@@ -298,7 +298,7 @@ describe('R-CF20260702-10 · route storage and client boundary', () => {
       expect(url).toBe('http://localhost:11434/v1/chat/completions')
       const body = JSON.parse(String(init?.body))
       expect(body.model).toBe('qwen-local')
-      expect(body.max_tokens).toBe(8_192)
+      expect(body).not.toHaveProperty('max_tokens')
       expect((init?.headers as Record<string, string>).Authorization).toBeUndefined()
       return new Response(JSON.stringify({
         choices: [{ message: { content: 'ok' } }],
@@ -349,7 +349,7 @@ describe('R-CF20260702-10 · route storage and client boundary', () => {
       if (init?.method === 'GET') return Response.json({models:[{model:config.model,context_length:window}]})
       sends++
       const body = JSON.parse(String(init?.body))
-      expect(body.max_tokens).toBe(16000)
+      expect(body).not.toHaveProperty('max_tokens')
       expect(body.messages).toEqual(messages)
       return Response.json({choices:[{message:{content:'ok'}}]})
     })

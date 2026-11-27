@@ -49,12 +49,12 @@ describe('LFQ9 · 节点复用正式全文评审', () => {
     expect(buildAuthoringExecutionPlan({ graph: { ...emptyAuthoringGraph(), nodes: [node()] } })).toMatchObject({ estimatedAiCalls: 1, estimatedMaxAiCalls: 1 })
   })
 
-  it('节点请求保留零温度、输出控制和作者Prompt，分步骤回读同一报告；默认不重复调用', async () => {
+  it('节点请求保留零温度和作者Prompt，旧输出控制不再设限，分步骤回读同一报告；默认不重复调用', async () => {
     const f = await seed(); const n = node()
     const inputs = [control('control.temperature', '0'), control('control.max-tokens', '2400')]
     const result = await executeDomainNode(args(f, n, inputs))
     expect(executeRegisteredAIEntryV1).toHaveBeenCalledTimes(1)
-    expect(vi.mocked(executeRegisteredAIEntryV1).mock.calls[0][2]).toMatchObject({ temperature: 0, maxTokens: 2400 })
+    expect(vi.mocked(executeRegisteredAIEntryV1).mock.calls[0][2]).toMatchObject({ temperature: 0, maxTokens: 0 })
     const step = await readLatestWholeChapterQualityReviewV1({ scope: f.scope, chapterId: f.chapterId, mode: 'quality' })
     expect(JSON.parse(result!.output)).toEqual(step!.report)
     expect((await db.chapters.get(f.chapterId))!.content).toBe(f.content)

@@ -870,9 +870,9 @@ test('一致性 Agent 显式单次检测，刷新恢复只读报告且不写业�
     expect(request.stream).toBe(false)
     expect(request.response_format).toEqual({ type: 'json_object' })
     expect(request.temperature).toBe(0)
-    // The isolated service fixture exposes a 100k input window; the final
-    // routed request uses its prepared 16k output capacity, without the old 2048 cap.
-    expect(request.max_tokens).toBe(16_000)
+    // The isolated service exposes its input window; output remains provider-managed
+    // instead of inheriting the old API or per-task token ceiling.
+    expect(request.max_tokens).toBeUndefined()
     const content = JSON.stringify({
       findings: [],
       cognitionReferences: [],
