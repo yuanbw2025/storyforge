@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { extractTextFromFile, textLayerReportLineV1, type ExtractResult } from '../../../lib/doc-parser'
 import type { CsvGridV1 } from '../../../lib/import/csv-grid'
 import { publishCsvGridViewV1 } from './ImportDocOverview'
@@ -26,22 +26,30 @@ export default function useImportDocumentPreparation() {
   /** 032-L1-c：仅 csv 成功抽取后出现的只读侧车快照，不进 AI/adopt/persistence。 */
   const [csvGrid, setCsvGrid] = useState<CsvGridV1 | null>(null)
   const lastUploadedFile = useRef<File | null>(null)
+  const sourceReadSequence = useRef(0)
+  useEffect(() => () => { sourceReadSequence.current++ }, [])
 
   const handleFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     event.target.value = ''
     if (!file) return
+    const request = ++sourceReadSequence.current
     setFileError(null)
     setExtractInfo(null)
     setFilename(file.name)
     setRawText('')
     setPlans(null)
+    setShowConfirm(false)
+    setVolumeDetect(null)
     setAutomaticChunking(true)
     setTextLayerBlocked(null)
+    setCsvGrid(null)
+    publishCsvGridViewV1(null)
     setLoadingFile(true)
     lastUploadedFile.current = file
     try {
       const result = await extractTextFromFile(file)
+      if (request !== sourceReadSequence.current) return
       if (result.status === 'empty') {
         // 不进入分块/候选/adopt，也不清掉已选文件：原件仍可由既有 saveBlob 路径存档。
         setTextLayerBlocked({ filename: file.name, sizeBytes: file.size, pageCount: result.pageCount, status: result.status, warnings: result.warnings })
@@ -62,18 +70,25 @@ export default function useImportDocumentPreparation() {
       if (result.warnings.includes('pdf-text-layer-sparse')) parts.push('部分页面文字极少')
       setExtractInfo(parts.join(' · '))
     } catch (error) {
+      if (request !== sourceReadSequence.current) return
       setFilename('')
       lastUploadedFile.current = null
       setFileError(error instanceof Error ? error.message : String(error))
     } finally {
-      setLoadingFile(false)
+      if (request === sourceReadSequence.current) setLoadingFile(false)
     }
   }
 
   const handleRawTextChange = (text: string) => {
-    if (text.trim()) { setTextLayerBlocked(null); setFileError(null); setCsvGrid(null); publishCsvGridViewV1(null) }
+    sourceReadSequence.current++
+    setLoadingFile(false)
+    setFilename('')
+    setExtractInfo(null)
+    setTextLayerBlocked(null); setFileError(null); setCsvGrid(null); publishCsvGridViewV1(null)
     setRawText(text)
     setPlans(null)
+    setShowConfirm(false)
+    setVolumeDetect(null)
     setAutomaticChunking(true)
     lastUploadedFile.current = null
   }
