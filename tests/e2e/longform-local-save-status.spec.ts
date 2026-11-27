@@ -33,6 +33,47 @@ async function flush(page: Page) {
   })
 }
 const pane = (page: Page) => page.locator('.lf-world-field:visible').first()
+test('050 Work info native saved feedback follows IME, actual DB failure, retry, reload and reopened tab', async ({ page, context }) => {
+  const scope = await seed(page), url = `./workspace/${scope.projectId}?module=info`
+  await page.goto(url)
+  const state = page.locator('[data-work-info-save-status]')
+  await expect(state).toHaveAttribute('data-work-info-save-status', 'saved')
+  const title = page.getByRole('textbox', { name: '作品名称', exact: true })
+  await title.dispatchEvent('compositionstart'); await title.fill('原作完整中文尾字🌊')
+  await expect(state).toHaveAttribute('data-work-info-save-status', 'dirty')
+  await expect(flush(page)).rejects.toThrow('输入法仍在组合')
+  await title.dispatchEvent('compositionend'); await flush(page)
+  await expect(state).toHaveAttribute('data-work-info-save-status', 'saved')
+  await page.evaluate(async () => {
+    const { db } = await (new Function('return import("/storyforge/src/lib/db/schema.ts")'))()
+    const fault = () => { throw new DOMException('isolated Work quota failure', 'QuotaExceededError') }
+    db.works.hook('updating', fault)
+    Object.assign(window, { clearWork050Fault: () => db.works.hook('updating').unsubscribe(fault) })
+  })
+  await page.getByRole('button', { name: '编辑源码', exact: true }).click()
+  const description = page.getByRole('textbox', { name: '作品简介', exact: true })
+  await description.fill('# 完整作者简介\n\n保留标点、段落和尾空白🌊。  ')
+  const raw = await description.inputValue()
+  await expect(flush(page)).rejects.toThrow('isolated Work quota failure')
+  await expect(state).toHaveAttribute('data-work-info-save-status', 'failed')
+  await expect(description).toHaveValue(raw)
+  await page.evaluate(() => (window as unknown as { clearWork050Fault: () => void }).clearWork050Fault())
+  await page.getByRole('button', { name: '保存', exact: true }).click()
+  await expect(state).toHaveAttribute('data-work-info-save-status', 'saved')
+  const read = (target: Page) => target.evaluate(async scope => {
+    const { db } = await (new Function('return import("/storyforge/src/lib/db/schema.ts")'))()
+    return { work: await db.works.get(scope.workId), project: await db.projects.get(scope.projectId) }
+  }, scope)
+  const saved = await read(page)
+  expect(saved.work.title).toBe('原作完整中文尾字🌊'); expect(saved.work.description).toBe(raw)
+  expect(saved.project.description).toBeUndefined()
+  await page.reload(); await expect(state).toHaveAttribute('data-work-info-save-status', 'saved')
+  const reopenUrl = page.url(); await page.close()
+  const reopened = await context.newPage(); await reopened.goto(reopenUrl)
+  await expect(reopened.locator('[data-work-info-save-status]')).toHaveAttribute('data-work-info-save-status', 'saved')
+  expect((await read(reopened)).work.description).toBe(raw)
+  await expect(reopened.getByRole('textbox', { name: '作品名称', exact: true })).toHaveValue('原作完整中文尾字🌊')
+})
 async function enter(page: Page) {
   const field = pane(page)
   const entry = field.getByRole('button', { name: '编辑源码', exact: true }).or(field.locator('.cursor-text').first()).first()
