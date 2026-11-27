@@ -124,33 +124,38 @@ test('structured resource and divinity leaves retain siblings, support clearing,
   test.setTimeout(120_000)
   const errors: string[] = []; page.on('pageerror', error => errors.push(error.message))
   const projectId = await create(page, '结构化子项作者保存隔离验收')
-  const editAt = async (index: number, value: string) => {
-    await page.locator('div.cursor-text:visible').nth(index).click()
-    const editor = page.locator('textarea:visible').first()
+  const editAt = async (label: string, value: string) => {
+    // Nonempty leaves render Markdown; locate the named field rather than an
+    // index in the shrinking set of empty cursor-text placeholders.
+    const row = page.getByText(label, { exact: true }).locator('..')
+    await row.getByRole('button', { name: '编辑源码', exact: true }).or(row.locator('div.cursor-text:visible')).first().click()
+    const editor = row.locator('textarea:visible').first()
     await editor.fill(value); await leaveField(page); await expect(editor).not.toBeVisible()
   }
+  const resourceLabels = ['🦅 珍禽异兽 / 牲畜', '🌿 灵药 / 粮食作物', '💎 矿石 / 金属', '✨ 其他特产']
+  const divineLabels = ['信仰层级', '名号与职司', '规则与禁忌']
   await openField(page, '自然环境', '自然资源')
   await page.getByText('自然资源分类明细（原生结构）', { exact: true }).click()
   const resources = { rareCreatures: '鹤与驮兽', herbs: '救命草', minerals: '寒铁', others: '盐茶' }
-  for (const [index, value] of Object.values(resources).entries()) await editAt(index + 1, value)
+  for (const [index, value] of Object.values(resources).entries()) await editAt(resourceLabels[index], value)
   await page.reload(); await openField(page, '自然环境', '自然资源')
   expect((await read(page, projectId, 'worldviews'))?.naturalResources).toEqual(resources)
   await page.getByText('自然资源分类明细（原生结构）', { exact: true }).click()
-  for (let index = 0; index < 4; index++) await editAt(index + 1, '')
+  for (let index = 0; index < 4; index++) await editAt(resourceLabels[index], '')
   await page.reload(); await openField(page, '自然环境', '自然资源')
   expect((await read(page, projectId, 'worldviews'))?.naturalResources).toEqual({ rareCreatures: '', herbs: '', minerals: '', others: '' })
   await openField(page, '世界起源', '神明与信仰')
   const toggle = page.getByRole('checkbox', { name: '包含神明或宗教信仰设定（神明是否存在可保留未知）', exact: true })
   await toggle.check()
   const divinity = { hasDivinity: true, divineRank: '凡俗与山神', divineNames: '守桥神', divineRules: '不得代替凡人选择' }
-  for (const [index, value] of [divinity.divineRank, divinity.divineNames, divinity.divineRules].entries()) await editAt(index, value)
+  for (const [index, value] of [divinity.divineRank, divinity.divineNames, divinity.divineRules].entries()) await editAt(divineLabels[index], value)
   await toggle.uncheck()
   await expect.poll(async () => (await read(page, projectId, 'worldviews'))?.divineDesign?.hasDivinity).toBe(false)
   await page.reload(); await openField(page, '世界起源', '神明与信仰')
   await expect(toggle).not.toBeChecked()
   expect((await read(page, projectId, 'worldviews'))?.divineDesign).toEqual({ ...divinity, hasDivinity: false })
   await toggle.check()
-  for (let index = 0; index < 3; index++) await editAt(index, '')
+  for (let index = 0; index < 3; index++) await editAt(divineLabels[index], '')
   await page.reload(); await openField(page, '世界起源', '神明与信仰')
   expect((await read(page, projectId, 'worldviews'))?.divineDesign).toEqual({ hasDivinity: true, divineRank: '', divineNames: '', divineRules: '' })
   expect(errors).toEqual([])

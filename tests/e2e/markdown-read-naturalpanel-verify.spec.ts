@@ -107,8 +107,11 @@ test('③ 编辑提交保留原串；刷新/关 tab 重开逐字回读', async (
   await page.goto(`./workspace/${ids.projectId}?module=worldview-natural`)
   await expect(pane(page).locator('[data-markdown-read-view]')).toBeVisible()
 
-  // 点击正文进入 editor.begin
-  await pane(page).locator('[data-markdown-body]').first().click()
+  // The centre of this mixed Markdown body can land in its code block;
+  // code clicks intentionally keep reading. Use the explicit edit action.
+  await pane(page).locator('[data-markdown-body] pre').first().click()
+  await expect(pane(page).locator('textarea')).toHaveCount(0)
+  await pane(page).getByRole('button', { name: '编辑源码', exact: true }).click()
   const area = pane(page).locator('textarea').first()
   await expect(area).toBeVisible()
   await area.fill('# 改写后自然结构')
