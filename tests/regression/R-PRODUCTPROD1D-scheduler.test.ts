@@ -2424,7 +2424,8 @@ describe('R-PRODUCTPROD-1D · durable bounded DAG scheduler', () => {
     expect(projection.tasks.find(item => item.taskKey === 'content.design')?.status).toBe('blocked')
     const build = await db.productBuilds.get(projection.buildId)
     expect(build?.status).toBe('recovery-required')
-    expect(build?.failureJson).toContain('task-context-budget-exceeded')
+    expect(JSON.parse(build!.failureJson!)).toMatchObject({code: 'task-preflight-failed',
+      detail: expect.stringContaining('mandatory-selection-exceeds-budget')})
     expect(JSON.parse(build!.budgetLedgerJson).attempts).toEqual([expect.objectContaining({
       usageKnown: true, usage: expect.objectContaining({ modelCalls: 0, costUsd: 0 }),
     })])

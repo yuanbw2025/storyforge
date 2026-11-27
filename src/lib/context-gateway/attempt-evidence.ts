@@ -768,7 +768,7 @@ export async function inspectContextGatewayManifestFreshnessV1(input: {
   const reasonCodes = new Set<string>()
   if (input.manifest.gateway.scopeFingerprint !== input.session.scopeFingerprint) reasonCodes.add('scope-fingerprint-stale')
   if (input.manifest.gateway.policyHash !== input.session.policyHash
-    && input.manifest.gateway.policyHash !== await contextAccessPolicyHashV1({ ...input.session.policy, retrievalBudgetMode: 'model-capacity' })) reasonCodes.add('policy-binding-stale')
+    && input.manifest.gateway.policyHash !== await keepIntegrityReadAlive(contextAccessPolicyHashV1({ ...input.session.policy, retrievalBudgetMode: 'model-capacity' }))) reasonCodes.add('policy-binding-stale')
   const unique = new Map(retrievalDecisions(input.manifest.gateway.retrievalTrace).map(item => [item.resourceKey, item]))
   const metadata = new Map<string, ReturnType<typeof lookupContextResourceMetadataV1>>()
   for (const decision of [...unique.values()].sort((left, right) => left.resourceKey.localeCompare(right.resourceKey))) {
