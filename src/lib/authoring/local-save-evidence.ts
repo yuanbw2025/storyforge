@@ -1,13 +1,21 @@
 import type { WorkspaceScope } from '../types'
 
-/** Deliberately limited to the independently owned long novel's Natural fields. */
+/** Initial verified consumers; retained for existing N5 callers and receipts. */
 export const LOCAL_SAVE_NATURAL_FIELDS_V1 = [
   'worldStructure', 'worldDimensions', 'continentLayout', 'mountainsRivers', 'climateByRegion',
 ] as const
 export type LocalSaveNaturalFieldV1 = typeof LOCAL_SAVE_NATURAL_FIELDS_V1[number]
+/** Explicit scalar text whitelist for the same independent-longform writer.
+ * Object leaves, other products and unverified writers do not acquire badges. */
+export const LOCAL_SAVE_WORLDVIEW_TEXT_FIELDS_V1 = [
+  ...LOCAL_SAVE_NATURAL_FIELDS_V1, 'worldOrigin', 'powerHierarchy', 'races',
+  'factionLayout', 'regionDimensions', 'politicsOverview', 'economyOverview',
+  'cultureOverview', 'internalConflicts', 'itemDesign',
+] as const
+export type LocalSaveWorldviewTextFieldV1 = typeof LOCAL_SAVE_WORLDVIEW_TEXT_FIELDS_V1[number]
 export interface LocalSaveIdentityV1 extends WorkspaceScope {
   table: 'worldviews'
-  field: LocalSaveNaturalFieldV1
+  field: LocalSaveWorldviewTextFieldV1
   worldGroupId: number | null
 }
 export interface LocalSaveWitnessV1 {

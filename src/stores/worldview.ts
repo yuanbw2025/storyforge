@@ -10,7 +10,7 @@ import { refreshSettingAssertionSourceStatus } from '../lib/fact-ledger/setting-
 import { assertRecordInScope, scopeTransactionTables, readOwnedRows, resolveScope, resolveScopeLike, stampNewRecord, type WorkspaceScopeLike } from '../lib/workspace/scope'
 import { coordinatePendingEditV1 } from '../lib/authoring/pending-edit-coordinator'
 
-import { LOCAL_SAVE_NATURAL_FIELDS_V1, type LocalSaveAckV1, type LocalSaveIntentV1, type LocalSaveWitnessV1, type LocalSaveNaturalFieldV1 } from '../lib/authoring/local-save-evidence'
+import { LOCAL_SAVE_WORLDVIEW_TEXT_FIELDS_V1, type LocalSaveAckV1, type LocalSaveIntentV1, type LocalSaveWitnessV1, type LocalSaveWorldviewTextFieldV1 } from '../lib/authoring/local-save-evidence'
 
 interface SaveWorldview {
   (data: WorldviewAuthorPatch, scope?: WorkspaceScope): Promise<void>
@@ -34,7 +34,7 @@ interface WorldviewStore {
 
   loadAll: (scope: WorkspaceScopeLike, worldGroupId?: number | null) => Promise<void>
 
-  localSaveWitnesses: Partial<Record<LocalSaveNaturalFieldV1, LocalSaveWitnessV1>>
+  localSaveWitnesses: Partial<Record<LocalSaveWorldviewTextFieldV1, LocalSaveWitnessV1>>
   saveWorldview: SaveWorldview
   saveStoryCore: (data: Partial<StoryCore>, scope?: WorkspaceScope) => Promise<void>
   savePowerSystem: (data: Partial<PowerSystem>, scope?: WorkspaceScope) => Promise<void>
@@ -82,8 +82,8 @@ function mergeAuthorWorldviewObjects(current: Worldview | undefined, patch: Reco
   return patch
 }
 
-async function naturalWitness(row: Worldview | undefined, scope: WorkspaceScope, worldGroupId: number | null,
-  field: LocalSaveNaturalFieldV1, source: LocalSaveWitnessV1['source']): Promise<LocalSaveWitnessV1> {
+async function worldviewTextWitness(row: Worldview | undefined, scope: WorkspaceScope, worldGroupId: number | null,
+  field: LocalSaveWorldviewTextFieldV1, source: LocalSaveWitnessV1['source']): Promise<LocalSaveWitnessV1> {
   const value = row?.[field]
   if (value !== undefined && typeof value !== 'string') throw new Error('字段格式异常，不能确认本机保存。')
   if (row && (row.id == null || !isPortableResourceUidV1(row.ragDocumentId, 'worldview'))) throw new Error('字段记录身份不完整，不能确认本机保存。')
@@ -91,9 +91,9 @@ async function naturalWitness(row: Worldview | undefined, scope: WorkspaceScope,
     recordId: row?.id ?? null, resourceUid: row?.ragDocumentId ?? null,
     present: row != null && Object.prototype.hasOwnProperty.call(row, field), value, valueHash: await hashAdoptFieldValueV1(value), confirmedAt: Date.now() }
 }
-async function naturalWitnesses(row: Worldview | undefined, scope: WorkspaceScope, group: number | null) {
-  const pairs = await Promise.all(LOCAL_SAVE_NATURAL_FIELDS_V1.map(async field => {
-    try { return [field, await naturalWitness(row, scope, group, field, 'database-read')] as const }
+async function worldviewTextWitnesses(row: Worldview | undefined, scope: WorkspaceScope, group: number | null) {
+  const pairs = await Promise.all(LOCAL_SAVE_WORLDVIEW_TEXT_FIELDS_V1.map(async field => {
+    try { return [field, await worldviewTextWitness(row, scope, group, field, 'database-read')] as const }
     catch { return [field, undefined] as const }
   }))
   return Object.fromEntries(pairs) as WorldviewStore['localSaveWitnesses']
@@ -102,7 +102,7 @@ async function naturalWitnesses(row: Worldview | undefined, scope: WorkspaceScop
 /** One opt-in branch of the existing writer, never a second UI write callback.
  * Keep every transactional continuation on the original Dexie transaction;
  * native promises are bridged only for the existing scoped reads/hashes. */
-function saveConfirmedNaturalField(data: WorldviewAuthorPatch, scope: WorkspaceScope, intent: LocalSaveIntentV1) {
+function saveConfirmedWorldviewTextField(data: WorldviewAuthorPatch, scope: WorkspaceScope, intent: LocalSaveIntentV1) {
   if (Dexie.currentTransaction) return Promise.reject(new Error('本机保存确认需要独立提交事务。'))
   scope = { ...scope }
   const request = structuredClone(intent)
@@ -110,7 +110,7 @@ function saveConfirmedNaturalField(data: WorldviewAuthorPatch, scope: WorkspaceS
   const identity = expected?.identity
   const field = identity?.field
   if (request.kind !== 'natural-field-local-save-v1' || !identity || identity.table !== 'worldviews'
-    || !LOCAL_SAVE_NATURAL_FIELDS_V1.includes(field) || !request.session || !Number.isSafeInteger(request.generation)
+    || !LOCAL_SAVE_WORLDVIEW_TEXT_FIELDS_V1.includes(field) || !request.session || !Number.isSafeInteger(request.generation)
     || request.generation < 0 || expected.version !== 1
     || !['database-read', 'committed-write'].includes(expected.source)
     || identity.projectId !== scope.projectId || identity.worldId !== scope.worldId || identity.workId !== scope.workId
@@ -180,8 +180,8 @@ function saveConfirmedNaturalField(data: WorldviewAuthorPatch, scope: WorkspaceS
         throw new Error('提交后字段已变化，未确认保存；已保留草稿。')
       }
       return { kind: 'natural-field-local-save-ack-v1' as const, session: request.session, generation: request.generation,
-        witness: await naturalWitness(row, scope, group, field, 'committed-write'), row,
-        witnesses: await naturalWitnesses(row, scope, group) }
+        witness: await worldviewTextWitness(row, scope, group, field, 'committed-write'), row,
+        witnesses: await worldviewTextWitnesses(row, scope, group) }
     })
   } })
 }
@@ -220,7 +220,7 @@ export const useWorldviewStore = create<WorldviewStore>((set, get) => ({
       const ps = worldGroupId == null
         ? psList.find(p => p.worldGroupId == null) ?? psList.find(p => p.worldGroupId === primaryId)
         : psList.find(p => p.worldGroupId === worldGroupId)
-      const witnesses = await naturalWitnesses(wv, scope, wv?.worldGroupId ?? worldGroupId)
+      const witnesses = await worldviewTextWitnesses(wv, scope, wv?.worldGroupId ?? worldGroupId)
       if (request !== worldviewLoadRequest || !sameScope(get().loadedScope, scope) || get().activeWorldGroupId !== worldGroupId) return
       set({
         localSaveWitnesses: witnesses,
@@ -241,7 +241,7 @@ export const useWorldviewStore = create<WorldviewStore>((set, get) => ({
     if (confirmation) {
       if (!frozenScope) return Promise.reject(new Error('缺少冻结的工作区。'))
       const confirmedScope = { ...frozenScope }
-      return saveConfirmedNaturalField(data, confirmedScope, confirmation).then(({ row, witnesses, ...ack }) => {
+      return saveConfirmedWorldviewTextField(data, confirmedScope, confirmation).then(({ row, witnesses, ...ack }) => {
         const current = get()
         if (sameScope(current.loadedScope, confirmedScope) && (current.activeWorldGroupId === ack.witness.identity.worldGroupId
           || (current.activeWorldGroupId == null && current.worldview?.id === row.id))) {

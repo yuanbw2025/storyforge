@@ -6,7 +6,8 @@ import { EMPTY_DIVINE_DESIGN } from '../../lib/types/worldview'
 import { useWorldviewStore, type WorldviewAuthorPatch } from '../../stores/worldview'
 import { useWorldGroupStore } from '../../stores/world-group'
 import WorldGroupSwitcher from '../world-group/WorldGroupSwitcher'
-import { InlineTextarea } from '../shared/InlineEdit'
+import { InlineTextarea, type InlineSave } from '../shared/InlineEdit'
+import type { LocalSaveContractV1 } from '../../lib/authoring/local-save-evidence'
 import CodexPanel from '../codex/CodexPanel'
 import CodexSearchBar from '../codex/CodexSearchBar'
 import { useMasterCopilot, type PendingMasterCandidate } from '../agent/useMasterCopilot'
@@ -36,6 +37,7 @@ export const WORLDVIEW_ORIGIN_AGENT_FIELDS = Object.values(AGENT_FIELD_BY_ORIGIN
 
 interface Props {
   project: Project
+  confirmedLocalSaves?: boolean
   resizableInputs?: boolean
   initialWorldviewId?: number | null
   initialField?: WorldviewOriginFieldKey
@@ -46,12 +48,15 @@ interface Props {
 // ── 主面板 ─────────────────────────────────────────────────────
 
 /** v3 §2.1 — 世界观.世界起源（三个子模块） */
-export default function WorldviewOriginPanel({ project, initialWorldviewId, initialField, onFieldChange, initialPowerTarget, resizableInputs = false }: Props) {
+export default function WorldviewOriginPanel({ project, initialWorldviewId, initialField, onFieldChange, initialPowerTarget, resizableInputs = false, confirmedLocalSaves = false }: Props) {
   const compact = useWorldSettingsLayout()
-  const { worldview, saveWorldview } = useWorldviewStore()
+  const { worldview, saveWorldview, localSaveWitnesses, loading, loadError, loadedScope, activeWorldGroupId } = useWorldviewStore()
   const activeGroupId = useWorldGroupStore(s => s.activeGroupId)
   const { authorScope, reloadCurrent } = useScopedWorldviewReadback(project, activeGroupId)
   const targetWorldGroupId = project.enableMultiWorld ? activeGroupId : (worldview?.worldGroupId ?? null)
+  const readReady = !loading && !loadError && loadedScope?.projectId === authorScope.projectId
+    && loadedScope.worldId === authorScope.worldId && loadedScope.workId === authorScope.workId
+    && activeWorldGroupId === (project.enableMultiWorld ? activeGroupId : null)
   const copilot = useMasterCopilot({
     project,
     worldGroupId: targetWorldGroupId,
@@ -71,10 +76,11 @@ export default function WorldviewOriginPanel({ project, initialWorldviewId, init
 
   // 同步 store -> 本地 state
   useEffect(() => {
+    if (!readReady) return
     setWorldOrigin(worldview?.worldOrigin ?? '')
     setPowerHierarchy(worldview?.powerHierarchy ?? '')
     setDivineDesign(worldview?.divineDesign || { ...EMPTY_DIVINE_DESIGN })
-  }, [worldview])
+  }, [worldview, readReady])
 
   // 通用保存
   const save = (patch: WorldviewAuthorPatch) =>
@@ -105,7 +111,7 @@ export default function WorldviewOriginPanel({ project, initialWorldviewId, init
   }, [pendingOriginKey])
 
   return (
-    <WorldviewReadBoundary onRetry={reloadCurrent}>
+    <WorldviewReadBoundary onRetry={reloadCurrent} ready={readReady}>
     <div
       {...initialRecordTargetAttributes(worldview?.id === initialWorldviewId, worldview?.id)}
       className={`worldview-origin-panel flex flex-col w-full ${compact ? 'lf-world-panel' : 'max-w-5xl space-y-4'} rounded-xl ${
@@ -157,7 +163,11 @@ export default function WorldviewOriginPanel({ project, initialWorldviewId, init
               resizableInputs={resizableInputs}
               field={WORLDVIEW_ORIGIN_FIELDS[0]}
               value={worldOrigin}
-              onChange={v => { setWorldOrigin(v); return save({ worldOrigin: v }) }}
+              localSave={confirmedLocalSaves ? { identity: { ...authorScope, table: 'worldviews', field: 'worldOrigin', worldGroupId: targetWorldGroupId }, witness: localSaveWitnesses.worldOrigin ?? null } : undefined}
+              onChange={(v, intent) => {
+                if (intent) return saveWorldview({ projectId: project.id!, worldGroupId: targetWorldGroupId, worldOrigin: v }, authorScope, intent)
+                setWorldOrigin(v); return save({ worldOrigin: v })
+              }}
               project={project}
               agentField="worldOrigin"
               activeGroupId={activeGroupId}
@@ -179,7 +189,11 @@ export default function WorldviewOriginPanel({ project, initialWorldviewId, init
               resizableInputs={resizableInputs}
               field={WORLDVIEW_ORIGIN_FIELDS[1]}
               value={powerHierarchy}
-              onChange={v => { setPowerHierarchy(v); return save({ powerHierarchy: v }) }}
+              localSave={confirmedLocalSaves ? { identity: { ...authorScope, table: 'worldviews', field: 'powerHierarchy', worldGroupId: targetWorldGroupId }, witness: localSaveWitnesses.powerHierarchy ?? null } : undefined}
+              onChange={(v, intent) => {
+                if (intent) return saveWorldview({ projectId: project.id!, worldGroupId: targetWorldGroupId, powerHierarchy: v }, authorScope, intent)
+                setPowerHierarchy(v); return save({ powerHierarchy: v })
+              }}
               project={project}
               agentField="powerHierarchy"
               activeGroupId={activeGroupId}
@@ -258,6 +272,7 @@ function TextFieldEditor({
   field,
   value,
   onChange,
+  localSave,
   project,
   agentField,
   activeGroupId,
@@ -271,7 +286,8 @@ function TextFieldEditor({
   field: typeof WORLDVIEW_ORIGIN_FIELDS[number]
   resizableInputs?: boolean
   value: string
-  onChange: (v: string) => void | Promise<void>
+  onChange: InlineSave
+  localSave?: LocalSaveContractV1
   project: Project
   agentField: WorldviewAgentField
   activeGroupId: number | null
@@ -293,7 +309,7 @@ function TextFieldEditor({
       </div>
 
       <div className="bg-bg-surface border border-border rounded-lg p-4">
-        <InlineTextarea markdownRead inputAreaLayout={inputAreaLayoutV1(resizableInputs, worldviewInputAreaFieldV1(agentField))} value={value} onChange={onChange} placeholder={field.desc} />
+        <InlineTextarea markdownRead localSave={localSave} inputAreaLayout={inputAreaLayoutV1(resizableInputs, worldviewInputAreaFieldV1(agentField))} value={value} onChange={onChange} placeholder={field.desc} />
       </div>
       <WorldviewAgentControls
         field={agentField}

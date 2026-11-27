@@ -439,6 +439,7 @@ export default function WorkspacePage({ embeddedProjectId, embeddedModule, embed
         return <WorldviewOriginPanel
           resizableInputs={resizableInputs}
           project={project}
+          confirmedLocalSaves={isLongform && activeWork.id === project.activeWorkId && activeWork.projectId === project.id}
           initialWorldviewId={impactHandoff?.targetModule === 'worldview-origin' && impactHandoffTarget?.table === 'worldviews'
             ? impactHandoffTarget.moduleRecordId
             : null}
@@ -456,7 +457,7 @@ export default function WorkspacePage({ embeddedProjectId, embeddedModule, embed
       case 'worldview-natural':
         return <WorldviewNaturalPanel project={project} resizableInputs={resizableInputs} confirmedLocalSaves={isLongform && activeWork.id === project.activeWorkId && activeWork.projectId === project.id} />
       case 'worldview-humanity':
-        return <WorldviewHumanityPanel project={project} resizableInputs={resizableInputs} />
+        return <WorldviewHumanityPanel project={project} resizableInputs={resizableInputs} confirmedLocalSaves={isLongform && activeWork.id === project.activeWorkId && activeWork.projectId === project.id} />
       case 'geography':
       case 'world-map':
       case 'locations': {
