@@ -735,7 +735,7 @@ const expansionOriginal = ' \t军税为17枚，不可夜航。\r\n\r\n重复段�
 type ExpansionField = 'worldOrigin' | 'worldStructure' | 'races' | 'naturalResources' | 'divineDesign'
 async function expansionFixture(field: ExpansionField = 'worldOrigin', value: unknown = expansionOriginal) {
   const f = await fixture()
-  await db.worldviews.update(f.worldviewId, { [field]: value })
+  await db.worldviews.update(f.worldviewId, row => { Object.assign(row, { [field]: value }) })
   const instruction = formatWorldviewFieldGenerationRequestV1({ field, mode: 'expand', hint: '补充执行细节，保留军税数字、夜航禁忌与重复段。' })
   const plan = await createMasterAgentPlan({ projectId: f.scope.projectId, scope: f.scope, worldGroupId: null, request: instruction,
     pinnedTask: { agentId: 'world-origin', skillId: 'world-origin.worldview-field.v2', targetField: field, authorLengthIntent: null,

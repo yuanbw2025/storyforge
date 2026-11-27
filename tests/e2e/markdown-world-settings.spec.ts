@@ -14,7 +14,7 @@ test('story core: exact first admission, actual source edit and reopen use the r
   const projectId = await page.evaluate(async raw => {
     const root = '/storyforge/src/lib/'
     const { createWorkspace } = await import(root + 'workspace/create-workspace.ts')
-    const { useWorldviewStore } = await import('/storyforge/src/stores/worldview.ts')
+    const { useWorldviewStore } = await import(root + '../stores/worldview.ts')
     const { scope } = await createWorkspace({ name: '051 isolated story core', description: '', genres: [], status: 'drafting', targetWordCount: 1000 },
       { purpose: 'independent-work', kind: 'novel', novelProfile: 'long' })
     await useWorldviewStore.getState().loadAll(scope)
@@ -64,7 +64,7 @@ for (const purpose of ['independent-work', 'world-engine'] as const) {
     const projectId = await page.evaluate(async ({ purpose, raw }) => {
       const root = '/storyforge/src/lib/'
       const { createWorkspace } = await import(root + 'workspace/create-workspace.ts')
-      const { useWorldviewStore } = await import('/storyforge/src/stores/worldview.ts')
+      const { useWorldviewStore } = await import(root + '../stores/worldview.ts')
       const { scope } = await createWorkspace({ name: '051 isolated world settings', description: '', genres: [], status: 'drafting', targetWordCount: 1000 },
         { purpose, kind: 'novel', novelProfile: 'long' })
       await useWorldviewStore.getState().loadAll(scope)

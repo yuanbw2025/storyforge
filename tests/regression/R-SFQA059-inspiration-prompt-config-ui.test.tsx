@@ -34,7 +34,7 @@ function Harness({ project, module }: { project: Project; module: InspirationPro
     systemOverride={controller.system} onSystemOverrideChange={value => controller.editText('system', value)}
     userOverride={controller.user} onUserOverrideChange={value => controller.editText('user', value)} />
 }
-function template(moduleKey: InspirationPromptConfigModuleV1, name = moduleKey): PromptTemplate {
+function template(moduleKey: InspirationPromptConfigModuleV1, name: string = moduleKey): PromptTemplate {
   return { moduleKey, name, scope: 'system', promptType: 'inspiration', description: '',
     systemPrompt: 'SOURCE {{tone}}', userPromptTemplate: 'IDEA {{inspiration}}', variables: ['inspiration'],
     parameters: [{ key: 'tone', label: '语气', type: 'text', default: 'plain' }],

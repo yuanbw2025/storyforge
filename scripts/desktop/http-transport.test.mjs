@@ -148,7 +148,7 @@ test('cover image transport accepts only the registered synchronous Agnes recipe
   try {
     await f.call('open', options)
     assert.equal(f.calls.length, 1)
-    assert.equal(f.calls[0][1].headers['x-storyforge-image-adapter'], undefined)
+    assert.equal(new Headers(f.calls[0][1].headers).has('x-storyforge-image-adapter'), false)
     assert.equal(f.calls[0][1].credentials, 'omit'); assert.equal(f.calls[0][1].redirect, 'error')
     await f.call('read', options); await f.call('read', options)
     for (const body of [{ ...request, n: 1 }, { ...request, response_format: 'b64_json' }, { ...request, return_base64: false }, { ...request, model: 'agnes-text-model' }]) {

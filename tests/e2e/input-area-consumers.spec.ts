@@ -370,7 +370,7 @@ test('047 native failed StoryCore save retains draft through resize and navigati
     const { useWorldviewStore } = await load<typeof import('../../src/stores/worldview')>('/storyforge/src/stores/worldview.ts')
     const save = useWorldviewStore.getState().saveStoryCore
     let fail = true
-    useWorldviewStore.setState({ saveStoryCore: (...args: Parameters<typeof save>) => fail ? Promise.reject(new Error('047 隔离保存失败')) : save(...args) })
+    useWorldviewStore.setState({ saveStoryCore: ((...args: Parameters<typeof save>) => fail ? Promise.reject(new Error('047 隔离保存失败')) : save(...args)) as typeof save })
     Object.assign(window, { releaseStorySave: () => { fail = false } })
   })
   await page.getByText(/^点击填写.*…$/).first().click()
@@ -378,7 +378,8 @@ test('047 native failed StoryCore save retains draft through resize and navigati
   await area.fill('保存失败仍保留的作者正文。')
   await nudge(page, 'story.logline/current')
   await page.locator('h2:visible').first().click()
-  await expect(page.getByRole('alert').filter({ hasText: '047 隔离保存失败' })).toBeVisible()
+  const failedSave = frame.locator('..').locator('[data-local-save-status=failed]').filter({ hasText: '047 隔离保存失败' })
+  await expect(failedSave).toBeVisible()
   await expect(area).toHaveValue('保存失败仍保留的作者正文。')
   const before = await snapshot(page)
   await nudge(page, 'story.logline/current')
@@ -388,7 +389,7 @@ test('047 native failed StoryCore save retains draft through resize and navigati
   await expect(page).toHaveURL(/module=story-design/)
   await expect(area).toHaveValue('保存失败仍保留的作者正文。')
   await page.evaluate(() => (window as unknown as { releaseStorySave: () => void }).releaseStorySave())
-  await page.getByRole('button', { name: '重试保存', exact: true }).click()
+  await failedSave.getByRole('button', { name: '重试', exact: true }).click()
   await expect(area).toHaveCount(0)
   await page.reload()
   await expect(page.getByText('保存失败仍保留的作者正文。', { exact: true })).toBeVisible()

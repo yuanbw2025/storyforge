@@ -23,7 +23,7 @@ async function read(page: Page, id: number) {
 }
 async function save(page: Page) {
   await page.getByRole('button', { name: '保存', exact: true }).click()
-  await expect(page.getByText('修改后自动保存', { exact: true })).toBeVisible()
+  await expect(page.locator('[data-work-info-save-status=saved]')).toHaveText('已保存到本机')
 }
 
 test('all four Work info controls save, clear, reload and stay out of the workspace shell', async ({ page }) => {

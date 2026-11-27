@@ -8,7 +8,7 @@ import { flushPendingEditsV1, resetPendingEditCoordinatorForTestsV1 } from '../.
 import { seedCurrentWorkspace } from '../helpers/current-workspace'
 import type { WorkspaceScope } from '../../src/lib/types'
 
-globalThis.IS_REACT_ACT_ENVIRONMENT = true
+Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
 const mounted: Array<{ root: ReturnType<typeof createRoot>; host: HTMLDivElement }> = []
 const source = '# 原始🌊\r\n\r\n**事实**：第七年。\r\n\r\n```text\r\n|-- 原文  \r\n```\r\n  '
 beforeEach(async () => { await db.delete(); await db.open(); resetPendingEditCoordinatorForTestsV1(); vi.stubGlobal('fetch', vi.fn(() => { throw Error('No external requests') })) })

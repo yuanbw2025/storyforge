@@ -119,7 +119,7 @@ it('plans the streamed original using complete request budgets and recovers immu
     await verifyBlobImportSourceV1(restored, frozen)
     registerBlobImportSourceV1(frozen.id!, restored, frozen.chunks)
     expect(getChunkText(frozen.id!, 0)).toBeUndefined()
-    expect(await readChunkTextV1(frozen.id!, plans.length - 1)).toBe(materialized.at(-1)!.text)
+    expect(await readChunkTextV1(frozen.id!, plans.length - 1)).toBe(materialized[materialized.length - 1]!.text)
     expect(getChunkText(frozen.id!, 0)).toBeUndefined()
     expect(await db.importSessions.get(frozen.id!)).toEqual(frozen)
     frozen.chunks[0].sourceTextHash = 'forged'
