@@ -21,9 +21,14 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261127-feedback541-capacity-main-v1.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261127-feedback541-capacity-main-v2.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261127-feedback541-capacity-main-v1.json",
+        "sha256": "80839352b281b2ac38e0660f046b75cd529dab9317d42c28cd3fa1599b2954db",
+        "note": "Preserve actual capacity-main v1 measurement before aligning the stale read-tool regression with PR681 full-delivery policy. New test asserts exact original text, source evidence, no writes and no model call; service-window rejection remains covered."
+      },
       {
         "path": "tests/acceptance/narrative-world/baseline-20261127-feedback541-cover-integration-v2.json",
         "sha256": "c12fa1b7cb03477a1e1dce5ec76481840b53d3fef07c2a50409cbbe24544b924",
