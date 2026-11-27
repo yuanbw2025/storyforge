@@ -1,4 +1,5 @@
 import { seedModelAllocationFixtureV1 } from '../helpers/model-capacity-fixture'
+import { getModelCapacityV1 } from '../../src/lib/ai/model-capacity'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { readPendingDocumentImportV1, runSession, registerChunkTexts, clearChunkTexts, retryFailedChunks } from '../../src/lib/import/pipeline'
@@ -64,7 +65,11 @@ describe('Feedback #56: bounded, diagnosable import failures', () => {
     expect(await db.characters.where('projectId').equals(projectId).count()).toBe(0)
     expect(await db.outlineNodes.where('projectId').equals(projectId).count()).toBe(0)
     const body = JSON.parse(fetch.mock.calls[0][1].body)
-    expect(body).toMatchObject({ response_format: { type: 'json_object' }, thinking: { type: 'disabled' }, max_tokens: 16384 })
+    const capacity = getModelCapacityV1(useAIConfigStore.getState().config)
+    expect(capacity.outputLimit).toBeGreaterThan(0)
+    expect(capacity.outputLimitSource).not.toBe('policy')
+    expect(body).toMatchObject({ response_format: { type: 'json_object' }, thinking: { type: 'disabled' },
+      max_tokens: capacity.outputLimit })
   })
 
   it('keeps custom import JSON mode without DeepSeek thinking options', async () => {
@@ -73,7 +78,9 @@ describe('Feedback #56: bounded, diagnosable import failures', () => {
     const fetch = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
       expect(String(url)).toBe('https://custom-import.example.invalid/v1/chat/completions')
       expect(init?.method).toBe('POST')
-      expect(JSON.parse(String(init?.body))).toMatchObject({ model: 'custom-import-model', stream: false, max_tokens: 16384 })
+      const body = JSON.parse(String(init?.body))
+      expect(body).toMatchObject({ model: 'custom-import-model', stream: false })
+      expect(body).not.toHaveProperty('max_tokens')
       return completion('{"worldview":{}}')
     })
     vi.stubGlobal('fetch', fetch)
@@ -82,6 +89,10 @@ describe('Feedback #56: bounded, diagnosable import failures', () => {
     expect(fetch).toHaveBeenCalledTimes(1)
     expect(JSON.parse(String(fetch.mock.calls[0][1]?.body))).not.toHaveProperty('thinking')
     expect(JSON.parse(String(fetch.mock.calls[0][1]?.body))).toMatchObject({ response_format: { type: 'json_object' } })
+    // A thrown mock assertion is itself a transport failure: require the real
+    // retained candidate so this successful JSON-mode case cannot pass on one.
+    expect(await readPendingDocumentImportV1({ projectId, sessionId })).toMatchObject({ candidate: expect.any(Object) })
+    expect(await db.outlineNodes.where('projectId').equals(projectId).count()).toBe(0)
   })
 
   it('keeps confirmed chunks when the next attempt fails and never resends the charged block', async () => {
