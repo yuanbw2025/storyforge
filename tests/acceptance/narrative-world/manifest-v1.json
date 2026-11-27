@@ -21,9 +21,14 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261127-feedback541-cover-integration-v2.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261127-feedback541-capacity-main-v1.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261127-feedback541-cover-integration-v2.json",
+        "sha256": "c12fa1b7cb03477a1e1dce5ec76481840b53d3fef07c2a50409cbbe24544b924",
+        "note": "Preserve pre-capacity-main integration measurement. PR681 changed registered execution inputs; current deterministic assertions passed before the fingerprint guard refused old inputs. Remeasure without changing corpus, gold or known gaps."
+      },
       {
         "path": "tests/acceptance/narrative-world/baseline-20261127-feedback541-cover-integration-v1.json",
         "sha256": "b8bcd5ab09ec48c1620a5af87c53056f5e8e394410ba4ded18b2030ca39dfebd",
