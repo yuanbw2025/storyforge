@@ -1,5 +1,17 @@
 # Pending development and branch audit
 
+## November 27, 2026 · Template wiring merged; capacity closeout pending
+
+Review from successful baseline `965a53a0` through `9ec67ee7` initially enumerates **207 local branches, 46 worktrees (including detached), 37 heads outside main ancestry and nine worktrees with uncommitted status**. Stable patches, net files, actual implementation and PRs were compared. All nine status-path sets match the previous audit; one consists only of three test caches on the worktree now hosting capacity closeout.
+
+- **#581/#682 normally merged:** template-governance foundations and single-/multiworld reverse-inspiration consumers now connect saved versions/parameters to actual requests. Different historical template-source commit shapes are not a wholly missing feature. Other preparation tasks keep their template rules.
+- **[#681](https://github.com/yuanbw2025/storyforge/pull/681) awaits merge:** its source branch has 47 net files involving long requests, candidate/adoption and usage readback. Record its PR/observed scope without presenting branch-only behavior such as complete sending with unknown capacity as mainline capability. Its three uncommitted test caches are not three features.
+- **[#574](https://github.com/yuanbw2025/storyforge/pull/574) remains open:** deduplicate callers against merged #645 and related work. [#675](https://github.com/yuanbw2025/storyforge/pull/675) is pending traffic archival, not product development.
+- **037 scope:** #677 fixes repeated whole-chapter parsing. Recorded mounted-editor testing on 100k characters with dense formatting reported 57.3 ms input P95 and 577.4 ms full paste under those conditions. Session-to-view entity-reference forwarding is still absent on static readback; this does not establish physical IME, all-device/scale or complete 037 acceptance.
+- **Other retained states:** import032 retains three uncommitted panel/confirmation/dedup files (14 outside-main commits, zero net files). Feedback 6, old extraction 9, budget drafts 31, old release 5, temporary metadata 2, private art 6,308 and history/backup/contracts 30 entries elsewhere are unchanged. Deduplicate integrated editor slices, validation variants, zero-net chat planning and equivalent patches. Full cover, power interaction, history writer and private work production retain their acceptance scope.
+
+This task only edits documentation, without committing, pushing, merging or cleaning this development. Private evidence retains exact branches/worktrees; the previous per-branch table remains below.
+
 ## November 25, 2026 · Merged scope and development requiring review
 
 The initial snapshot reviews successful baseline `77d1b1c7` through `71ecc33d`, then synchronizes test cleanup through `a6362b7e`. It enumerates **200 local branches and 46 worktrees (including detached)**: 37 heads outside main ancestry, nine worktrees with uncommitted status, including one with test caches only. Stable patches, net files, actual implementation and PRs were compared rather than counting commits as features.

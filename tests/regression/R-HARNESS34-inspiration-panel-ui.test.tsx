@@ -19,6 +19,14 @@ vi.mock('../../src/hooks/useIncrementalInspiration', () => ({
   useIncrementalInspiration: () => mocks.fusion,
 }))
 
+vi.mock('../../src/hooks/useInspirationPromptConfig', () => ({
+  useInspirationPromptConfig: (_project: unknown, module: string | null) => ({
+    enabled: module !== null, ready: true, unapplied: false, parameters: {}, system: null, user: null,
+    configuration: { template: null, error: '', onRetry: async () => undefined },
+    prepareRequest: async () => ({ version: 1, moduleKey: module, selection: { templateHash: 'visible-selected-version' } }),
+  }),
+}))
+
 vi.mock('../../src/stores/world-group', () => ({
   useWorldGroupStore: Object.assign(
     () => ({ enableMultiWorld: vi.fn(), loadAll: vi.fn() }),
@@ -174,6 +182,9 @@ describe('R-HARNESS34 · 分步骤灵感面板接入 inspiration.reverse Skill',
     expect(button.disabled).toBe(false)
     await act(async () => button.click())
     expect(mocks.generate).toHaveBeenCalledOnce()
+    expect(mocks.generate).toHaveBeenCalledWith(expect.objectContaining({
+      moduleKey: 'inspiration.reverse', selection: { templateHash: 'visible-selected-version' },
+    }))
   })
 
   it('刷新恢复的候选可编辑、拒绝和确认', async () => {

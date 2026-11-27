@@ -1,5 +1,9 @@
 # Longform: continuity, post-chapter review, and revision
 
+## November 27: consistency review retains actual connection capacity
+
+Explicit consistency review retains service-address/prepared-capacity evidence from the current model configuration, using one snapshot for input assembly and dispatch. Custom/local connections no longer fall back to a small unknown-model window merely because the address was lost. Truly insufficient windows still reject full material. Check connection, material and errors; failed/interrupted requests are not automatically resent. Authors still assess review reports. Based on #672.
+
 ## November 25: post-chapter processing and full handoff
 
 New organization/memory tasks size input/output from chapter material and actual model capacity. Valid states, reconciliations and citations retain full results; direct handoff no longer takes only six citations, and summaries scale with information. Check authorization and usage; explicit finite budgets may still block a task before dispatch. New tasks use V2, while historical tasks restore under their frozen identities. Adoption, version and no-resend rules remain. Based on #595/#598.

@@ -1,5 +1,13 @@
 # Longform: settings, characters, and story design
 
+## November 27: save inspiration-template versions per work
+
+In single- or multiworld reverse inspiration, expand the initially collapsed Current template panel. Choose a built-in or personal Template version, adjust parameters/Temperature, and wait for Saving to finish before generating. Singleworld, multiworld and separate works save independently. The displayed fixed version enters the actual generation request and survives reload. Based on #581/#682.
+
+Follow latest default template tracks the module default; the first modification fixes the displayed version. Save as my version saves and uses the current content; Restore follow default returns to default selection. Temporary System/User edits are drafts for this work/module. If switching templates leaves a draft from another version unapplied, inspect it and explicitly Apply to current template or Clear text draft. This persistence covers single-/multiworld reverse inspiration; organization, comparison, deepening and other preparation actions retain their own configurations.
+
+Conflicts/corrupt configuration retain original records. Copy needed temporary text before Reload, discard unsaved configuration and inspect current records rather than repeatedly saving/overwriting. Editing, deleting or reusing a global template ID does not replace an already fixed content version. Historical tasks retain their frozen requests.
+
 ## November 25: outline, story-core and inspiration capacity
 
 Outline, whole-volume planning, replanning, story-arc, story-core, inspiration and creative-rule copilots no longer automatically turn old small output forecasts into dispatch caps. Explicit author/template limits and existing Skill checks remain. Batch scene outlines persist chapter candidates individually; on recovery, verify completed chapters and continue unfinished ones without resending completed work. Longer plans do not establish whole-volume production or literary-quality acceptance. Based on #602/#604/#605/#606/#607/#611; see [usage](/en/guides/token-cost).

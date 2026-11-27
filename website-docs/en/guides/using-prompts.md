@@ -1,5 +1,11 @@
 # Using Prompts and creative methods
 
+## November 27: default templates, fixed versions and text drafts
+
+Reverse inspiration saves separate single-/multiworld template snapshots, parameters and temperature for the current work. Expand Current template and inspect Follow default versus Fixed version. Following reads the module's latest system default; a fixed version retains its content without requiring the global template ID to exist. See [inspiration/planning](/en/features/longform/planning).
+
+Temporary text is retained in this work/module's draft, without automatically creating a global template. Explicit Save as my version saves and uses a new version. Unmatched drafts after switching require author action and are not silently applied/deleted. Configuration failures remain visible and generation waits for saving. Candidate recovery keeps the original frozen request. Other pages/preparation actions retain their own template rules. Based on #581/#682.
+
 ## November 21: application templates versus method documents
 
 Organization, comparison, deepening and uncertain/defined positioning each have a prompt-library module; configuration/examples follow the current action. World/history/rule/style/research/entry methods live in editable built-in templates and respect the author's active version without hidden appended methods. Temporary System/User edits belong to the current session; recovered candidates use the frozen request. Based on #531/#556.
