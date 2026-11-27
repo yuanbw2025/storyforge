@@ -503,7 +503,8 @@ export function parseWorldviewFieldCandidateDraft(draft: string): WorldviewField
 }
 
 
-export function parseWorldviewFieldCandidateDraftV2(draft: string): WorldviewFieldCopilotCandidate {
+export function parseWorldviewFieldCandidateDraftV2(draft: string, options: { preserveText?: boolean } = {}): WorldviewFieldCopilotCandidate {
+  const textValue = (value: string) => options.preserveText ? value : value.trim()
   return parseStructuredOutputV2({
     raw: draft,
     contract: {
@@ -567,9 +568,9 @@ export function parseWorldviewFieldCandidateDraftV2(draft: string): WorldviewFie
           field,
           value: {
             hasDivinity: divine.hasDivinity,
-            divineRank: divineRank.trim(),
-            divineNames: divineNames.trim(),
-            divineRules: divineRules.trim(),
+            divineRank: textValue(divineRank),
+            divineNames: textValue(divineNames),
+            divineRules: textValue(divineRules),
           },
           ...(temporaryAssumptions?.length ? { temporaryAssumptions } : {}),
         }
@@ -588,10 +589,10 @@ export function parseWorldviewFieldCandidateDraftV2(draft: string): WorldviewFie
         return {
           field,
           value: {
-            rareCreatures: (resources.rareCreatures as string).trim(),
-            herbs: (resources.herbs as string).trim(),
-            minerals: (resources.minerals as string).trim(),
-            others: (resources.others as string).trim(),
+            rareCreatures: textValue(resources.rareCreatures as string),
+            herbs: textValue(resources.herbs as string),
+            minerals: textValue(resources.minerals as string),
+            others: textValue(resources.others as string),
           },
           ...(temporaryAssumptions?.length ? { temporaryAssumptions } : {}),
         }
@@ -599,7 +600,7 @@ export function parseWorldviewFieldCandidateDraftV2(draft: string): WorldviewFie
       if (typeof source.value !== 'string' || !source.value.trim()) {
         throw new Error(`世界基座候选 ${field}.value 不能为空。`)
       }
-      const fieldValue = source.value.trim()
+      const fieldValue = textValue(source.value)
       return {
         field,
         value: fieldValue,
@@ -650,7 +651,7 @@ function outputContract(field: WorldviewAgentField): string {
     : `{"field":"${field}","value":"候选正文","temporaryAssumptions":["尚未成为正式设定的假设"]}`
 }
 
-function worldviewFieldHardSystem(input: Pick<WorldviewFieldCopilotInput, 'targetField' | 'snapshot' | 'mode' | 'projectName'>): string {
+function worldviewFieldHardSystem(input: Pick<WorldviewFieldCopilotInput, 'targetField' | 'snapshot' | 'mode' | 'projectName'>, responseContract?: string): string {
   const capability = WORLDVIEW_AGENT_FIELD_CAPABILITIES.get(input.targetField)
   if (!capability) throw new Error(`世界基座字段 ${input.targetField} 缺少可生成能力声明。`)
   const dependencies = capability.directDependencies
@@ -676,7 +677,7 @@ ${dependencies ? `7. 当前字段的直接依赖是 ${dependencies}。已填写�
 ${raceRequirement}
 
 ${input.targetField === 'races' ? '9' : '8'}. 只输出严格 JSON 对象，不输出 Markdown、解释或额外字段：
-${outputContract(input.targetField)}`
+${responseContract ?? outputContract(input.targetField)}`
 }
 
 function buildWorldviewFieldMessages(input: WorldviewFieldCopilotInput): ChatMessage[] {
@@ -714,6 +715,7 @@ async function adoptCandidate(input: {
   targetField: WorldviewAgentField
   candidate: WorldviewFieldCopilotCandidate
   protocol?: 2
+  preserveText?: boolean
   transaction?: import('dexie').Transaction
 }): Promise<AdoptResult> {
   const scope = await resolveScope({ projectId: input.projectId, scope: input.scope })
@@ -722,10 +724,11 @@ async function adoptCandidate(input: {
         ? await readWorldviewFieldSnapshotV2(input.projectId, input.worldGroupId, scope)
         : await readSnapshot(input.projectId, input.worldGroupId, scope)
       if (current.serialized !== input.snapshot.serialized) throw new WorldviewFieldCopilotStaleError()
+      if (input.preserveText && current.id == null) throw new Error('精确保留扩写缺少原记录。')
       const issues = candidateIssues(input.candidate, {
         targetField: input.targetField,
         snapshot: current,
-      }, input.protocol === 2 ? parseWorldviewFieldCandidateDraftV2 : parseWorldviewFieldCandidateDraft)
+      }, input.protocol === 2 ? draft => parseWorldviewFieldCandidateDraftV2(draft, { preserveText: input.preserveText }) : parseWorldviewFieldCandidateDraft)
       if (issues.length) throw new Error(issues.map(issue => issue.message).join('；'))
       const result = await adopt({
         projectId: input.projectId,
@@ -734,6 +737,7 @@ async function adoptCandidate(input: {
         target: 'worldviews',
         mode: 'replace',
         data: { [input.targetField]: input.candidate.value },
+        ...(input.preserveText ? { recordId: current.id!, preserveAuthorText: true } : {}),
       }, transaction ? { transaction } : undefined)
       if (
         result.written.length !== 1
@@ -1104,13 +1108,14 @@ export async function readWorldviewFieldSnapshotV2(projectId: number, worldGroup
   if (matching.length > 1) throw new Error('目标世界基线不唯一；不生成或覆盖。')
   return snapshotOf(matching[0] ?? null)
 }
-export function worldviewFieldHardSystemV2(input: Pick<WorldviewFieldCopilotInput, 'targetField' | 'snapshot' | 'mode' | 'projectName'>): string {
-  return worldviewFieldHardSystem(input)
+export function worldviewFieldHardSystemV2(input: Pick<WorldviewFieldCopilotInput, 'targetField' | 'snapshot' | 'mode' | 'projectName'>, responseContract?: string): string {
+  return worldviewFieldHardSystem(input, responseContract)
 }
 export async function adoptRestoredWorldviewFieldCandidateV2(input: {
   projectId: number; scope: WorkspaceScope; worldGroupId: number | null
   snapshot: WorldviewFieldCopilotSnapshot; targetField: WorldviewAgentField; draft: string
   transaction: import('dexie').Transaction
+  preserveText?: boolean
 }): Promise<AdoptResult> {
-  return adoptCandidate({ ...input, protocol: 2, candidate: parseWorldviewFieldCandidateDraftV2(input.draft) })
+  return adoptCandidate({ ...input, protocol: 2, candidate: parseWorldviewFieldCandidateDraftV2(input.draft, { preserveText: input.preserveText }) })
 }
