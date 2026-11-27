@@ -6,10 +6,13 @@
  */
 import ResizableInputArea, { type AreaControlV1 } from '../shared/ResizableInputArea'
 import { inputAreaLayoutV1 } from '../../lib/input-area-layout'
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef, useContext } from 'react'
 import { Eye, EyeOff } from 'lucide-react'
 import { useWorldSettingsLayout } from '../longform/WorldSettingsLayout'
-import { useWorldRulesStore } from '../../stores/world-rules'
+import { useWorldRulesStore, matchesWorldRulesLocalSaveV1 } from '../../stores/world-rules'
+import { AuthorRecordSaveScopeV1 } from '../shared/AuthorRecordSaveScope'
+import { LocalSaveStatus } from '../shared/InlineEdit'
+import { CTextarea } from '../shared/CompositionInput'
 import { useWorldGroupStore } from '../../stores/world-group'
 import {
   WORLD_RULE_TREE,
@@ -81,7 +84,7 @@ export default function WorldRulesPanel({ project, initialProfileId, resizableIn
     updateEntry, deleteEntry,
     updateGlobalNote,
     addCustomNode, deleteCustomNode,
-    filledCount, dirty, pendingSaves, saveError, _persist, discardDraft,
+    filledCount, dirty, pendingSaves, saveError, _persist, discardDraft, localSaveEvidence,
   } = useWorldRulesStore()
   const {
     groups: worldGroups,
@@ -98,6 +101,9 @@ export default function WorldRulesPanel({ project, initialProfileId, resizableIn
   const [actionError, setActionError] = useState('')
   const [loadError, setLoadError] = useState('')
   const [discarded, setDiscarded] = useState(false)
+  const authorScope = useContext(AuthorRecordSaveScopeV1)
+  const [composing, setComposing] = useState(false)
+  const composingRef = useRef(false)
   const actionSequence = useRef(0)
   const activeLoad = useRef<symbol | null>(null)
   const reportError = useCallback((cause: unknown) => {
@@ -108,6 +114,7 @@ export default function WorldRulesPanel({ project, initialProfileId, resizableIn
     const action = ++actionSequence.current
     setActionError('')
     try {
+      if (composingRef.current) throw new Error('输入法仍在组合世界规则，请完成输入后再操作。')
       await operation()
       if (action === actionSequence.current) setActionError('')
     } catch (cause) {
@@ -115,10 +122,11 @@ export default function WorldRulesPanel({ project, initialProfileId, resizableIn
     }
   }, [])
   useEffect(() => registerPendingDraftFlusherV1(() => {
+    if (composingRef.current) throw new Error('输入法仍在组合世界规则，请完成输入后再切换。')
     const state = useWorldRulesStore.getState()
     if (state.dirty && state.pendingSaves === 0) throw new Error(state.saveError || '规则草稿尚未保存，输入已保留。')
   }), [])
-  useBeforeUnload(dirty || pendingSaves > 0)
+  useBeforeUnload(dirty || pendingSaves > 0 || composing)
   const loadRules = useCallback(async () => {
     if (project.enableMultiWorld && worldTab == null) return
     const request = Symbol('loadRules')
@@ -371,12 +379,19 @@ export default function WorldRulesPanel({ project, initialProfileId, resizableIn
   }
 
   const noteLayout = inputAreaLayoutV1(resizableInputs, 'rules.note')
+  const retrySave = () => {
+    if (composingRef.current) { reportError(new Error('输入法仍在组合世界规则，请完成输入后重试。')); return }
+    void runEdit(() => _persist())
+  }
+  const saveFeedback = authorScope ? <LocalSaveStatus status={saveError ? 'failed' : pendingSaves > 0 ? 'saving'
+    : dirty || composing ? 'dirty' : matchesWorldRulesLocalSaveV1(profile, authorScope, localSaveEvidence) ? 'saved' : 'unconfirmed'}
+    error={saveError} retryLabel="重试保存规则" retry={retrySave} /> : null
   const renderNote = (control?: AreaControlV1) => (
-    <textarea
+    <CTextarea
       ref={control?.ref}
       style={control?.style}
-      onCompositionStart={control?.compositionStart}
-      onCompositionEnd={control?.compositionEnd}
+      onCompositionStartCapture={control?.compositionStart}
+      onCompositionEndCapture={control?.compositionEnd}
       value={profile.globalNote || ''}
       onChange={event => { const note = event.target.value; void runEdit(() => updateGlobalNote(note)) }}
       placeholder="例如：本作以唐代为蓝本但加入仙侠元素，凡是涉及朝堂制度的一律遵循史实，力量体系完全虚构。"
@@ -389,6 +404,8 @@ export default function WorldRulesPanel({ project, initialProfileId, resizableIn
 
   return (
     <div
+      onCompositionStartCapture={() => { composingRef.current = true; setComposing(true) }}
+      onCompositionEndCapture={() => { composingRef.current = false; setComposing(false) }}
       {...initialRecordTargetAttributes(profile.id === initialProfileId, profile.id)}
       className={`${compact ? 'lf-world-panel' : 'max-w-7xl mx-auto'} space-y-4 rounded-xl ${
         profile.id === initialProfileId ? INITIAL_RECORD_TARGET_CLASS : ''
@@ -422,7 +439,7 @@ export default function WorldRulesPanel({ project, initialProfileId, resizableIn
         {loadError && <p role="alert" className="text-amber-400">{loadError}</p>}
         <div className="flex gap-3">
           <button type="button" className="text-accent underline" onClick={exportDraft}>导出未保存规则草稿</button>
-          <button type="button" disabled={pendingSaves > 0} className="text-accent underline" onClick={() => { void runEdit(() => _persist()) }}>重试保存规则</button>
+          <button type="button" disabled={pendingSaves > 0 || composing} className="text-accent underline" onClick={retrySave}>重试保存规则</button>
           {loadError && <button type="button" disabled={pendingSaves > 0} className="text-accent underline" onClick={() => {
             void runEdit(async () => {
               await flushPendingEditsV1()
@@ -463,8 +480,8 @@ export default function WorldRulesPanel({ project, initialProfileId, resizableIn
           selectedL1={selectedL1}
           selectedNode={selectedNode}
           countL1Filled={countL1Filled}
-          onSelectL1={l1Id => { setSelectedL1(l1Id); setSelectedNode(null) }}
-          onSelectNode={setSelectedNode}
+          onSelectL1={l1Id => { void flushPendingEditsV1().then(() => { setSelectedL1(l1Id); setSelectedNode(null) }).catch(reportError) }}
+          onSelectNode={nodeId => { void flushPendingEditsV1().then(() => setSelectedNode(nodeId)).catch(reportError) }}
           onAddL1={handleAddL1}
           onAddL2={handleAddL2}
           onDeleteCustomNode={(nodeId, label) => { void handleDeleteCustomNode(nodeId, label) }}
@@ -477,6 +494,7 @@ export default function WorldRulesPanel({ project, initialProfileId, resizableIn
           currentEntry={currentEntry}
           isCustomNode={selectedNode ? isCustomNode(selectedNode) : false}
           onFieldChange={(field, value) => { void handleFieldChange(field, value) }}
+          saveFeedback={saveFeedback}
           onDeleteNode={() => { if (selectedNode) void handleDeleteCustomNode(selectedNode, currentLabel) }}
           onClearEntry={() => { if (selectedNode) void handleClearEntry(selectedNode) }}
           toolbarActions={compact && <button type="button" onClick={handleTogglePreview} className="text-xs text-accent underline">
@@ -491,6 +509,7 @@ export default function WorldRulesPanel({ project, initialProfileId, resizableIn
           📝 全局补充说明（对 AI 的额外约束，适用于所有维度）
         </label>
         {noteLayout ? <ResizableInputArea options={noteLayout}>{renderNote}</ResizableInputArea> : renderNote()}
+        {saveFeedback}
       </div>
 
       {/* 预览面板 */}
