@@ -402,9 +402,10 @@ export const useWorldviewStore = create<WorldviewStore>((set, get) => ({
         })
         const next = (await readOwnedRows<Worldview>(scope, 'worldviews', { owner: 'world' }))
           .find(row => (row.worldGroupId ?? null) === targetWorldGroupId) ?? null
+        const witnesses = await worldviewTextWitnesses(next ?? undefined, scope, targetWorldGroupId)
         const current = get()
         if (sameScope(current.loadedScope, scope) && (current.activeWorldGroupId === targetWorldGroupId
-          || (current.activeWorldGroupId == null && current.worldview?.id === saved))) set({ worldview: next, localSaveWitnesses: {} })
+          || (current.activeWorldGroupId == null && current.worldview?.id === saved))) set({ worldview: next, localSaveWitnesses: witnesses })
       },
     })
   }) as SaveWorldview,
