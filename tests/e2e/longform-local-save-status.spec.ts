@@ -33,6 +33,43 @@ async function flush(page: Page) {
   })
 }
 const pane = (page: Page) => page.locator('.lf-world-field:visible').first()
+test('050 Reference note native original writer retains failed text and blocks tab loss until retry', async ({ page, context }) => {
+  const scope = await seed(page)
+  const id = await page.evaluate(async scope => {
+    const { useReferenceStore } = await (new Function('return import("/storyforge/src/stores/reference.ts")'))()
+    return useReferenceStore.getState().addReference({ projectId: scope.projectId, title: '原参考050', author: '原作者', type: 'style', note: '原参考要点', url: '' }, scope)
+  }, scope)
+  await page.goto(`./workspace/${scope.projectId}?module=references`)
+  await page.getByRole('button').filter({ hasText: '原参考050' }).click()
+  await page.getByRole('button', { name: '基本信息', exact: true }).click()
+  const readView = (text: string) => page.locator('[data-markdown-read-view]').filter({ hasText: text })
+  await expect(readView('原参考要点').locator('../..').locator('[data-local-save-status]')).toHaveAttribute('data-local-save-status', 'saved')
+  await readView('原参考要点').getByRole('button', { name: '编辑源码', exact: true }).click()
+  const note = page.locator('textarea[placeholder="记录你希望借鉴这部作品的哪些方面…"]')
+  await page.evaluate(async () => {
+    const { db } = await (new Function('return import("/storyforge/src/lib/db/schema.ts")'))()
+    const fault = () => { throw new DOMException('isolated reference quota failure', 'QuotaExceededError') }
+    db.references.hook('updating', fault)
+    Object.assign(window, { clearReference050Fault: () => db.references.hook('updating').unsubscribe(fault) })
+  })
+  await note.fill('# 参考要点新稿\n\n原文与尾空白完整。  '); const raw = await note.inputValue()
+  await expect(flush(page)).rejects.toThrow('isolated reference quota failure')
+  await page.getByRole('button', { name: '作品分析', exact: true }).click()
+  await expect(note).toBeVisible(); await expect(note).toHaveValue(raw)
+  await expect(note.locator('..').locator('[data-local-save-status]')).toHaveAttribute('data-local-save-status', 'failed')
+  await page.evaluate(() => (window as unknown as { clearReference050Fault: () => void }).clearReference050Fault())
+  await page.getByRole('button', { name: '重试', exact: true }).click()
+  await expect(readView('参考要点新稿').locator('../..').locator('[data-local-save-status]')).toHaveAttribute('data-local-save-status', 'saved')
+  const url = page.url(); await page.close(); const reopened = await context.newPage(); await reopened.goto(url)
+  await reopened.getByRole('button').filter({ hasText: '原参考050' }).click()
+  await reopened.getByRole('button', { name: '基本信息', exact: true }).click()
+  await expect(reopened.locator('[data-markdown-read-view]').filter({ hasText: '参考要点新稿' }).locator('../..').locator('[data-local-save-status]')).toHaveAttribute('data-local-save-status', 'saved')
+  const saved = await reopened.evaluate(async id => {
+    const { db } = await (new Function('return import("/storyforge/src/lib/db/schema.ts")'))()
+    return db.references.get(id)
+  }, id)
+  expect(saved).toMatchObject({ note: raw, title: '原参考050', author: '原作者', workId: scope.workId })
+})
 test('050 Planning native stable scene and stage text survives failure, retry and reopened tab', async ({ page, context }) => {
   const scope = await seed(page)
   const ids = await page.evaluate(async scope => {

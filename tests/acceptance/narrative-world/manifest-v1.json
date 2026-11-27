@@ -21,9 +21,19 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261128-document031-stream-source-v1.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261128-reference050-note-v1.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
+      {
+        "path": "tests/acceptance/narrative-world/ir-contract-20261127-cover035-runtime-v1.json",
+        "sha256": "6efeeae4f0f1405467e0ff85d30f402255e18445d8587d994d032287952a190b",
+        "note": "Preserve the previous IR contract receipt before adding the existing author note field. The replacement retains all deterministic case outcomes and refreshes only measured input hashes."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261128-document031-stream-source-v1.json",
+        "sha256": "e4f261cc8047ceabad05d226b41e69bb2b1145b42eff12c21bb953c292e1e930",
+        "note": "Preserve the measured document031 parent before registering the existing reference author note and updating the IR receipt input. Remeasure deterministic inputs only; corpus, outcomes, known gaps and human acceptance are unchanged."
+      },
       {
         "path": "tests/acceptance/narrative-world/baseline-20261127-document031-auto-input-v1.json",
         "sha256": "daf1085f59cda0ee579574baa4f2d8d70219969d78c6fda32a821ef34202c3c4",

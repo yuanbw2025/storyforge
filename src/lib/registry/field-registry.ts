@@ -699,6 +699,8 @@ export const FIELD_REGISTRY: FieldSpec[] = [
   num('storyTimelineEvents', 'order'),
 
   // reference analysis (AI output must use adopt; child rows are scoped through referenceId)
+  // Existing author note; no Skill gains a new write declaration.
+  longtext('references', 'note'),
   text('references', 'genre'),
   num('references', 'totalChars'),
   text('references', 'fileHash'),

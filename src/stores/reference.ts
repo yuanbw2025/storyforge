@@ -8,13 +8,25 @@ import {
 } from '../lib/reference-analysis/lifecycle'
 import { assertRecordInScope, readOwnedRows, resolveScope, resolveScopeLike, scopeTransactionTables, stampNewRecord, type WorkspaceScopeLike } from '../lib/workspace/scope'
 import { coordinatePendingEditV1 } from '../lib/authoring/pending-edit-coordinator'
+import type { LocalSaveAckV1, LocalSaveIntentV1 } from '../lib/authoring/local-save-evidence'
+import { assertRecordTextSaveExpectedV1, recordTextSaveAckV1, recordTextSaveRequestV1 } from '../lib/authoring/record-text-save-evidence'
+
+interface ReferenceAuthorUpdateV1 {
+  (id: number, data: Partial<Reference>, options?: { scope?: WorkspaceScope; expected?: Partial<Reference> }): Promise<void>
+  (id: number, data: Partial<Reference>, options: { scope: WorkspaceScope; expected?: Partial<Reference>; confirmation: LocalSaveIntentV1 }): Promise<LocalSaveAckV1>
+}
+const authorFields = new Set(['title', 'author', 'type', 'note', 'url'])
+const sameWork = (a: WorkspaceScope | null, b: WorkspaceScope) => a?.projectId === b.projectId && a.worldId === b.worldId && a.workId === b.workId
+let loadSequence = 0, writeRevision = 0
 
 interface ReferenceStore {
   references: Reference[]
   loading: boolean
+  loadedScope: WorkspaceScope | null
+  loadError: string | null
   loadAll: (scope: WorkspaceScopeLike) => Promise<void>
   addReference: (data: CreateReferenceInput, scope?: WorkspaceScope) => Promise<number>
-  updateReference: (id: number, data: Partial<Reference>) => Promise<void>
+  updateReference: ReferenceAuthorUpdateV1
   deleteReference: (id: number) => Promise<void>
 
   // ── 深度分析相关 ──
@@ -57,11 +69,29 @@ export function importedReferenceDataV1(session: ImportSession & { id: number },
 export const useReferenceStore = create<ReferenceStore>((set, get) => ({
   references: [],
   loading: false,
+  loadedScope: null,
+  loadError: null,
 
   loadAll: async (scopeInput: WorkspaceScopeLike) => {
-    set({ loading: true })
-    const references = await readOwnedRows<Reference>(await resolveScopeLike(scopeInput), 'references', { owner: 'work' })
-    set({ references, loading: false })
+    const request = ++loadSequence
+    set({ loading: true, loadError: null })
+    try {
+      const scope = await resolveScopeLike(typeof scopeInput === 'number' ? scopeInput : { ...scopeInput })
+      if (request !== loadSequence) return
+      if (!sameWork(get().loadedScope, scope)) set({ references: [], loadedScope: null })
+      let references: Reference[] = [], observed = -1
+      for (let attempt = 0; attempt < 3; attempt++) {
+        observed = writeRevision
+        references = await readOwnedRows<Reference>(scope, 'references', { owner: 'work' })
+        if (request !== loadSequence) return
+        if (observed === writeRevision) break
+      }
+      if (observed !== writeRevision) throw new Error('读取期间参考持续变化，请重新读取。')
+      if (request === loadSequence) set({ references, loading: false, loadedScope: scope })
+    } catch (error) {
+      if (request === loadSequence) set({ loading: false, loadError: error instanceof Error ? error.message : '参考读取失败。' })
+      throw error
+    }
   },
 
   addReference: async (data: CreateReferenceInput, explicitScope?: WorkspaceScope) => {
@@ -72,21 +102,49 @@ export const useReferenceStore = create<ReferenceStore>((set, get) => ({
     return id as number
   },
 
-  updateReference: async (id: number, data: Partial<Reference>) => {
-    await coordinatePendingEditV1({
+  updateReference: ((id: number, input: Partial<Reference>, options?: { scope?: WorkspaceScope; expected?: Partial<Reference>; confirmation?: LocalSaveIntentV1 }) => {
+    const data = structuredClone(input), expected = structuredClone(options?.expected ?? get().references.find(row => row.id === id))
+    const confirmation = options?.confirmation ? structuredClone(options.confirmation) : undefined
+    if (confirmation && Dexie.currentTransaction) return Promise.reject(new Error('参考保存确认需要独立提交。'))
+    const explicitScope = options?.scope ? { ...options.scope } : undefined
+    const captured = (async () => {
+      if (explicitScope) return resolveScopeLike(explicitScope)
+      const row = await db.references.get(id)
+      if (!row) throw new Error('参考已删除，输入尚未保存。')
+      return resolveScopeLike(row.projectId)
+    })()
+    void captured.catch(() => undefined)
+    return coordinatePendingEditV1({
       key: `reference:${id}`,
       persist: async () => {
-        const initial = await db.references.get(id)
-        if (!initial) throw new Error('参考已删除，输入尚未保存。')
-        const scope = await resolveScopeLike(initial.projectId)
-        const current = await db.references.get(id)
-        if (!current || !await assertRecordInScope(scope, 'references', current, { owner: 'work' })) throw new Error('参考不属于当前作品或已删除，输入尚未保存。')
-        if (await db.references.update(id, { ...data, updatedAt: Date.now() }) !== 1) throw new Error('参考已删除，输入尚未保存。')
-        const ref = await db.references.get(id)
-        if (ref) await get().loadAll(ref.projectId)
+        const scope = await captured
+        for (const [field, value] of Object.entries(data)) {
+          if (!authorFields.has(field) || typeof value !== 'string' || (field === 'type' && !['story', 'style', 'historical'].includes(value))) throw new Error('参考修改包含身份、分析结果或未登记的作者字段。')
+        }
+        const proof = confirmation ? recordTextSaveRequestV1('references', id, data, explicitScope, confirmation) : undefined
+        let saved = await db.transaction('rw', referenceCreationTablesV1(), async transaction => {
+          const table = transaction.table<Reference, number>('references'), update = db.references.update.bind(table)
+          const current = await table.get(id)
+          if (!current || !await assertRecordInScope(scope, 'references', current, { owner: 'work' })) throw new Error('参考不属于当前作品或已删除，输入尚未保存。')
+          if (expected && Object.keys(data).some(field => Reflect.get(current, field) !== Reflect.get(expected, field))) throw new Error('参考字段已被其他页面修改，输入已保留。')
+          if (confirmation) await Dexie.waitFor(assertRecordTextSaveExpectedV1(current, confirmation, transaction))
+          if (await update(id, { ...data, updatedAt: Math.max(Date.now(), current.updatedAt + 1) }) !== 1) throw new Error('参考写入0行，输入尚未保存。')
+          const actual = await table.get(id)
+          if (confirmation && proof) await Dexie.waitFor(recordTextSaveAckV1(actual, confirmation, proof.raw))
+          if (!actual || !await assertRecordInScope(scope, 'references', actual, { owner: 'work' })) throw new Error('保存后的参考归属异常，输入已保留。')
+          return actual
+        })
+        const revision = ++writeRevision
+        let ack: LocalSaveAckV1 | undefined
+        if (confirmation && proof) {
+          const actual = await db.references.get(id)
+          ack = await recordTextSaveAckV1(actual, confirmation, proof.raw); saved = actual!
+        }
+        if (revision === writeRevision && sameWork(get().loadedScope, scope)) set({ references: get().references.map(row => row.id === id ? saved : row) })
+        return ack
       },
     })
-  },
+  }) as ReferenceAuthorUpdateV1,
 
   deleteReference: async (id: number) => {
     const current = get().references.find(r => r.id === id) ?? await db.references.get(id)

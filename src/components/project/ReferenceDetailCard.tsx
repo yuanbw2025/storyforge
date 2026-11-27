@@ -12,6 +12,9 @@ import {
 import type { Reference, ReferenceType } from '../../lib/types'
 import { InlineInput, InlineTextarea } from '../shared/InlineEdit'
 import ReferenceDeepAnalysisTab from './ReferenceDeepAnalysisTab'
+import { useAuthorRecordSavesV1 } from '../shared/AuthorRecordSaveScope'
+import type { LocalSaveAckV1, LocalSaveIntentV1 } from '../../lib/authoring/local-save-evidence'
+import { flushPendingEditsV1 } from '../../lib/authoring/pending-edit-coordinator'
 import {
   REFERENCE_GLYPH_COLORS,
   REFERENCE_TYPE_CONFIG,
@@ -42,7 +45,7 @@ type DetailTab = 'worldview' | 'characters' | 'outline' | 'deep-analysis' | 'inf
 interface Props {
   reference: Reference
   referenceIndex: number
-  onUpdate: (data: Partial<Reference>) => void | Promise<void>
+  onUpdate: (data: Partial<Reference>, confirmation?: LocalSaveIntentV1) => void | Promise<void | LocalSaveAckV1>
   onDelete: () => void
 }
 
@@ -71,6 +74,7 @@ export default function ReferenceDetailCard({ reference, referenceIndex, onUpdat
     return tabs
   }, [characters.length, data, outline.length, worldviewEntries.length])
   const [activeTab, setActiveTab] = useState<DetailTab>(availableTabs[0]?.key || 'info')
+  const [navigationError, setNavigationError] = useState('')
 
   useEffect(() => {
     const validTabs = availableTabs.map(tab => tab.key)
@@ -111,7 +115,7 @@ export default function ReferenceDetailCard({ reference, referenceIndex, onUpdat
             return (
               <button
                 key={tab.key}
-                onClick={() => setActiveTab(tab.key)}
+              onClick={() => { void flushPendingEditsV1().then(() => { setActiveTab(tab.key); setNavigationError('') }).catch(error => setNavigationError(error instanceof Error ? error.message : '参考输入尚未保存。')) }}
                 aria-pressed={activeTab === tab.key}
                 className={`flex items-center gap-1.5 px-3 py-2 text-xs rounded-t transition-colors border-b-2 ${
                   activeTab === tab.key
@@ -128,6 +132,7 @@ export default function ReferenceDetailCard({ reference, referenceIndex, onUpdat
       )}
 
       <div>
+        {navigationError && <p role="alert" className="text-sm text-error">{navigationError}</p>}
         {activeTab === 'info' && <ReferenceInfoTab reference={reference} onUpdate={onUpdate} />}
         {activeTab === 'worldview' && <ReferenceWorldviewTab entries={worldviewEntries} />}
         {activeTab === 'characters' && <ReferenceCharactersTab characters={characters} />}
@@ -138,7 +143,8 @@ export default function ReferenceDetailCard({ reference, referenceIndex, onUpdat
   )
 }
 
-function ReferenceInfoTab({ reference, onUpdate }: { reference: Reference; onUpdate: (data: Partial<Reference>) => void | Promise<void> }) {
+function ReferenceInfoTab({ reference, onUpdate }: Pick<Props, 'reference' | 'onUpdate'>) {
+  const localSave = useAuthorRecordSavesV1('references', reference)
   return (
     <div className="space-y-0 divide-y divide-border/40">
       <ReferenceInfoRow label="标题">
@@ -156,7 +162,7 @@ function ReferenceInfoTab({ reference, onUpdate }: { reference: Reference; onUpd
         </select>
       </ReferenceInfoRow>
       <ReferenceInfoRow label="参考要点">
-        <InlineTextarea markdownRead value={reference.note} onChange={value => onUpdate({ note: value })} placeholder="记录你希望借鉴这部作品的哪些方面…" />
+        <InlineTextarea localSave={localSave('note')} markdownRead value={reference.note} onChange={(value, confirmation) => confirmation ? onUpdate({ note: value }, confirmation) : onUpdate({ note: value })} placeholder="记录你希望借鉴这部作品的哪些方面…" />
       </ReferenceInfoRow>
     </div>
   )

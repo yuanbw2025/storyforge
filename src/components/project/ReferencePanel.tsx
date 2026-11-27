@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Library, Upload } from 'lucide-react'
 import { useReferenceStore } from '../../stores/reference'
+import { flushPendingEditsV1 } from '../../lib/authoring/pending-edit-coordinator'
 import type { Project, Reference, ReferenceType } from '../../lib/types'
 import { useDialog } from '../shared/Dialog'
 import ReferenceDetailCard from './ReferenceDetailCard'
@@ -25,11 +26,16 @@ interface Props {
 
 export default function ReferencePanel({ project, initialReferenceId }: Props) {
   const dialog = useDialog()
-  const { references, loadAll, updateReference, deleteReference } = useReferenceStore()
+  const { references, loadAll, updateReference, deleteReference, loadError } = useReferenceStore()
+  const [navigationError, setNavigationError] = useState('')
   const [filter, setFilter] = useState<ReferenceType | 'all'>('all')
   const [selected, setSelected] = useState<number | null>(null)
 
-  useEffect(() => { loadAll(project.id!) }, [project.id, loadAll])
+  useEffect(() => { void loadAll({ projectId: project.id!, worldId: project.activeWorldId!, workId: project.activeWorkId! }).catch(() => undefined) }, [project.id, project.activeWorldId, project.activeWorkId, loadAll])
+  const guarded = async (action: () => void | Promise<void>) => {
+    try { await flushPendingEditsV1(); await action(); setNavigationError('') }
+    catch (error) { setNavigationError(error instanceof Error ? error.message : '参考输入尚未保存。') }
+  }
 
   const displayed = filter === 'all'
     ? references
@@ -80,7 +86,7 @@ export default function ReferencePanel({ project, initialReferenceId }: Props) {
             ([v, l, c]) => (
               <button
                 key={v}
-                onClick={() => setFilter(v)}
+                onClick={() => { void guarded(() => setFilter(v)) }}
                 className={`flex-1 text-xs py-1 rounded px-1 transition-colors ${filter === v ? 'bg-accent text-white' : 'text-text-muted hover:text-text-secondary'}`}
               >
                 {l} {c > 0 && <span className="opacity-70">({c})</span>}
@@ -112,7 +118,7 @@ export default function ReferencePanel({ project, initialReferenceId }: Props) {
               <button
                 key={ref.id}
                 {...initialRecordTargetAttributes(ref.id === initialReferenceId, ref.id)}
-                onClick={() => setSelected(active ? null : ref.id!)}
+                onClick={() => { void guarded(() => setSelected(active ? null : ref.id!)) }}
                 className={`w-full flex items-center gap-2.5 px-2 py-2 rounded-lg text-left transition-all ${
                   active
                     ? 'bg-accent/8 border-l-2 border-accent'
@@ -143,17 +149,23 @@ export default function ReferencePanel({ project, initialReferenceId }: Props) {
 
       {/* 右侧详情 */}
       <div className="flex-1 min-w-0">
+        {(navigationError || loadError) && <p role="alert" className="mb-3 text-sm text-error">{navigationError || loadError}
+          {loadError && <button type="button" className="ml-2 underline" onClick={() => { void guarded(() => loadAll({ projectId: project.id!, worldId: project.activeWorldId!, workId: project.activeWorkId! })) }}>重新读取参考</button>}
+        </p>}
         {selectedRef ? (
           <ReferenceDetailCard
+            key={selectedRef.id}
             reference={selectedRef}
             referenceIndex={references.findIndex(r => r.id === selectedRef.id)}
-            onUpdate={(data) => {
+            onUpdate={(data, confirmation) => {
               if (selectedRef?.id) {
-                return updateReference(selectedRef.id, data)
+                const scope = { projectId: project.id!, worldId: project.activeWorldId!, workId: project.activeWorkId! }
+                return confirmation ? updateReference(selectedRef.id, data, { scope, expected: selectedRef, confirmation })
+                  : updateReference(selectedRef.id, data, { scope, expected: selectedRef })
               }
               return Promise.reject(new Error('参考已不可编辑，输入尚未保存。'))
             }}
-            onDelete={() => handleDelete(selectedRef)}
+            onDelete={() => { void guarded(() => handleDelete(selectedRef)) }}
           />
         ) : (
           <div className="flex flex-col items-center justify-center h-64 text-text-muted text-sm gap-3">
