@@ -15,6 +15,7 @@ export default function CandidateMarkdownField({ value, disabled, onCommit, chil
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const active = useRef(false), composing = useRef(false), revision = useRef(0)
+  const editorRoot = useRef<HTMLDivElement>(null)
   const save = useRef(onCommit), editingSave = useRef(onCommit)
   const inFlight = useRef<Promise<void> | null>(null)
   save.current = onCommit
@@ -37,11 +38,12 @@ export default function CandidateMarkdownField({ value, disabled, onCommit, chil
     return operation.then(() => commit())
   }, [])
   useEffect(() => registerPendingDraftFlusherV1(commit), [commit])
+  useEffect(() => { if (editing) editorRoot.current?.querySelector('textarea')?.focus({ preventScroll: true }) }, [editing])
   const finish = () => { void commit().catch(() => undefined) }
   if (!editing) return <MarkdownReadView value={value} readOnly={disabled} onRequestEdit={() => {
     editingSave.current = save.current; active.current = true; setError(''); setEditing(true)
   }} />
-  return <div className="min-w-0" onInputCapture={() => { revision.current++ }}
+  return <div ref={editorRoot} className="min-w-0" onInputCapture={() => { revision.current++ }}
     onCompositionStartCapture={() => { composing.current = true }}
     onCompositionEndCapture={() => { composing.current = false; revision.current++ }}
     onBlurCapture={event => {

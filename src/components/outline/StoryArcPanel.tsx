@@ -628,7 +628,7 @@ function StoryArcEditor({ arc, stages, targeted, onUpdateArc, onEditStage, onCom
             <Trash2 className="w-4 h-4" />
           </button>
         </div>
-        <AcknowledgedTextField label="故事线整体描述" rows={3} value={arc.description}
+        <AcknowledgedTextField markdownRead label="故事线整体描述" rows={3} value={arc.description}
           onCommit={(value, expected) => onUpdateArc({ description: value }, { description: expected as string })}
           placeholder="故事线整体描述..."
           className="w-full h-16 p-2 bg-bg-base border border-border rounded text-sm text-text-secondary resize-y focus:outline-none focus:border-accent"
@@ -839,7 +839,7 @@ function StageCard({ stage, index, total, onUpdate, onDelete, onGenerateKeyEvent
           />
 
           {/* 描述 */}
-          <AcknowledgedTextField label="故事阶段描述" rows={4}
+          <AcknowledgedTextField markdownRead label="故事阶段描述" rows={4}
             value={stage.description}
             onCommit={(value, expected) => onUpdate({ description: value }, { description: expected as string })}
             placeholder="这个阶段发生什么..."
