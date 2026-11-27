@@ -85,10 +85,13 @@
 
 ## 二、上下文源清单（CONTEXT_SOURCES · AI 读什么）
 
-共 178 个上下文源。assembleContext({ sourceKeys }) 按 key 装配。
+共 181 个上下文源。assembleContext({ sourceKeys }) 按 key 装配。
 
 | key | 标签 | 作用域 | 层级 | 预算(token) |
 |---|---|---|---|---|
+| `workCoverMetadataV1` | 封面作品元信息 | project | L0 | 4000 |
+| `workCoverBriefV1` | 封面提示词 | project | L0 | 12000 |
+| `workCoverSelectedTextV1` | 作者选用的封面正文片段 | project | L0 | 12000 |
 | `extensionRecords` | 插件冻结任务与自有记录 | project | L0 | 24000 |
 | `shortNovel.production` | 短篇已确认生产合同 | project | L0 | 8000 |
 | `shortNovel.manuscript` | 短篇当前结构与正文 | project | L0 | 64000 |
@@ -503,13 +506,14 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 
 ## 五、正式 AI 入口（FormalAIEntryBindingV1）
 
-共 76 个操作级绑定。运行时按 entryId 校验 category 和 Skill；采纳权限不由文字说明决定。显式 outputModality=audio/image 分别使用冻结音频执行器或临时图片预览执行器，文本入口不补默认字段。
+共 77 个操作级绑定。运行时按 entryId 校验 category 和 Skill；采纳权限不由文字说明决定。显式 outputModality=audio/image 分别使用冻结音频执行器或临时图片预览执行器，文本入口不补默认字段。
 
 | entryId | Skill | category | 边界 | 候选 | 采纳目标 | 调用方 |
 |---|---|---|---|---|---|---|
 | `world.worldview-field.v2` | `world-origin.worldview-field.v2` | `agent.world-origin.worldview-field.v2` | formal / durable-run | `worldview-field-candidate-v2` | `worldviews` | `src/lib/agent/run/worldview-field-v2-durable.ts` |
 | `world.codex.extract.v2` | `world-origin.codex-extract.v2` | `codex.extract` | formal / durable-run | `codex-extraction-candidate-v2` | `codexEntries` | `src/lib/agent/run/codex-extraction-v2-runtime.ts` |
 | `world.map.paint-preview` | `world-origin.map-config` | `geography.world-map-paint` | auxiliary / authoring-draft / image | `map-paint-image-preview` | 禁止 | `src/lib/world-map/atlas/paint-preview.ts` |
+| `work-cover.image.generate` | `inspiration.work-cover-image-v1` | `work-cover.image.generate` | formal / durable-run / image | `storyforge.work-cover.image-candidate@1` | `works` | `src/lib/work-cover/run.ts` |
 | `node.worldview.field` | `world-origin.worldview-field` | `worldview.dimension` | formal / durable-run | `node-worldview-field-candidate` | `worldviews` | `src/lib/node-authoring/field-producer.ts` |
 | `node.story-core.field` | `world-origin.story-core` | `story.core` | formal / durable-run | `node-story-core-field-candidate` | `storyCores` | `src/lib/node-authoring/field-producer.ts` |
 | `chat.source-unit-confirmation` | `chat.source-unit-confirmation.v1` | `authoring.chat-source-unit-confirmation` | formal / durable-run | `chat-source-unit-confirmation` | `chatAuthoringDrafts` | `src/lib/character-interaction/source-unit-confirmation-harness.ts` |
@@ -598,4 +602,4 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 
 ---
 
-生成时间基准:commit `f25f179f8`
+生成时间基准:commit `298d27ac4`

@@ -678,6 +678,8 @@ export interface ConsistencyAuditSourceReadV1 {
 }
 
 export interface AssembleContextInput {
+  workCoverDraftId?: number
+  workCoverDraftRevision?: number
   captureConsistencyAuditSource?: (source: ConsistencyAuditSourceReadV1) => void
   extensionSnapshot?: import('../extensions/types').ExtensionRegistrySnapshot
   projectId: number

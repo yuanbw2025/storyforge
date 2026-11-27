@@ -170,10 +170,16 @@ export function parseFormalAIEntryRegistryV1(
     const outputModality = record.outputModality === undefined ? undefined : record.outputModality
     if (outputModality !== undefined) {
       const audio = outputModality === 'audio' && entryKind === 'formal' && executionBoundary === 'product-runtime'
-        && !skill.writeTargets.length && !skill.readToolNames.length
+        && !skill.writeTargets.length && !skill.readToolNames.length && !adoptAllowed && !adoptionTargets.length
       const imagePreview = outputModality === 'image' && entryKind === 'auxiliary' && executionBoundary === 'authoring-draft'
-      if ((!audio && !imagePreview) || adoptAllowed || adoptionTargets.length) fail(`${entryId} 非文本入口必须符合无正式写回的音频候选或临时图片预览边界`)
+        && !adoptAllowed && !adoptionTargets.length
+      const workCoverImage = outputModality === 'image' && entryKind === 'formal' && executionBoundary === 'durable-run'
+        && entryId === 'work-cover.image.generate' && skillId === 'inspiration.work-cover-image-v1'
+        && !skill.readToolNames.length && adoptAllowed && adoptionTargets.length === 1 && adoptionTargets[0] === 'works'
+        && skill.writeTargets.length === 1 && skill.writeTargets[0].fields.join(',') === 'coverImage'
+      if (!audio && !imagePreview && !workCoverImage) fail(`${entryId} 非文本入口须符合音频候选、临时图片预览或作品封面明确采用边界`)
     }
+
 
     return {
       version: 1,
@@ -345,6 +351,23 @@ export async function executeFrozenFormalAudioEntryV1<T>(
   const binding = await assertFormalAIEntrySnapshotIntegrityV1(snapshot, new Map([[frozenSkill.id, frozenSkill]]))
   if (binding.entryId !== entryId || binding.skillId !== frozenSkill.id || binding.outputModality !== 'audio'
     || !binding.allowedCallers.includes(caller) || !binding.categories.includes(meta.category ?? '')) fail(`${entryId} 的冻结音频入口、Skill、category 或 caller 权限不匹配`)
+  signal?.throwIfAborted()
+  return invoke()
+}
+
+/** A registered image dispatch cannot borrow the text transport or auto-adopt. */
+export async function executeFrozenFormalImageEntryV1<T>(
+  entryId: FormalAIEntryId,
+  snapshot: AgentRunFormalAIEntryBindingV1,
+  frozenSkill: AgentSkillDefinitionV1,
+  caller: string,
+  invoke: () => Promise<T>,
+  meta: AICallMeta,
+  signal?: AbortSignal,
+): Promise<T> {
+  const binding = await assertFormalAIEntrySnapshotIntegrityV1(snapshot, new Map([[frozenSkill.id, frozenSkill]]))
+  if (binding.entryId !== entryId || entryId !== 'work-cover.image.generate' || binding.skillId !== frozenSkill.id || binding.outputModality !== 'image'
+    || !binding.allowedCallers.includes(caller) || !binding.categories.includes(meta.category ?? '')) fail('冻结的封面图片入口或 caller 权限不匹配')
   signal?.throwIfAborted()
   return invoke()
 }

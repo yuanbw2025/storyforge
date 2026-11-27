@@ -53,7 +53,6 @@ import { readStorylineProgressContext } from '../storyline/storyline-progress'
 import { readCodexExtractionBaselineContextV1 } from '../codex/extraction'
 import { readHistoryAgentBaselineContextV1 } from '../history/agent-baseline'
 import { readReferenceDerivedBaselineContextV1 } from '../reference-analysis/derived-agent-baseline'
-import { buildEditImpactGraphV1 } from '../consistency/impact-analysis'
 import {
   buildLongTermConsistencyDossierV1,
   formatLongTermConsistencyDossierV1,
@@ -1600,6 +1599,9 @@ async function readConsistencyReport(
   scope?: WorkspaceScope,
 ): Promise<string> {
   if (chapterId == null) return ''
+  // The impact graph is only needed for this explicit source read. Keep its
+  // analysis dependencies out of ordinary context-source initialization.
+  const { buildEditImpactGraphV1 } = await import('../consistency/impact-analysis')
   const impact = await buildEditImpactGraphV1(scope ?? projectId, chapterId)
   const staleFacts = impact.nodes.filter(node => node.kind === 'fact' && node.status && ['stale', 'source-missing', 'invalid-range'].includes(node.status))
   const lines = [
@@ -2107,6 +2109,15 @@ async function readCharacterPassages(projectId: number, name?: string, worldGrou
 }
 
 export const CONTEXT_SOURCES: ContextSource[] = [
+  { key: 'workCoverMetadataV1', label: '封面作品元信息', scope: 'project', ownerFrom: 'work', layer: 'L0', budgetTokens: 4_000,
+    atomic: true, protectedFromTrim: true,
+    read: async input => { const loading = import('../work-cover/context'); const module = await (Dexie.currentTransaction ? Dexie.waitFor(loading) : loading); return module.readWorkCoverMetadataV1(input) } },
+  { key: 'workCoverBriefV1', label: '封面提示词', scope: 'project', ownerFrom: 'work', layer: 'L0', budgetTokens: 12_000,
+    atomic: true, protectedFromTrim: true,
+    read: async input => { const loading = import('../work-cover/context'); const module = await (Dexie.currentTransaction ? Dexie.waitFor(loading) : loading); return module.readWorkCoverBriefV1(input) } },
+  { key: 'workCoverSelectedTextV1', label: '作者选用的封面正文片段', scope: 'project', ownerFrom: 'work', layer: 'L0', budgetTokens: 12_000,
+    atomic: true, protectedFromTrim: true,
+    read: async input => { const loading = import('../work-cover/context'); const module = await (Dexie.currentTransaction ? Dexie.waitFor(loading) : loading); return module.readWorkCoverSelectedTextV1(input) } },
   { key: 'extensionRecords', label: '插件冻结任务与自有记录', scope: 'project', layer: 'L0', ownerFrom: 'work', budgetTokens: 24000, protectedFromTrim: true, atomic: true,
     enabled: input => Boolean(input.extensionSnapshot),
     read: async input => { const loading = import('../extensions/ai-registry'); const module = await (Dexie.currentTransaction ? Dexie.waitFor(loading) : loading); return module.readExtensionContext(input) } },
