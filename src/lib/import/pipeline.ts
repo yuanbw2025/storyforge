@@ -9,7 +9,7 @@ import {
   registerChunkTexts as _registerChunkTexts,
   hasChunkTexts as _hasChunkTexts,
   clearChunkTexts as _clearChunkTexts,
-  getChunkText,
+  captureChunkTextReaderV1,
 } from './chunk-text-registry'
 import { applyChunkResult, type ApplyChunkCounts } from './chunk-writer'
 import { createDocumentImportChunkCandidateV1, readDocumentImportChunkEvidenceV1 } from './document-parse-durable'
@@ -50,18 +50,18 @@ export function isPipelineRunning() {
   return activeController !== null && !activePauseFlag.paused
 }
 
-/** Capture all strings synchronously so later registry replacement cannot change the admitted input. */
-async function captureImportSource(session: ImportSession): Promise<ReadonlyMap<number, string>> {
-  const captured = new Map<number, string>()
-  for (const chunk of session.chunks) {
-    const text = getChunkText(session.id!, chunk.index)
-    if (captured.has(chunk.index) || !text)
-      throw new ImportSessionAuthorityError('分块原文不完整；请重新上传原文件后继续。')
-    captured.set(chunk.index, text)
-  }
-  for (const chunk of session.chunks) {
-    if (await hashImportChunkTextV1(captured.get(chunk.index)!) !== chunk.sourceTextHash)
-      throw new ImportSessionAuthorityError('分块原文与已确认文件不一致；请上传原文件重新核对。')
+/** Small legacy inputs are captured and checked in full. Immutable Blob readers
+ * retain only the selected chunk; registration already checked the frozen source. */
+async function captureImportSource(session: ImportSession) {
+  const captured = captureChunkTextReaderV1(session.id!)
+  if (!captured.lazy) {
+    const seen = new Set<number>()
+    for (const chunk of session.chunks) {
+      const text = await captured.read(chunk.index)
+      if (seen.has(chunk.index) || !text || await hashImportChunkTextV1(text) !== chunk.sourceTextHash)
+        throw new ImportSessionAuthorityError('分块原文不完整或与已确认文件不一致；请重新上传原文件后继续。')
+      seen.add(chunk.index)
+    }
   }
   return captured
 }
@@ -75,8 +75,9 @@ export async function readPendingDocumentImportV1(input: { sessionId: number; pr
 
 /** An explicit start/continue can submit at most one previously unsent chunk.
  * Pending/unknown/returned attempts are read-only and never replayed. */
-export async function runSession(args: { sessionId: number; projectId: number }): Promise<void> {
+export async function runSession(args: { sessionId: number; projectId: number; signal?: AbortSignal }): Promise<void> {
   args = { ...args }
+  args.signal?.throwIfAborted()
   const { sessionId, projectId } = args
   const sessionStore = useImportSessionStore.getState()
   const status = useImportStatusStore.getState()
@@ -92,6 +93,9 @@ export async function runSession(args: { sessionId: number; projectId: number })
     failedChunks: session.chunks.filter(chunk => chunk.status === 'failed').length,
   })
   const controller = new AbortController()
+  const abortFromCaller = () => controller.abort()
+  args.signal?.addEventListener('abort', abortFromCaller, { once: true })
+  if (args.signal?.aborted) controller.abort()
   const control = { paused: false, cancelled: false }
   activeController = controller
   activePauseFlag = control
@@ -116,7 +120,7 @@ export async function runSession(args: { sessionId: number; projectId: number })
     attach('running')
     status.setActiveChunk(first.index, 1)
     await createDocumentImportChunkCandidateV1({ ...args, chunkIndex: first.index,
-      signal: controller.signal, sourceText: source.get(first.index)! })
+      signal: controller.signal, sourceText: await source.read(first.index) })
     status.setActiveChunk(null)
     status.setPhase('paused')
     status.pushActivity('success', `第 ${first.index + 1} 块解析完成，等待你审查并确认。`, first.index)
@@ -131,6 +135,7 @@ export async function runSession(args: { sessionId: number; projectId: number })
     status.setFatalError(message)
     status.pushActivity('error', message)
   } finally {
+    args.signal?.removeEventListener('abort', abortFromCaller)
     if (activeController === controller) activeController = null
   }
 }
@@ -200,7 +205,7 @@ export async function runPublishedReferenceAnalysisV1(
 
 async function analyzeConfirmedReference(
   refId: number, session: ImportSession & { id: number }, depth: 'quick' | 'deep',
-  captured: ReadonlyMap<number, string> | null,
+  captured: Awaited<ReturnType<typeof captureImportSource>> | null,
   statusStore?: { pushActivity: (level: 'info' | 'success' | 'warn' | 'error', msg: string) => void },
   firstStart?: ReferenceAnalysisFirstStartGuardV1,
 ): Promise<void> {
@@ -208,8 +213,12 @@ async function analyzeConfirmedReference(
   await verify()
   if (depth === 'deep') {
     if (!captured) throw new ImportSessionAuthorityError('深层分析需要完整原文件。')
-    const sourceChunks = session.chunks.map(({ index, startChar, endChar, charCount, label }) =>
-      ({ index, startChar, endChar, charCount, label, text: captured.get(index)! }))
+    const sourceChunks = []
+    for (const { index, startChar, endChar, charCount, label } of session.chunks) {
+      const text = await captured.read(index)
+      if (!text) throw new ImportSessionAuthorityError('深层分析需要完整原文件。')
+      sourceChunks.push({ index, startChar, endChar, charCount, label, text })
+    }
     const run = await createReferenceAnalysisRun({
       referenceId: refId, depth, sourceFilename: session.filename, fileHash: session.fileHash,
       totalChars: session.totalChars, expectedChunks: sourceChunks.length,

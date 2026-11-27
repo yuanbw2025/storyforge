@@ -17,7 +17,7 @@ import { createVerificationReceiptV1, verifyVerificationReceiptIntegrityV1 } fro
 import { REGISTRY_BY_NAME } from '../registry/project-tables'
 import type { ImportSession, UnifiedParseResult, WorkspaceScope } from '../types'
 import { applyChunkResult, importChunkAdoptionTablesV1, refreshImportedChunkStoresV1 } from './chunk-writer'
-import { getChunkText } from './chunk-text-registry'
+import { getChunkText, readChunkTextV1 } from './chunk-text-registry'
 import { readDocumentImportChunkEvidenceV1 } from './document-parse-durable'
 import { buildFinalReport, mergeUnified, normalizeUnified } from './unified-merge'
 
@@ -69,7 +69,7 @@ export async function confirmDocumentImportChunkV1(input: ConfirmDocumentImportC
     ...input.reviewedResult, codexCandidates: candidate.result.codexCandidates ?? [],
   } : candidate.result)
   const editedHash = await hashCanonicalValue(reviewed)
-  const source = getChunkText(input.sessionId, input.chunkIndex)
+  const source = await readChunkTextV1(input.sessionId, input.chunkIndex)
   const sourceHash = source === undefined ? null : await hashImportChunkTextV1(source)
   const checkpoint = await readLatestVerifiedAgentRunCheckpointV1(scope, runId)
   if (!checkpoint) throw new Error('原导入候选缺少可核验检查点。')

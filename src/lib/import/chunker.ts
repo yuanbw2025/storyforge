@@ -205,17 +205,29 @@ function chunkByCharacters(text: string, target: number, overlap: number): Chunk
 }
 
 /** 轻量 hash（不需要强密码学）：转 16 进制短串，够做"同文件续跑"识别 */
-export function quickHash(text: string): string {
-  let h1 = 0xdeadbeef, h2 = 0x41c6ce57
-  for (let i = 0; i < text.length; i++) {
-    const ch = text.charCodeAt(i)
-    h1 = Math.imul(h1 ^ ch, 2654435761)
-    h2 = Math.imul(h2 ^ ch, 1597334677)
+export function createImportQuickHashV1() {
+  let h1 = 0xdeadbeef, h2 = 0x41c6ce57, length = 0
+  return {
+    update(text: string) {
+      length += text.length
+      for (let i = 0; i < text.length; i++) {
+        const ch = text.charCodeAt(i)
+        h1 = Math.imul(h1 ^ ch, 2654435761)
+        h2 = Math.imul(h2 ^ ch, 1597334677)
+      }
+    },
+    digest() {
+      const a = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909)
+      const b = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(a ^ (a >>> 13), 3266489909)
+      const hex = (n: number) => (n >>> 0).toString(16).padStart(8, '0')
+      return hex(b) + hex(a) + '-' + length.toString(36)
+    },
   }
-  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909)
-  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909)
-  const hex = (n: number) => (n >>> 0).toString(16).padStart(8, '0')
-  return hex(h2) + hex(h1) + '-' + text.length.toString(36)
+}
+export function quickHash(text: string): string {
+  const hash = createImportQuickHashV1()
+  hash.update(text)
+  return hash.digest()
 }
 
 

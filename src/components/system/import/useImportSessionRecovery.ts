@@ -2,10 +2,12 @@ import { useEffect, useState } from 'react'
 import { extractTextFromFile, textLayerReportLineV1 } from '../../../lib/doc-parser'
 import type { CsvGridV1 } from '../../../lib/import/csv-grid'
 import { publishTextLayerNoticeV1, publishCsvGridViewV1 } from './ImportDocOverview'
-import { recoverFrozenImportSourceV1 } from '../../../lib/import/frozen-source-recovery'
+import { recoverFrozenImportSourceV1, registerBlobImportSourceV1, verifyBlobImportSourceV1 } from '../../../lib/import/frozen-source-recovery'
 import type { ImportSession } from '../../../lib/types/import-session'
 import { hasFrozenImportIdentityV1, readImportSessionAuthorityV1, useImportSessionStore } from '../../../stores/import-session'
 import { hasChunkTexts, registerChunkTexts } from '../../../lib/import/pipeline'
+
+import { isLargeImportTextFileV1, openImportBlobTextSourceV1 } from '../../../lib/import/blob-text-source'
 
 export default function useImportSessionRecovery(projectId: number, activeWorldId?: number | null, activeWorkId?: number | null) {
   const [unfinished, setUnfinished] = useState<ImportSession | null>(null)
@@ -26,6 +28,7 @@ export default function useImportSessionRecovery(projectId: number, activeWorldI
 
   useEffect(() => {
     let cancelled = false
+    const controller = new AbortController()
     const scan = async () => {
       const store = useImportSessionStore.getState()
       const [reusable, unfinished] = await Promise.all([store.findReusableCompleted(projectId), store.findUnfinished(projectId)])
@@ -59,6 +62,17 @@ export default function useImportSessionRecovery(projectId: number, activeWorldI
           return
         }
         const file = new File([row.blob], row.filename, { type: row.blob.type })
+        if (isLargeImportTextFileV1(file)) {
+          const source = await openImportBlobTextSourceV1(file, { signal: controller.signal })
+          await verifyBlobImportSourceV1(source, frozen, controller.signal)
+          await readImportSessionAuthorityV1(session.id, projectId, frozen)
+          if (cancelled) return
+          registerBlobImportSourceV1(session.id, source, frozen.chunks)
+          setTextLayerBlocked(null); publishTextLayerNoticeV1(null)
+          setCsvGrid(null); publishCsvGridViewV1(null)
+          setBlobRestored(true)
+          return
+        }
         const result = await extractTextFromFile(file)
         if (cancelled) return
         if (result.status === 'empty') {
@@ -90,7 +104,7 @@ export default function useImportSessionRecovery(projectId: number, activeWorldI
       }
     }
     scan()
-    return () => { cancelled = true }
+    return () => { cancelled = true; controller.abort() }
   }, [activeWorldId, activeWorkId, projectId])
 
   return {

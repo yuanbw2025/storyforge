@@ -5,6 +5,10 @@ import type { ChunkPlan } from '../../../lib/import/chunker'
 interface Props {
   filename: string
   rawText: string
+  totalChars?: number
+  hasSourceText?: boolean
+  largePreview?: boolean
+  onCancelRead?: () => void
   loadingFile: boolean
   fileError: string | null
   extractInfo: string | null
@@ -23,6 +27,7 @@ interface Props {
 export default function ImportUploadZone({
   filename,
   rawText,
+  totalChars = rawText.length, hasSourceText = !!rawText.trim(), largePreview = false, onCancelRead,
   loadingFile,
   fileError,
   extractInfo,
@@ -67,7 +72,11 @@ export default function ImportUploadZone({
         </p>
       )}
 
+      {(loadingFile || largePreview) && <button type="button" onClick={onCancelRead} className="mb-2 text-xs text-accent">
+        {loadingFile ? '取消读取' : '改为粘贴文本'}
+      </button>}
       <textarea
+        readOnly={largePreview}
         value={rawText}
         onChange={e => onRawTextChange(e.target.value)}
         placeholder="把文档内容粘贴在这里，或上方点「上传文件」——支持设定集、成品小说与大纲，解析后由你审查确认。"
@@ -75,14 +84,14 @@ export default function ImportUploadZone({
         className="w-full px-3 py-2 bg-bg-base border border-border rounded text-sm text-text-primary font-mono resize-y focus:outline-none focus:border-accent"
       />
 
-      {automaticChunking && rawText.trim() && <p className="mt-2 text-xs text-text-muted">已读取 {rawText.length.toLocaleString()} 字符，将在开始前自动分块。</p>}
+      {automaticChunking && hasSourceText && <p className="mt-2 text-xs text-text-muted">已读取 {totalChars.toLocaleString()} 字符，将在开始前自动分块。</p>}
 
       {/* 预切块预览 */}
       {previewPlans && previewPlans.length > 0 && (
         <div className="mt-2 text-xs text-text-muted flex items-center gap-1">
           <Wand2 className="w-3 h-3 text-accent" />
           预计拆成 <strong className="text-accent">{previewPlans.length}</strong> 块
-          （每块约 {chunkSize.toLocaleString()} 字 · 共 {rawText.length.toLocaleString()} 字）
+          （每块约 {chunkSize.toLocaleString()} 字 · 共 {totalChars.toLocaleString()} 字）
         </div>
       )}
 
@@ -90,7 +99,7 @@ export default function ImportUploadZone({
       <div className="mt-3 flex items-center gap-2">
         <button
           onClick={onStart}
-          disabled={!rawText.trim()}
+          disabled={loadingFile || !hasSourceText}
           className="flex items-center gap-1.5 px-4 py-2 bg-accent text-white text-sm rounded hover:bg-accent-hover disabled:opacity-50"
         >
           <Sparkles className="w-4 h-4" />
