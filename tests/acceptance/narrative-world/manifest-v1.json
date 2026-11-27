@@ -21,18 +21,41 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261127-markdown051-descriptions-v1.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261127-markdown051-descriptions-v2.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
       {
-        "path": "tests/acceptance/narrative-world/baseline-20261127-cover035-runtime-v1.json",
-        "sha256": "8b103ef5385ee2cf9cc8a5791d64a104b9c5469d4ce26b36f337f611988e4938",
-        "note": "Preserve the cover035 receipt before admitting StoryCore author text into the existing caller-owned adoption transaction. Remeasure deterministic observations and known gaps; no model, literary or release acceptance inferred."
+        "path": "tests/acceptance/narrative-world/baseline-20261127-markdown051-descriptions-v1.json",
+        "sha256": "4be643a188bc5f821942501483bd04e172c6d71686ac30f77b89f02946c6026c",
+        "note": "Preserve the measured Markdown051 description receipt before merging the published main inputs; remeasure combined deterministic evidence without changing corpus or outcomes."
       },
       {
-        "path": "tests/acceptance/narrative-world/baseline-20261127-inspiration059-input-v2.json",
-        "sha256": "c0e0009453ba660f945f4a34b9edff1af216fb5179335d03d19c4c0eb0bc5592",
-        "note": "Preserve the inspiration059 receipt before integrating the original cover035 runtime. Remeasure registered cover context/entry types without changing deterministic narrative-world observations or known gaps."
+        "path": "tests/acceptance/narrative-world/baseline-20261127-feedback541-capacity-main-v2.json",
+        "sha256": "d20643a90715b3fb030ddc41b361a05fa132bdc53b328656a397e6729ce3f45e",
+        "note": "Preserve the published main receipt before integrating exact StoryCore author text; no release or model acceptance inferred."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261127-feedback541-capacity-main-v1.json",
+        "sha256": "80839352b281b2ac38e0660f046b75cd529dab9317d42c28cd3fa1599b2954db",
+        "note": "Preserve actual capacity-main v1 measurement before aligning the stale read-tool regression with PR681 full-delivery policy. New test asserts exact original text, source evidence, no writes and no model call; service-window rejection remains covered."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261127-feedback541-cover-integration-v2.json",
+        "sha256": "c12fa1b7cb03477a1e1dce5ec76481840b53d3fef07c2a50409cbbe24544b924",
+        "note": "Preserve pre-capacity-main integration measurement. PR681 changed registered execution inputs; current deterministic assertions passed before the fingerprint guard refused old inputs. Remeasure without changing corpus, gold or known gaps."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261127-feedback541-cover-integration-v1.json",
+        "sha256": "b8bcd5ab09ec48c1620a5af87c53056f5e8e394410ba4ded18b2030ca39dfebd",
+        "note": "Preserve integrated cover input measurement before resolving the measured 39-byte context chunk overage by lazily loading the existing reference-derived baseline reader. Outcomes and known gaps remain unchanged."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261127-feedback541-context-loading-v2.json",
+        "note": "Preserve measured pre-cover integration receipt; remeasure combined registered inputs without changing observations."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261127-cover035-runtime-v1.json",
+        "note": "Preserve independently merged cover035 receipt; no narrative capability upgrade inferred."
       },
       {
         "path": "tests/acceptance/narrative-world/baseline-20261127-inspiration059-input-v1.json",
@@ -1352,24 +1375,9 @@
         "note": "Retained the measured parent receipt before checking combined product admission on the updated test toolchain."
       },
       {
-        "path": "tests/acceptance/narrative-world/baseline-20261112-runtime-main344-v1.json",
-        "workPackage": "SFQA-028-032",
-        "note": "Preserved the measured independent runtime and comic contract evidence before integration."
-      },
-      {
-        "path": "tests/acceptance/narrative-world/baseline-20261112-quality034-039-after341-v1.json",
-        "workPackage": "SFQA-028-032",
-        "note": "Preserved the measured independent runtime and comic contract evidence before integration."
-      },
-      {
         "path": "tests/acceptance/narrative-world/baseline-20261113-runtime-main345-v1.json",
         "workPackage": "SFQA-028-031-032-069-082-083",
         "note": "Preserved the measured six-fix branch receipt before merging current main; its observations are unchanged by the merge."
-      },
-      {
-        "path": "tests/acceptance/narrative-world/baseline-20261112-quality007-post345-v1.json",
-        "workPackage": "SFQA-007",
-        "note": "Preserved the mainline receipt measured before the six-fix integration."
       },
       {
         "path": "tests/acceptance/narrative-world/baseline-20261113-runtime-merged422-v1.json",
@@ -1478,11 +1486,6 @@
         "note": "Preserve the v6 input measurement at F1 before PR536 reference prompt retirement, the independent finite-capacity test fixtures, and the document-parse request foundation. New measurements require an approved fixed source; observations and raw failures remain preserved."
       },
       {
-        "path": "tests/acceptance/narrative-world/baseline-20261119-035-cover-input-v1.json",
-        "workPackage": "release-4.0.9-feedback541",
-        "note": "Preserves the previous main input measurement; new receipt remeasures current inputs without changing corpus or acceptance."
-      },
-      {
         "path": "tests/acceptance/narrative-world/baseline-20261120-035-repair-foundation-input-v7.json",
         "workPackage": "BUG-035-RF-release409-current-source-renewal",
         "implementationCommit": "437fcaef9884ac6bc2f3219bcea51f1602ca23b0",
@@ -1492,6 +1495,14 @@
         "path": "tests/acceptance/narrative-world/baseline-20261120-client-release409-v1.json",
         "workPackage": "release-4.0.9-feedback541",
         "note": "Preserve the independent release4.0.9 input measurement and its complete dated receipt before the renewed repair-foundation input measurement. Corpus, observations and earlier lineage remain preserved."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261127-inspiration059-input-v2.json",
+        "note": "Preserved before deferred consistency-impact loading changed the registered context-source input; the new version is actually measured and all observed outcomes are compared without changing corpus or gold."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261127-feedback541-context-loading-v1.json",
+        "note": "Actual intermediate measurement retained; behavior matched previous evidence, before the existing domain receipt drift was discovered by strict combined readback. Not final full-source validation."
       }
     ],
     "comparison": "NW-2E checkpoint of the unchanged legacy v3 120-query comparator. Typed v4 query, exact product plans, current impact diagnostics and scale failures have separate receipts; no model or human quality acceptance is inferred."
