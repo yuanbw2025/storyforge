@@ -3315,7 +3315,11 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
           onGenerateImpactStoryTimelineRegeneration={() => { void handleGenerateImpactStoryTimelineRegeneration() }}
           onConfirmImpactStoryTimelineRegeneration={() => { void handleConfirmImpactStoryTimelineRegeneration() }}
           onRejectImpactStoryTimelineRegeneration={() => { void handleRejectImpactStoryTimelineRegeneration() }}
-          onToggleOutlinePreview={() => setShowOutlinePreview(!showOutlinePreview)}
+          onToggleOutlinePreview={() => {
+            if (!showOutlinePreview) { setShowOutlinePreview(true); return }
+            void flushPendingEditsV1().then(() => setShowOutlinePreview(false))
+              .catch(cause => setManualSaveError(cause instanceof Error ? cause.message : '章节摘要尚未保存，输入已保留。'))
+          }}
           onToggleReviewPanel={() => setShowReviewPanel(!showReviewPanel)}
           onToggleNotePanel={() => {
             if (!showNotePanel) { setShowNotePanel(true); return }
