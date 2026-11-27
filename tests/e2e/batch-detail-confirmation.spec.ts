@@ -23,10 +23,18 @@ async function setup(page: Page) {
   await page.getByRole('button', { name: '添加章节', exact: true }).click()
   await page.getByLabel('章节摘要', { exact: true }).fill('先试绳再救人。')
   await page.getByRole('button', { name: '添加章节', exact: true }).click()
-  await expect(page.getByLabel('章节摘要', { exact: true })).toHaveCount(2)
-  await page.getByLabel('章节摘要', { exact: true }).last().fill('渡船即将离岸。')
+  const chapterRows = page.locator('[data-outline-chapter-row]')
+  await expect(chapterRows).toHaveCount(2)
+  // The first saved summary is now in Markdown reading mode; only the new,
+  // empty chapter exposes its source textbox. Keep a two-record witness below.
+  await chapterRows.nth(1).getByLabel('章节摘要', { exact: true }).fill('渡船即将离岸。')
   await page.getByTitle('编辑本章细纲', { exact: true }).first().click()
   await expect(page.getByRole('heading', { name: '📝 第1章', exact: true })).toBeVisible()
+  await expect.poll(() => page.evaluate(async () => {
+    const { db } = await (new Function('return import("/storyforge/src/lib/db/schema.ts")'))()
+    return (await db.outlineNodes.toArray()).filter((row: { type: string }) => row.type === 'chapter')
+      .map((row: { title: string; summary: string }) => ({ title: row.title, summary: row.summary }))
+  })).toEqual([{ title: '第1章', summary: '先试绳再救人。' }, { title: '第2章', summary: '渡船即将离岸。' }])
   await page.getByRole('button', { name: '批量生成细纲', exact: true }).click()
   await expect(page.getByText('等待确认「第1章」的细纲候选...', { exact: true })).toBeVisible()
   return { calls: () => calls }
