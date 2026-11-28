@@ -2523,7 +2523,8 @@ test('真实世界观入口可维护修炼 DAG 并关联角色境界', async ({ 
   await expect(page.getByText('剑修', { exact: true }).first()).toBeVisible()
 
   await page.getByRole('button', { name: '添加第一个起始境界', exact: true }).click()
-  const stageNameField = page.getByText('境界名称', { exact: true }).locator('..')
+  const stageNameField = page.locator('[data-power-stage-fields] label').filter({ hasText: /^境界名称/ }).locator('..')
+  await expect(stageNameField).toHaveCount(1)
   // An absent field also has zero disabled ancestors. Require the actual
   // native committed field before inspecting its owner/read guards.
   await expect(stageNameField).toBeVisible()
