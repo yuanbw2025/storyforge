@@ -59,14 +59,33 @@ export default function CultivationProgressPanel({ project }: { project: Project
   const [analyzing, setAnalyzing] = useState(false)
   const [message, setMessage] = useState('')
 
+  const chapterScope = useChapterStore(state => state.loadedScope)
+  const outlineScope = useOutlineStore(state => state.loadedScope)
+  const characterScope = useCharacterStore(state => state.loadedScope)
+  const systemsScope = useCultivationStore(state => state.loadedScope)
+  const [readRetry, setReadRetry] = useState(0)
+  const readIdentity = `${project.id}:${project.activeWorldId}:${project.activeWorkId}`
+  const [read, setRead] = useState<{ identity: string; ready: boolean; error: string | null } | null>(null)
+  const scopeMatches = (scope: typeof chapterScope, work: boolean) => scope != null && scope.projectId === project.id
+    && (project.activeWorldId == null || scope.worldId === project.activeWorldId)
+    && (!work || project.activeWorkId == null || scope.workId === project.activeWorkId)
+  const readReady = read?.identity === readIdentity && read.ready
+    && scopeMatches(chapterScope, true) && scopeMatches(outlineScope, true)
+    && scopeMatches(characterScope, false) && scopeMatches(systemsScope, false)
+  const readError = read?.error || (read?.ready && !readReady ? '读取来源已切换，请重新读取。' : null)
   useEffect(() => {
     if (!project.id) return
-    loadChapters(project.id)
-    loadOutline(project.id)
-    loadCharacters(project.id)
-    loadSystems(project.id)
-    loadEvents(project.id)
-  }, [loadChapters, loadCharacters, loadEvents, loadOutline, loadSystems, project.id])
+    let active = true
+    setRead({ identity: readIdentity, ready: false, error: null })
+    void Promise.all([loadChapters(project.id), loadOutline(project.id), loadCharacters(project.id), loadSystems(project.id), loadEvents(project.id)]).then(() => {
+      const error = useOutlineStore.getState().loadError || useCharacterStore.getState().loadError || useCultivationStore.getState().loadError
+      if (error) throw new Error(error)
+      if (active) setRead({ identity: readIdentity, ready: true, error: null })
+    }).catch(error => {
+      if (active) setRead({ identity: readIdentity, ready: false, error: error instanceof Error ? error.message : String(error) })
+    })
+    return () => { active = false }
+  }, [loadChapters, loadCharacters, loadEvents, loadOutline, loadSystems, project.id, readIdentity, readRetry])
 
   useEffect(() => {
     if (!project.id) return
@@ -134,18 +153,18 @@ export default function CultivationProgressPanel({ project }: { project: Project
   [characters])
 
   useEffect(() => {
-    if (selectedChapterId == null && writtenChapters[0]?.id != null) {
+    if (readReady && selectedChapterId == null && writtenChapters[0]?.id != null) {
       setSelectedChapterId(writtenChapters[0].id)
     }
-  }, [selectedChapterId, writtenChapters])
+  }, [readReady, selectedChapterId, writtenChapters])
   useEffect(() => {
-    if (
+    if (readReady && (
       selectedCharacterId == null
       || !trackableCharacters.some(character => character.id === selectedCharacterId)
-    ) {
+    )) {
       setSelectedCharacterId(trackableCharacters[0]?.id ?? null)
     }
-  }, [selectedCharacterId, trackableCharacters])
+  }, [readReady, selectedCharacterId, trackableCharacters])
 
   const selectedCharacter = trackableCharacters.find(character => character.id === selectedCharacterId)
   const selectedSystem = systems.find(system => system.id === selectedCharacter?.cultivationSystemId)
@@ -298,6 +317,10 @@ export default function CultivationProgressPanel({ project }: { project: Project
     await deleteEvent(id)
     await loadEvents(project.id!)
   }
+
+  if (!readReady) return <section className="max-w-5xl p-4 text-sm">
+    {readError ? <><p role="alert">修炼进度读取失败：{readError}；原记录未更改。</p><button type="button" onClick={() => setReadRetry(value => value + 1)}>重新读取</button></> : <p role="status">正在读取修炼进度…</p>}
+  </section>
 
   return (
     <div className="max-w-5xl space-y-5">
