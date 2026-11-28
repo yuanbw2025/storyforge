@@ -564,6 +564,10 @@ export interface AdoptionExtensionSpec {
   id: string
   target: string
   entrypoints: string[]
+  /** An operation on non-Canon journal/draft storage; does not turn the
+   * entire structural table into a canonical AI write collection. Canonical
+   * FIELD_REGISTRY targets cannot use this boundary. */
+  nonCanonicalStorage?: true
   policyRegistry: string
   reason: string
   /** 到期后 CI 必须重新审查，而不是让例外永久沉积。ISO 日期。 */
@@ -1264,3 +1268,5 @@ export interface AssembleContextResult {
   overBudgetBeforeTrim: boolean
   overBudgetAfterTrim: boolean
 }
+
+export type { AdoptHistoryKeywordSuggestionsInputV1 } from '../history/keyword-suggestions'

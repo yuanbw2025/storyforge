@@ -1,3 +1,4 @@
+import { parseHistoryKeywordSuggestionRequestV1, parseHistoryKeywordSuggestionsSnapshotV1 } from '../../history/keyword-suggestions'
 import { parseHistoryEventCreationRequestV1 } from '../../history/event-creation-contract'
 import { parseHistoryEventCreationSnapshotV1 } from '../../history/event-creation-adoption'
 import { parseHistoryTextRequestV1, parseHistoryTextSnapshotV1 } from '../history-text-copilot'
@@ -395,6 +396,13 @@ function readOptionalHistoryEventRequest(value: Record<string, unknown>, agentId
   return parseHistoryEventCreationRequestV1(value.historyEventRequest)
 }
 
+function readOptionalHistoryKeywordSuggestionRequest(value: Record<string, unknown>, agentId: string, skillId: string, label: string) {
+  const present = Object.prototype.hasOwnProperty.call(value, 'historyKeywordSuggestionRequest')
+  if (!present) { if (skillId === 'world-origin.history-keyword-suggestions') fail(label + '.historyKeywordSuggestionRequest 缺失'); return undefined }
+  if (agentId !== 'world-origin' || skillId !== 'world-origin.history-keyword-suggestions') fail(label + '.historyKeywordSuggestionRequest 无效')
+  return parseHistoryKeywordSuggestionRequestV1(value.historyKeywordSuggestionRequest)
+}
+
 function readOptionalPowerAuthoringRequest(
   value: Record<string, unknown>,
   agentId: DomainAgentId,
@@ -503,7 +511,7 @@ function readRequiredSkillId(
   if (typeof value.skillId !== 'string') fail(label + '.skillId 无效')
   const skill = getAgentSkillV1(value.skillId, agentId)
   const allowedModes: Record<DomainAgentId, ReadonlySet<string>> = {
-    'world-origin': new Set(['worldview-field', 'story-core', 'creative-rules', 'power-authoring', 'history-text', 'history-events']),
+    'world-origin': new Set(['worldview-field', 'story-core', 'creative-rules', 'power-authoring', 'history-text', 'history-events', 'history-keyword-suggestions']),
     character: new Set(['create', 'supplement', 'lifecycle']),
     inspiration: new Set(['reverse']),
     outline: new Set(['auto', 'details', 'story-arcs', 'storyline-progress', 'character-driven', 'character-revision', 'volumes', 'chapters']),
@@ -527,6 +535,7 @@ function promptModuleForPlanTaskV1(
     const mode = /灵感反推模式=(single|multiworld)\b/.exec(instruction)?.[1]
     if (mode) return mode === 'multiworld' ? 'inspiration.reverse.multiworld' : 'inspiration.reverse'
   }
+  if (skill.executionMode === 'history-keyword-suggestions') return 'history.keyword-suggestions'
   if (skill.executionMode === 'history-events') return 'history.timeline'
   if (skill.executionMode === 'history-text') return historyTextRequest?.field === 'eraSystem' ? 'history.calendar' : 'history.overview'
   if (skill.executionMode === 'worldview-field') return 'worldview.dimension'
@@ -575,7 +584,7 @@ export function parseMasterAgentPlanV1(value: unknown): MasterAgentPlan {
     assertKeysWithOptional(
       item,
       ['id', 'agentId', 'skillId', 'instruction', 'dependsOn'],
-      ['perspectiveCharacterId', 'inspirationFragmentIds', 'characterDrivenPlanId', 'characterRevisionRequest', 'characterSupplementRequest', 'powerAuthoringRequest', 'historyTextRequest', 'historyEventRequest', 'characterLifecycleRequest', 'storylineProgressChapterId', 'storyArcMutationRequest', 'promptExecution', 'requestContext'],
+      ['perspectiveCharacterId', 'inspirationFragmentIds', 'characterDrivenPlanId', 'characterRevisionRequest', 'characterSupplementRequest', 'powerAuthoringRequest', 'historyTextRequest', 'historyEventRequest', 'historyKeywordSuggestionRequest', 'characterLifecycleRequest', 'storylineProgressChapterId', 'storyArcMutationRequest', 'promptExecution', 'requestContext'],
       '主 Agent 计划任务 ' + (index + 1),
     )
     const id = readString(item.id, `主 Agent 计划任务 ${index + 1}.id`, MAX_TASK_ID_CHARS)
@@ -619,6 +628,7 @@ export function parseMasterAgentPlanV1(value: unknown): MasterAgentPlan {
       skillId,
       '主 Agent 计划任务 ' + id,
     )
+    const historyKeywordSuggestionRequest = readOptionalHistoryKeywordSuggestionRequest(item, agentId, skillId, '主 Agent 计划任务 ' + id)
     const historyEventRequest = readOptionalHistoryEventRequest(item, agentId, skillId, '主 Agent 计划任务 ' + id)
     const historyTextRequest = readOptionalHistoryTextRequest(item, agentId, skillId, '主 Agent 计划任务 ' + id)
     const powerAuthoringRequest = readOptionalPowerAuthoringRequest(item, agentId, skillId, '主 Agent 计划任务 ' + id)
@@ -663,6 +673,7 @@ export function parseMasterAgentPlanV1(value: unknown): MasterAgentPlan {
       ...(inspirationFragmentIds !== undefined ? { inspirationFragmentIds } : {}),
       ...(characterDrivenPlanId !== undefined ? { characterDrivenPlanId } : {}),
       ...(characterRevisionRequest !== undefined ? { characterRevisionRequest } : {}),
+      ...(historyKeywordSuggestionRequest !== undefined ? { historyKeywordSuggestionRequest } : {}),
       ...(historyEventRequest !== undefined ? { historyEventRequest } : {}),
       ...(historyTextRequest !== undefined ? { historyTextRequest } : {}),
       ...(powerAuthoringRequest !== undefined ? { powerAuthoringRequest } : {}),
@@ -760,7 +771,10 @@ function semanticReviewTaskIdsForPlan(plan: MasterAgentPlan): string[] {
 
 function requiredContextGatewayWriteTargetForTaskV1(task: MasterAgentTask): string | undefined {
   const skill = resolveAgentSkillV1(task.agentId, task.skillId)
-  const specializedWriteTarget = skill.executionMode === 'history-events'
+  // The closed extension appends private author drafts; no canonical message field grant.
+  const specializedWriteTarget = skill.executionMode === 'history-keyword-suggestions'
+    ? 'agentEvents'
+    : skill.executionMode === 'history-events'
     ? 'historicalTimelineEvents.title'
     : skill.executionMode === 'history-text'
     ? `histories.${task.historyTextRequest!.field}`
@@ -980,6 +994,7 @@ function sameTaskIdentity(left: MasterAgentTask, right: MasterAgentTask): boolea
     && (left.characterDrivenPlanId ?? null) === (right.characterDrivenPlanId ?? null)
     && JSON.stringify(left.characterRevisionRequest ?? null)
       === JSON.stringify(right.characterRevisionRequest ?? null)
+    && JSON.stringify(left.historyKeywordSuggestionRequest ?? null) === JSON.stringify(right.historyKeywordSuggestionRequest ?? null)
     && JSON.stringify(left.historyEventRequest ?? null) === JSON.stringify(right.historyEventRequest ?? null)
     && JSON.stringify(left.historyTextRequest ?? null) === JSON.stringify(right.historyTextRequest ?? null)
     && JSON.stringify(left.powerAuthoringRequest ?? null) === JSON.stringify(right.powerAuthoringRequest ?? null)
@@ -1252,7 +1267,7 @@ export async function replanDurableMasterAgentRunV1(
         resumePayload: {
           version: 1,
           kind: MASTER_AGENT_PLAN_CHECKPOINT_KIND_V1,
-          ...(nextPlan.tasks.some(task => ['world-origin.power-authoring', 'world-origin.history-text', 'world-origin.history-events'].includes(task.skillId)) ? { portable: false as const } : {}),
+          ...(nextPlan.tasks.some(task => ['world-origin.power-authoring', 'world-origin.history-text', 'world-origin.history-events', 'world-origin.history-keyword-suggestions'].includes(task.skillId)) ? { portable: false as const } : {}),
           plan: nextPlan,
           planHash: nextPlanHash,
           budgetEvidence: parsedBudget,
@@ -1462,6 +1477,11 @@ function parseCandidatePayload(value: unknown, label: string): MasterCandidatePa
       fail(`${label} characterRevisionRequest 无效：${error instanceof Error ? error.message : String(error)}`)
     }
   }
+  if (payload.historyKeywordSuggestionRequest !== undefined) {
+    payload.historyKeywordSuggestionRequest = parseHistoryKeywordSuggestionRequestV1(payload.historyKeywordSuggestionRequest)
+    const snapshot = parseHistoryKeywordSuggestionsSnapshotV1(payload.baseSnapshot)
+    if (JSON.stringify(snapshot.request) !== JSON.stringify(payload.historyKeywordSuggestionRequest)) fail(`${label}关键词建议快照与固定请求不匹配`)
+  }
   if (payload.historyEventRequest !== undefined) {
     payload.historyEventRequest = parseHistoryEventCreationRequestV1(payload.historyEventRequest)
     const history = parseHistoryEventCreationSnapshotV1(payload.baseSnapshot)
@@ -1574,6 +1594,7 @@ function assertCandidateMatchesTaskSkill(
     taskSkill.executionMode !== 'character-revision'
     && payload.characterRevisionRequest !== undefined
   ) fail(`${label} 不得携带角色变更请求`)
+  if (taskSkill.executionMode === 'history-keyword-suggestions' ? JSON.stringify(payload.historyKeywordSuggestionRequest ?? null) !== JSON.stringify(task.historyKeywordSuggestionRequest ?? null) : payload.historyKeywordSuggestionRequest !== undefined) fail(`${label}关键词建议请求与 Skill 不匹配`)
   if (taskSkill.executionMode === 'history-events' ? JSON.stringify(payload.historyEventRequest ?? null) !== JSON.stringify(task.historyEventRequest ?? null) : payload.historyEventRequest !== undefined) fail(`${label}事件请求与 Skill 不匹配`)
   if (taskSkill.executionMode === 'history-text' ? JSON.stringify(payload.historyTextRequest ?? null) !== JSON.stringify(task.historyTextRequest ?? null) : payload.historyTextRequest !== undefined) fail(`${label}历史请求与 Skill 不匹配`)
   if (taskSkill.executionMode === 'power-authoring' ? JSON.stringify(payload.powerAuthoringRequest ?? null) !== JSON.stringify(task.powerAuthoringRequest ?? null) : payload.powerAuthoringRequest !== undefined) fail(`${label}力量请求与 Skill 不匹配`)
@@ -2016,7 +2037,7 @@ export async function runDurableMasterAgentPlanV1(
     const checkpointPayload: MasterAgentPlanCheckpointV1 = {
       version: 1,
       kind: MASTER_AGENT_PLAN_CHECKPOINT_KIND_V1,
-      ...(plan.tasks.some(task => ['world-origin.power-authoring', 'world-origin.history-text', 'world-origin.history-events'].includes(task.skillId)) ? { portable: false as const } : {}),
+      ...(plan.tasks.some(task => ['world-origin.power-authoring', 'world-origin.history-text', 'world-origin.history-events', 'world-origin.history-keyword-suggestions'].includes(task.skillId)) ? { portable: false as const } : {}),
       plan,
       planHash: await hashMasterAgentPlanV1(plan),
       budgetEvidence: evidence,
@@ -3061,7 +3082,7 @@ export async function runDurableMasterAgentPlanV1(
           resumePayload: {
             version: 1,
             kind: MASTER_AGENT_PLAN_CHECKPOINT_KIND_V1,
-            ...(plan.tasks.some(task => ['world-origin.power-authoring', 'world-origin.history-text', 'world-origin.history-events'].includes(task.skillId)) ? { portable: false as const } : {}),
+            ...(plan.tasks.some(task => ['world-origin.power-authoring', 'world-origin.history-text', 'world-origin.history-events', 'world-origin.history-keyword-suggestions'].includes(task.skillId)) ? { portable: false as const } : {}),
             plan,
             planHash: await hashMasterAgentPlanV1(plan),
             budgetEvidence: budget.snapshot(),
@@ -3107,7 +3128,7 @@ export async function runDurableMasterAgentPlanV1(
               resumePayload: {
                 version: 1,
                 kind: MASTER_AGENT_PLAN_CHECKPOINT_KIND_V1,
-                ...(plan.tasks.some(task => ['world-origin.power-authoring', 'world-origin.history-text', 'world-origin.history-events'].includes(task.skillId)) ? { portable: false as const } : {}),
+                ...(plan.tasks.some(task => ['world-origin.power-authoring', 'world-origin.history-text', 'world-origin.history-events', 'world-origin.history-keyword-suggestions'].includes(task.skillId)) ? { portable: false as const } : {}),
                 plan,
                 planHash: await hashMasterAgentPlanV1(plan),
                 budgetEvidence: budget.snapshot(),

@@ -1092,6 +1092,9 @@ const NARRATIVE_ADOPTION_REVIEW_AFTER = '2027-01-01'
 /** One domain extension per target; current narrative fields are derived from
  * PROJECT_TABLES, while existing lifecycle entrypoints retain their policies. */
 export const ADOPTION_EXTENSIONS: readonly AdoptionExtensionSpec[] = Object.freeze([
+  { id: 'history-keyword-suggestions-v1', target: 'agentEvents', entrypoints: ['src/lib/history/keyword-suggestions.ts'], nonCanonicalStorage: true,
+    policyRegistry: 'HistoryKeywordSuggestionsSnapshotV1 + original author-draft message CAS + original Master confirmation and atomic receipt',
+    reason: 'Only append author-confirmed selected suggestions to an independent Work-owned draft state. No generic message edits, official historicalKeywords, fabricated author intent or Canon writes.', reviewAfter: '2027-02-28' },
   ...ADOPTION_EXTENSION_REGISTRATIONS.map(extension => {
     if (!REGISTRY_BY_NAME.get(extension.target)?.worldSemantic?.projector) return extension
     return { ...extension,

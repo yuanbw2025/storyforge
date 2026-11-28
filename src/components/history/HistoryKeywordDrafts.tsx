@@ -1,3 +1,4 @@
+import HistoryKeywordSuggestions from './HistoryKeywordSuggestions'
 import { useEffect, useRef, useState } from 'react'
 import type { HistoricalKeyword, Project } from '../../lib/types'
 import { HISTORICAL_ERA_LABELS, KEYWORD_CATEGORY_LABELS } from '../../lib/types/history'
@@ -26,7 +27,8 @@ export default function HistoryKeywordDrafts({ project, worldGroupId, keywords, 
     const result = await readHistoryKeywordDraftsV1(origin)
     if (!mounted.current || request !== loadSequence.current) return
     saved.current = result; update(result.value)
-    setActiveId(result.value.drafts.find(row => !row.deleted)?.draftId ?? null)
+    setActiveId(previous => result.value.drafts.some(row => row.draftId === previous && !row.deleted) ? previous : result.value.drafts.find(row => !row.deleted)?.draftId ?? null)
+    return result
   }
   useEffect(() => {
     mounted.current = true
@@ -57,6 +59,19 @@ export default function HistoryKeywordDrafts({ project, worldGroupId, keywords, 
     try { await action() } catch (cause) { if (mounted.current) setError(cause instanceof Error ? cause.message : String(cause)) }
     finally { if (mounted.current) setBusy(false) }
   }
+  const transferSuggestions = async (action: () => Promise<boolean | undefined>): Promise<boolean> => {
+    if (busy) return false
+    setBusy(true); setError('')
+    try {
+      const previousIds = new Set(current.current?.drafts.map(row => row.draftId))
+      await flushPendingEditsV1(); if (!await action()) return false
+      const loaded = await load(), added = loaded?.value.drafts.find(row => !previousIds.has(row.draftId) && !row.deleted)
+      if (added) setActiveId(added.draftId)
+      return true
+    }
+    catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); return false }
+    finally { if (mounted.current) setBusy(false) }
+  }
   const close = () => { void guarded(async () => { await flushPendingEditsV1(); onClose() }) }
   const draft = value?.drafts.find(row => row.draftId === activeId)
   const formal = draft ? keywords.find(row => Reflect.get(row, 'ragDocumentId') === draft.draftId) : undefined
@@ -70,6 +85,7 @@ export default function HistoryKeywordDrafts({ project, worldGroupId, keywords, 
       if (await dialog.confirm({ title: '重新读取已存草稿？', message: '这会放弃此页尚未保存的修改，保留本机已经保存的版本。', confirmText: '放弃本页修改并重读', tone: 'danger' })) { if (writing.current) await writing.current.catch(() => undefined); await load() }
     }) }}>重新读取已存版本</button></div>}
     {!value ? <p role="status">正在读取草稿…</p> : <div onCompositionStartCapture={() => { composing.current = true }} onCompositionEndCapture={() => { composing.current = false }}>
+      <HistoryKeywordSuggestions project={project} worldGroupId={worldGroupId} disabled={busy} transfer={transferSuggestions}/>
       <div className="mb-3 flex flex-wrap gap-3 text-xs"><button disabled={busy} onClick={() => { if (composing.current) { setError('请先完成当前中文输入，再添加草稿。'); return } const next = createHistoryKeywordDraftV1(); update({ ...value, drafts: [...value.drafts, next] }); choose(next.draftId) }} className="text-accent">添加关键词草稿</button><button disabled={busy} onClick={() => update({ ...value, drafts: value.drafts.map(row => ({ ...row, selected: false })) })}>取消本次全部选择</button></div>
       <div className="grid min-w-0 gap-3 md:grid-cols-[220px_minmax(0,1fr)]">
         <div className="space-y-2">{value.drafts.filter(row => !row.deleted).map((row, index) => <div key={row.draftId} className="flex items-center gap-2">

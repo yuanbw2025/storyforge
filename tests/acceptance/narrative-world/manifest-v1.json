@@ -21,9 +21,44 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261128-history061-events-v1.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261128-issue833-main830-guard-v1.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261128-history061-keyword-draft-extension-v1.json",
+        "sha256": "123168d0aa694c9941c502e25281566d17812075683718fae5aedee2a5e2c074",
+        "note": "Preserve the actual main830 keyword-draft extension receipt before measuring its later architecture-guard input. All deterministic observations/issues/known gaps must remain unchanged; no gold, timeout, quota or model/human acceptance change."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/domain-projection-20261128-history061-keyword-suggestions-v1.json",
+        "sha256": "d89b092f23e1e594da02c31c328953133313c74f73cb86a720f68b9b69969183",
+        "note": "Preserve measured pre-review receipt. Final recommendation uses a closed non-Canon author-draft extension, never a canonical agentEvents.content field grant. Deterministic outcomes and known gaps must remain unchanged."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/ir-contract-20261128-history061-keyword-suggestions-v1.json",
+        "sha256": "fd4bb09a0dac3ce02ca4ad8758f65e621ef381beb4c48104650d800361e72c7e",
+        "note": "Preserve measured pre-review receipt. Final recommendation uses a closed non-Canon author-draft extension, never a canonical agentEvents.content field grant. Deterministic outcomes and known gaps must remain unchanged."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261128-history061-keyword-suggestions-v1.json",
+        "sha256": "b2c2c0e84ac1482b77dd6b9ba5c50af7abc4a915045e8bfc44365c83778bd3cf",
+        "note": "Preserve measured pre-review receipt. Final recommendation uses a closed non-Canon author-draft extension, never a canonical agentEvents.content field grant. Deterministic outcomes and known gaps must remain unchanged."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/domain-projection-20261128-history061-events-v1.json",
+        "sha256": "005cda6791fc24f94904843c58072193d1d3806994cbdfe458a2490491864dd3",
+        "note": "Preserve measured receipt before history061 selected keyword suggestions are transferred only to Work-owned author drafts. Compare deterministic outcomes and known gaps unchanged; no model, release or human acceptance inferred."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/ir-contract-20261128-history061-events-v1.json",
+        "sha256": "92071468a92104d1bd8a3e7af68c936c9d7313297e6184c7c4e6ca23a9587b66",
+        "note": "Preserve measured receipt before history061 selected keyword suggestions are transferred only to Work-owned author drafts. Compare deterministic outcomes and known gaps unchanged; no model, release or human acceptance inferred."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261128-history061-events-v1.json",
+        "sha256": "7a8a7409d0e7a08ff1990b41ce2e6ef54386fb7bf8de40356b1e72c58aab27bb",
+        "note": "Preserve measured receipt before history061 selected keyword suggestions are transferred only to Work-owned author drafts. Compare deterministic outcomes and known gaps unchanged; no model, release or human acceptance inferred."
+      },
       {
         "path": "tests/acceptance/narrative-world/ir-contract-20261128-history061-text-v1.json",
         "sha256": "473b122e8b8b4aa504007bd43609a8db150bfb273411d7025e4bfa5ed7a0e288",

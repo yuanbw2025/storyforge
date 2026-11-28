@@ -1,3 +1,6 @@
+import { assertHistoryKeywordSuggestionsReadyV1, adoptRestoredHistoryKeywordSuggestionsCandidateV1, historyKeywordSuggestionsCandidateMatchesDraftsV1 } from '../history-keyword-suggestions-copilot'
+import { historyKeywordDraftTransactionTablesV1 } from '../../history/keyword-drafts'
+import type { HistoryKeywordSuggestionsSnapshotV1 } from '../../history/keyword-suggestions'
 import { adoptRestoredHistoryEventsCandidateV1, assertHistoryEventCandidateReadyV1, historyEventsCandidateMatchesBusinessV1 } from '../history-events-copilot'
 import { historyEventCreationTransactionTablesV1, type HistoryEventCreationSnapshotV1 } from '../../history/event-creation-adoption'
 import { adoptRestoredHistoryTextCandidateV1, assertHistoryTextCandidateReadyV1, historyTextCandidateMatchesBusinessV1, type HistoryTextSnapshotV1 } from '../history-text-copilot'
@@ -213,6 +216,7 @@ export async function beginMasterAgentCandidateAdoptionV1(
   input: MasterAgentCandidateAdoptionRefV1,
 ): Promise<ResolvedMasterCandidateV1> {
   const resolved = await resolveCandidate(input)
+  if (resolved.candidate.payload.skillId === 'world-origin.history-keyword-suggestions') await assertHistoryKeywordSuggestionsReadyV1({ scope: input.scope, worldGroupId: resolved.snapshot.run.worldGroupId ?? null, snapshot: resolved.candidate.payload.baseSnapshot as HistoryKeywordSuggestionsSnapshotV1, draft: resolved.candidate.draft })
   if (resolved.candidate.payload.skillId === 'world-origin.history-events') await assertHistoryEventCandidateReadyV1({ scope: input.scope, worldGroupId: resolved.snapshot.run.worldGroupId ?? null, snapshot: resolved.candidate.payload.baseSnapshot as HistoryEventCreationSnapshotV1, draft: resolved.candidate.draft })
   if (resolved.candidate.payload.skillId === 'world-origin.history-text') await assertHistoryTextCandidateReadyV1({ scope: input.scope, worldGroupId: resolved.snapshot.run.worldGroupId ?? null, snapshot: resolved.candidate.payload.baseSnapshot as HistoryTextSnapshotV1, draft: resolved.candidate.draft })
   if (resolved.candidate.payload.skillId === 'world-origin.power-authoring') await assertPowerAuthoringCandidateReadyV1({ scope: input.scope, worldGroupId: resolved.snapshot.run.worldGroupId ?? null, snapshot: resolved.candidate.payload.baseSnapshot as PowerAuthoringCopilotSnapshotV1, draft: resolved.candidate.draft })
@@ -315,7 +319,7 @@ export async function beginMasterAgentCandidateAdoptionV1(
 }
 
 async function staleClosedFieldCandidateAfterSourceChangeV1(input: MasterAgentCandidateAdoptionRefV1, resolved: ResolvedMasterCandidateV1): Promise<void> {
-  if (!['world-origin.power-authoring', 'world-origin.history-text', 'world-origin.history-events'].includes(resolved.candidate.payload.skillId!)) return
+  if (!['world-origin.power-authoring', 'world-origin.history-text', 'world-origin.history-events', 'world-origin.history-keyword-suggestions'].includes(resolved.candidate.payload.skillId!)) return
   const current = await readAgentRunV1(input.scope, input.runId), step = current.projection.steps[resolved.stepId]
   if (!step?.candidateHash || !['awaiting_confirmation', 'running'].includes(step.status) || step.candidateHash !== resolved.candidate.payload.candidateHash) return
   await appendAgentRunEventV1({ scope: input.scope, runId: input.runId, type: 'candidate.staled',
@@ -349,6 +353,7 @@ export async function commitMasterAgentCandidateAdoptionV1(
   // Confirmation and the business write are separate crash-recovery boundaries;
   // re-check freshness immediately before the only Canon mutation.
   try {
+    if (resolved.candidate.payload.skillId === 'world-origin.history-keyword-suggestions') await assertHistoryKeywordSuggestionsReadyV1({ scope: input.scope, worldGroupId: resolved.snapshot.run.worldGroupId ?? null, snapshot: resolved.candidate.payload.baseSnapshot as HistoryKeywordSuggestionsSnapshotV1, draft: resolved.candidate.draft })
     if (resolved.candidate.payload.skillId === 'world-origin.history-events') await assertHistoryEventCandidateReadyV1({ scope: input.scope, worldGroupId: resolved.snapshot.run.worldGroupId ?? null, snapshot: resolved.candidate.payload.baseSnapshot as HistoryEventCreationSnapshotV1, draft: resolved.candidate.draft })
   if (resolved.candidate.payload.skillId === 'world-origin.history-text') await assertHistoryTextCandidateReadyV1({ scope: input.scope, worldGroupId: resolved.snapshot.run.worldGroupId ?? null, snapshot: resolved.candidate.payload.baseSnapshot as HistoryTextSnapshotV1, draft: resolved.candidate.draft })
     if (resolved.candidate.payload.skillId === 'world-origin.power-authoring') await assertPowerAuthoringCandidateReadyV1({ scope: input.scope, worldGroupId: resolved.snapshot.run.worldGroupId ?? null, snapshot: resolved.candidate.payload.baseSnapshot as PowerAuthoringCopilotSnapshotV1, draft: resolved.candidate.draft })
@@ -382,17 +387,18 @@ export async function commitMasterAgentCandidateAdoptionV1(
   let message: string
   let adoptionHash: string
   let snapshot: AgentRunSnapshotV1
-  if (['world-origin.power-authoring', 'world-origin.history-text', 'world-origin.history-events'].includes(resolved.candidate.payload.skillId!)) {
+  if (['world-origin.power-authoring', 'world-origin.history-text', 'world-origin.history-events', 'world-origin.history-keyword-suggestions'].includes(resolved.candidate.payload.skillId!)) {
+    const isSuggestions = resolved.candidate.payload.skillId === 'world-origin.history-keyword-suggestions'
     const isEvents = resolved.candidate.payload.skillId === 'world-origin.history-events'
     const isHistory = isEvents || resolved.candidate.payload.skillId === 'world-origin.history-text'
     const history = resolved.candidate.payload.baseSnapshot as HistoryTextSnapshotV1
     const power = resolved.candidate.payload.baseSnapshot as PowerAuthoringCopilotSnapshotV1
-    message = `${isHistory ? '历史' : '力量'}设定“${resolved.candidate.payload.label}”已按本次目标写入。`
+    message = isSuggestions ? '所选关键词建议已转入独立草稿，尚未成为正式设定。' : `${isHistory ? '历史' : '力量'}设定“${resolved.candidate.payload.label}”已按本次目标写入。`
     adoptionHash = await hashCanonicalValue({ version: 1, candidateHash: resolved.candidate.payload.candidateHash,
       evidence: { agentId: 'world-origin', candidateEventId: input.candidateEventId, message } })
     snapshot = await readAgentRunV1(input.scope, input.runId)
     const original = snapshot
-    await db.transaction('rw', [...(isEvents ? historyEventCreationTransactionTablesV1() : isHistory ? [...worldHistoryAdoptionTransactionTablesV1(), db.works] : powerAuthoringTransactionTablesV1(power.request.target.table)), db.agentRuns, db.agentRunEvents, db.agentEvents], () => {
+    await db.transaction('rw', [...(isSuggestions ? historyKeywordDraftTransactionTablesV1() : isEvents ? historyEventCreationTransactionTablesV1() : isHistory ? [...worldHistoryAdoptionTransactionTablesV1(), db.works] : powerAuthoringTransactionTablesV1(power.request.target.table)), db.agentRuns, db.agentRunEvents, db.agentEvents], () => {
       const transaction = Dexie.currentTransaction!
       // The domain adopter deliberately awaits native crypto. Anchor each
       // continuation in this original Dexie zone, so Run events cannot escape
@@ -403,7 +409,7 @@ export async function commitMasterAgentCandidateAdoptionV1(
         if (current?.lastSequence !== original.projection.lastSequence || current.projectionHash !== original.run.projectionHash
           || event?.content !== resolved.candidate.draft || event.payload !== resolved.candidate.event.payload) throw new Error('原采纳请求或候选已变化。')
         maybeInjectHarnessFaultV1('adoption.before-write')
-        return Dexie.Promise.resolve(isEvents ? adoptRestoredHistoryEventsCandidateV1({ scope: input.scope, worldGroupId: resolved.snapshot.run.worldGroupId ?? null, snapshot: resolved.candidate.payload.baseSnapshot as HistoryEventCreationSnapshotV1, draft: resolved.candidate.draft, owner: { transaction } }) : isHistory ? adoptRestoredHistoryTextCandidateV1({ scope: input.scope, worldGroupId: resolved.snapshot.run.worldGroupId ?? null, snapshot: history, draft: resolved.candidate.draft, owner: { transaction } }) : adoptRestoredPowerAuthoringCandidateV1({ scope: input.scope, worldGroupId: resolved.snapshot.run.worldGroupId ?? null,
+        return Dexie.Promise.resolve(isSuggestions ? adoptRestoredHistoryKeywordSuggestionsCandidateV1({ scope: input.scope, worldGroupId: resolved.snapshot.run.worldGroupId ?? null, snapshot: resolved.candidate.payload.baseSnapshot as HistoryKeywordSuggestionsSnapshotV1, draft: resolved.candidate.draft, owner: { transaction } }) : isEvents ? adoptRestoredHistoryEventsCandidateV1({ scope: input.scope, worldGroupId: resolved.snapshot.run.worldGroupId ?? null, snapshot: resolved.candidate.payload.baseSnapshot as HistoryEventCreationSnapshotV1, draft: resolved.candidate.draft, owner: { transaction } }) : isHistory ? adoptRestoredHistoryTextCandidateV1({ scope: input.scope, worldGroupId: resolved.snapshot.run.worldGroupId ?? null, snapshot: history, draft: resolved.candidate.draft, owner: { transaction } }) : adoptRestoredPowerAuthoringCandidateV1({ scope: input.scope, worldGroupId: resolved.snapshot.run.worldGroupId ?? null,
           snapshot: power, draft: resolved.candidate.draft, owner: { transaction } }))
       }).then(() => dependencies.afterBusinessAdoption ? Dexie.waitFor(dependencies.afterBusinessAdoption()) : undefined).then(() => {
         maybeInjectHarnessFaultV1('adoption.after-write')
@@ -419,7 +425,7 @@ export async function commitMasterAgentCandidateAdoptionV1(
         }).then(succeeded => { snapshot = succeeded })
       })
     }).catch(async error => {
-      if (error instanceof Error && (error.message.includes('[PowerAuthoring] 原记录或引用已变化') || error.message.includes('[HistoryText] 原历史内容已变化') || error.message.includes('[HistoryEvents]'))) await staleClosedFieldCandidateAfterSourceChangeV1(input, resolved)
+      if (error instanceof Error && (error.message.includes('[PowerAuthoring] 原记录或引用已变化') || error.message.includes('[HistoryText] 原历史内容已变化') || error.message.includes('[HistoryEvents]') || error.message.includes('[HistoryKeywordSuggestions]'))) await staleClosedFieldCandidateAfterSourceChangeV1(input, resolved)
       throw error
     })
   } else {
@@ -584,6 +590,7 @@ async function businessAlreadyMatches(
 ): Promise<boolean> {
   const agentId = candidate.payload.agentId
   if (agentId === 'world-origin') {
+    if (candidate.payload.skillId === 'world-origin.history-keyword-suggestions') return historyKeywordSuggestionsCandidateMatchesDraftsV1({ scope: input.scope, worldGroupId: input.worldGroupId ?? null, snapshot: candidate.payload.baseSnapshot as HistoryKeywordSuggestionsSnapshotV1, draft: candidate.draft })
     if (candidate.payload.skillId === 'world-origin.history-events') return historyEventsCandidateMatchesBusinessV1({ scope: input.scope, worldGroupId: input.worldGroupId ?? null, snapshot: candidate.payload.baseSnapshot as HistoryEventCreationSnapshotV1, draft: candidate.draft })
     if (candidate.payload.skillId === 'world-origin.history-text') return historyTextCandidateMatchesBusinessV1({ scope: input.scope, worldGroupId: input.worldGroupId ?? null, snapshot: candidate.payload.baseSnapshot as HistoryTextSnapshotV1, draft: candidate.draft })
     if (candidate.payload.skillId === 'world-origin.power-authoring') return powerAuthoringCandidateMatchesBusinessV1({ scope: input.scope, worldGroupId: input.worldGroupId ?? null, snapshot: candidate.payload.baseSnapshot as PowerAuthoringCopilotSnapshotV1, draft: candidate.draft })
