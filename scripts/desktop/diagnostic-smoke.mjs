@@ -1,10 +1,11 @@
-/* global window */
+/* global window, console, process, setTimeout, clearTimeout */
 import assert from 'node:assert/strict'
-import { readFile } from 'node:fs/promises'
+import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { expect } from '@playwright/test'
 import { buildDiagnosticOptOutFixture } from './diagnostic-fixture.mjs'
 import { preserveDiagnosticSmokeEvidence } from './diagnostic-smoke-evidence.mjs'
+import { beginDiagnosticWriteProbe } from './diagnostic-write-probe.mjs'
 /** Synthetic profile only. Exercise the real renderer-crash event and IPC, then recover.
  * @param {import('@playwright/test').ElectronApplication} app
  * @param {import('@playwright/test').Page} page
@@ -14,19 +15,20 @@ export async function verifyDiagnosticContext(app, page, launch) {
   await page.getByRole('region', { name: '问题与故障反馈' }).waitFor()
   assert.equal(await page.getByLabel('附带最近操作轨迹（可选，默认关闭）').count(), 0)
   assert.equal(await page.evaluate(() => window.localStorage.getItem('storyforge-diagnostic-context-v1')), null)
-  // Use the installed operation collector: a direct IPC fixture can be replaced
-  // by a later real UI update. Button content must never enter the stored trail.
-  await page.evaluate(() => {
-    const button = window.document.createElement('button')
-    button.id = 'native-diagnostic-save-probe'
-    button.setAttribute('data-diagnostic-action', 'save')
-    button.textContent = 'PRIVATE-SYNTHETIC'
-    button.addEventListener('click', () => button.setAttribute('data-smoke-clicked', 'true'), { once: true })
-    window.document.body.append(button)
-  })
-  await page.locator('#native-diagnostic-save-probe').click()
   const directory = await app.evaluate(({app}) => app.getPath('userData'))
+  const writeProbe = await beginDiagnosticWriteProbe(app, directory)
   try {
+    // Use the installed operation collector: a direct IPC fixture can be replaced
+    // by a later real UI update. Button content must never enter the stored trail.
+    await page.evaluate(() => {
+      const button = window.document.createElement('button')
+      button.id = 'native-diagnostic-save-probe'
+      button.setAttribute('data-diagnostic-action', 'save')
+      button.textContent = 'PRIVATE-SYNTHETIC'
+      button.addEventListener('click', () => button.setAttribute('data-smoke-clicked', 'true'), { once: true })
+      window.document.body.append(button)
+    })
+    await page.locator('#native-diagnostic-save-probe').click()
     await expect.poll(async () => {
       const state = JSON.parse(await readFile(join(directory, 'native-diagnostics.json'), 'utf8'))
       assert.equal(JSON.stringify(state).includes('PRIVATE-SYNTHETIC'), false)
@@ -37,6 +39,12 @@ export async function verifyDiagnosticContext(app, page, launch) {
   } catch (error) {
     await preserveDiagnosticSmokeEvidence(app, page, directory).catch(() => console.warn('Synthetic diagnostic evidence unavailable'))
     throw error
+  } finally {
+    const receipt = await writeProbe.evaluate(probe => probe.finish()).finally(() => writeProbe.dispose())
+    const output = join('release', 'native-smoke', process.platform)
+    await mkdir(output, { recursive: true })
+    await writeFile(join(output, 'diagnostic-write-receipt.json'), JSON.stringify(receipt, null, 2), { mode: 0o600 })
+    console.log('Synthetic native diagnostic write receipt:', JSON.stringify(receipt))
   }
   // Await the handle so the main-process listener is installed before the CDP
   // command can crash the renderer. The event may arrive before we read result.
