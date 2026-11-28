@@ -19,6 +19,7 @@ export interface HistoryKeywordDraftV1 {
   location: string
   description: string
   conceptNote: string
+  aiBrainstorm?: string
   selected: boolean
   deleted: boolean
 }
@@ -27,17 +28,18 @@ export interface HistoryKeywordDraftScopeV1 { scope: WorkspaceScope; worldGroupI
 export interface HistoryKeywordDraftReadV1 { revision: number | null; value: HistoryKeywordDraftSetV1 }
 
 export function createHistoryKeywordDraftV1(keyword = ''): HistoryKeywordDraftV1 {
-  return { draftId: createPortableResourceUidV1(resourceKind()), keyword, category: 'technology', era: 'custom', customTimeRange: '', location: '', description: '', conceptNote: '', selected: false, deleted: false }
+  return { draftId: createPortableResourceUidV1(resourceKind()), keyword, category: 'technology', era: 'custom', customTimeRange: '', location: '', description: '', conceptNote: '', aiBrainstorm: '', selected: false, deleted: false }
 }
 export function copyHistoryKeywordDraftSetV1(value: unknown): HistoryKeywordDraftSetV1 {
   const root = historyAuthorRecordV1(value, ['version', 'drafts'], '关键词草稿集')
   if (root.version !== 1 || !Array.isArray(root.drafts)) throw new Error('关键词草稿集版本无效。')
   const seen = new Set<string>()
   const drafts = root.drafts.map(value => {
-    const row = historyAuthorRecordV1(value, ['draftId', 'keyword', 'category', 'era', 'customTimeRange', 'location', 'description', 'conceptNote', 'selected', 'deleted'], '关键词草稿')
+    const row = historyAuthorRecordV1(value, ['draftId', 'keyword', 'category', 'era', 'customTimeRange', 'location', 'description', 'conceptNote', 'aiBrainstorm', 'selected', 'deleted'], '关键词草稿')
     if (!isPortableResourceUidV1(row.draftId, resourceKind()) || seen.has(row.draftId) || row.draftId !== row.draftId.trim()) throw new Error('关键词草稿身份无效或重复。')
     if (typeof row.category !== 'string' || !Object.prototype.hasOwnProperty.call(KEYWORD_CATEGORY_LABELS, row.category)) throw new Error('关键词草稿分类无效。')
     if (['keyword', 'era', 'customTimeRange', 'location', 'description', 'conceptNote'].some(key => typeof row[key] !== 'string')
+      || row.aiBrainstorm !== undefined && typeof row.aiBrainstorm !== 'string'
       || typeof row.selected !== 'boolean' || typeof row.deleted !== 'boolean' || row.deleted && row.selected) throw new Error('关键词草稿文字或选择状态无效。')
     seen.add(row.draftId)
     return { ...row } as unknown as HistoryKeywordDraftV1

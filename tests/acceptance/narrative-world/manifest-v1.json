@@ -21,13 +21,33 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261128-issue833-main830-guard-v1.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261128-history061-keyword-content-main832-v1.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
       {
+        "path": "tests/acceptance/narrative-world/baseline-20261128-history061-keyword-content-v1.json",
+        "sha256": "a35268c9ca7a5ab42d85c0a7eb8914be1427e041d4db0d3d26264fc4d9aa1f08",
+        "note": "Preserve measured PR835 keyword content receipt before integrating main832 checkpoint/build changes."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261128-issue833-main830-guard-v1.json",
+        "sha256": "2e04d30b52aff842d03b39d1f9e47fd9c484588a46763db6c3b44eaaeef83e8a",
+        "note": "Preserve main832 measured guard receipt while integrating independent keyword-content fixes."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/domain-projection-20261128-history061-keyword-draft-extension-v1.json",
+        "sha256": "64b14d26955cea39b14d442f0562c2eb9d2ee32800ae05ae03afdf66afb2487d",
+        "note": "Preserve delivered PR830 private-draft extension receipt before keyword-content selected-field integration. Compare deterministic outcomes and known gaps unchanged; no model, release or human acceptance inferred."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/ir-contract-20261128-history061-keyword-draft-extension-v1.json",
+        "sha256": "650b285e64f4ba0c4802e72762e3b5659e3b3cbe7b72a4499be3b1d31e8e879a",
+        "note": "Preserve delivered PR830 private-draft extension receipt before keyword-content selected-field integration. Compare deterministic outcomes and known gaps unchanged; no model, release or human acceptance inferred."
+      },
+      {
         "path": "tests/acceptance/narrative-world/baseline-20261128-history061-keyword-draft-extension-v1.json",
         "sha256": "123168d0aa694c9941c502e25281566d17812075683718fae5aedee2a5e2c074",
-        "note": "Preserve the actual main830 keyword-draft extension receipt before measuring its later architecture-guard input. All deterministic observations/issues/known gaps must remain unchanged; no gold, timeout, quota or model/human acceptance change."
+        "note": "Preserve delivered PR830 private-draft extension receipt before keyword-content selected-field integration. Compare deterministic outcomes and known gaps unchanged; no model, release or human acceptance inferred."
       },
       {
         "path": "tests/acceptance/narrative-world/domain-projection-20261128-history061-keyword-suggestions-v1.json",

@@ -1,3 +1,4 @@
+import HistoryKeywordContent from './HistoryKeywordContent'
 import HistoryKeywordSuggestions from './HistoryKeywordSuggestions'
 import { useEffect, useRef, useState } from 'react'
 import type { HistoricalKeyword, Project } from '../../lib/types'
@@ -86,6 +87,7 @@ export default function HistoryKeywordDrafts({ project, worldGroupId, keywords, 
     }) }}>重新读取已存版本</button></div>}
     {!value ? <p role="status">正在读取草稿…</p> : <div onCompositionStartCapture={() => { composing.current = true }} onCompositionEndCapture={() => { composing.current = false }}>
       <HistoryKeywordSuggestions project={project} worldGroupId={worldGroupId} disabled={busy} transfer={transferSuggestions}/>
+      <HistoryKeywordContent project={project} worldGroupId={worldGroupId} value={value} activeId={activeId} formalIds={keywords.map(row => String(Reflect.get(row, 'ragDocumentId') ?? ''))} disabled={busy} transfer={transferSuggestions}/>
       <div className="mb-3 flex flex-wrap gap-3 text-xs"><button disabled={busy} onClick={() => { if (composing.current) { setError('请先完成当前中文输入，再添加草稿。'); return } const next = createHistoryKeywordDraftV1(); update({ ...value, drafts: [...value.drafts, next] }); choose(next.draftId) }} className="text-accent">添加关键词草稿</button><button disabled={busy} onClick={() => update({ ...value, drafts: value.drafts.map(row => ({ ...row, selected: false })) })}>取消本次全部选择</button></div>
       <div className="grid min-w-0 gap-3 md:grid-cols-[220px_minmax(0,1fr)]">
         <div className="space-y-2">{value.drafts.filter(row => !row.deleted).map((row, index) => <div key={row.draftId} className="flex items-center gap-2">
@@ -99,6 +101,7 @@ export default function HistoryKeywordDrafts({ project, worldGroupId, keywords, 
           <div className="grid gap-2 sm:grid-cols-2"><label className="text-xs">时间范围<CInput aria-label="草稿时间范围" value={draft.customTimeRange} onChange={event => edit({ customTimeRange: event.target.value })} className="mt-1 w-full"/></label><label className="text-xs">地点<CInput aria-label="草稿地点" value={draft.location} onChange={event => edit({ location: event.target.value })} className="mt-1 w-full"/></label></div>
           <label className="block text-xs">条目内容<CTextarea aria-label="草稿条目内容" value={draft.description} onChange={event => edit({ description: event.target.value })} rows={5} className="mt-1 w-full"/></label>
           <label className="block text-xs">自己的想法与创作方向<CTextarea aria-label="草稿创作方向" value={draft.conceptNote} onChange={event => edit({ conceptNote: event.target.value })} rows={3} className="mt-1 w-full"/></label>
+          <label className="block text-xs">风暴灵感草稿<CTextarea aria-label="草稿风暴灵感" value={draft.aiBrainstorm ?? ''} onChange={event => edit({ aiBrainstorm: event.target.value })} rows={3} className="mt-1 w-full"/></label>
           <button className="text-xs text-error" onClick={() => { if (composing.current) { setError('请先完成当前中文输入，再删除草稿。'); return } update(deleteHistoryKeywordDraftV1(value, draft.draftId, true)); setActiveId(null) }}>删除此草稿</button>
         </fieldset> : <p className="text-xs text-text-muted">添加或选择一个关键词草稿。</p>}
       </div>

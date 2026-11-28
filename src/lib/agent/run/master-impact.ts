@@ -35,7 +35,7 @@ const TARGET_TABLE_BY_AGENT: Record<string, string> = {
 }
 
 function targetTableFor(candidate: MasterAgentDurableCandidateV1): string {
-  if (candidate.payload.skillId === 'world-origin.history-keyword-suggestions') return 'agentEvents'
+  if (['world-origin.history-keyword-suggestions', 'world-origin.history-keyword-content'].includes(candidate.payload.skillId ?? '')) return 'agentEvents'
   if (candidate.payload.skillId === 'world-origin.history-events') return 'historicalTimelineEvents'
   if (candidate.payload.skillId === 'world-origin.history-text') return 'histories'
   if (candidate.payload.skillId === 'world-origin.power-authoring') return candidate.payload.powerAuthoringRequest!.target.table
@@ -76,7 +76,7 @@ async function buildReport(
   const { scope, snapshot, candidate } = input
   const payload = candidate.payload
   const agentId = payload.agentId
-  const draftOnly = payload.skillId === 'world-origin.history-keyword-suggestions'
+  const draftOnly = ['world-origin.history-keyword-suggestions', 'world-origin.history-keyword-content'].includes(payload.skillId ?? '')
   const downstream = draftOnly ? [] : await readOwnedRows<any>(scope, 'chapters', { owner: 'work' })
   const report: MasterAgentImpactReportV1 = {
     version: MASTER_AGENT_IMPACT_REPORT_VERSION_V1,

@@ -4,7 +4,7 @@ import { scopeTransactionTables } from '../workspace/scope'
 import { useHistoricalStore } from '../../stores/historical'
 import { copyHistoryKeywordDraftSetV1, readHistoryKeywordDraftsV1, saveHistoryKeywordDraftsV1, type HistoryKeywordDraftScopeV1, type HistoryKeywordDraftV1 } from './keyword-drafts'
 
-const fields = ['keyword', 'category', 'era', 'customTimeRange', 'location', 'description', 'conceptNote'] as const
+const fields = ['keyword', 'category', 'era', 'customTimeRange', 'location', 'description', 'conceptNote', 'aiBrainstorm'] as const
 const normalizedName = (name: string) => name.normalize('NFKC').trim().toLocaleLowerCase('zh-CN')
 /** Explicit author creation from saved drafts. This is the original manual
  * keyword writer, not an AI grant or adoption of an unreviewed model result. */
@@ -24,7 +24,7 @@ export async function createHistoryKeywordsFromDraftsV1(input: HistoryKeywordDra
       const matches = all.filter(row => Reflect.get(row, identity) === draft.draftId)
       if (matches.length > 1 || matches.some(row => !inPartition(row))) throw new Error('草稿身份对应的正式词条不属于本历史分区，未新建。')
       if (matches[0]) {
-        if (fields.some(field => (matches[0][field] ?? '') !== draft[field])) throw new Error('该草稿已加入正式词条；修改草稿不会覆盖已保存内容，请在正式词条中编辑。')
+        if (fields.some(field => (matches[0][field] ?? '') !== (draft[field] ?? ''))) throw new Error('该草稿已加入正式词条；修改草稿不会覆盖已保存内容，请在正式词条中编辑。')
         native.set(draft.draftId, matches[0])
       }
     }
@@ -38,7 +38,7 @@ export async function createHistoryKeywordsFromDraftsV1(input: HistoryKeywordDra
     for (const draft of selected) {
       const existing = native.get(draft.draftId)
       if (existing?.id) { created.push(existing.id); continue }
-      const data = { ...Object.fromEntries(fields.map(field => [field, draft[field]])) as Pick<HistoryKeywordDraftV1, typeof fields[number]>,
+      const data = { ...Object.fromEntries(fields.map(field => [field, draft[field] ?? ''])) as Pick<HistoryKeywordDraftV1, typeof fields[number]>,
         [identity]: draft.draftId, projectId: input.scope.projectId, worldGroupId: input.worldGroupId }
       created.push(await useHistoricalStore.getState().addKeyword(data, { projectId: input.scope.projectId, worldId: input.scope.worldId }))
     }
