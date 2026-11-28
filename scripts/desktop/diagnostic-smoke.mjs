@@ -16,7 +16,10 @@ export async function verifyDiagnosticContext(app, page, launch) {
   assert.equal(await page.getByLabel('附带最近操作轨迹（可选，默认关闭）').count(), 0)
   assert.equal(await page.evaluate(() => window.localStorage.getItem('storyforge-diagnostic-context-v1')), null)
   const directory = await app.evaluate(({app}) => app.getPath('userData'))
-  const writeProbe = await beginDiagnosticWriteProbe(app, directory)
+  // Explicit manual diagnostics only. Formal smoke must not patch either
+  // clock or filesystem while checking the real application's timing.
+  const writeProbe = process.env.STORYFORGE_NATIVE_DIAGNOSTIC_PROBE === '1'
+    ? await beginDiagnosticWriteProbe(app, directory) : undefined
   /** @type {import('playwright').JSHandle<{ finish(): number[] }> | undefined} */
   let rendererProbe
   let smokeFailed = false
@@ -24,7 +27,7 @@ export async function verifyDiagnosticContext(app, page, launch) {
   /** @type {unknown} */
   let receiptError
   try {
-    rendererProbe = await page.evaluateHandle(() => {
+    if (writeProbe) rendererProbe = await page.evaluateHandle(() => {
       const original = Date.now
       /** @type {number[]} */
       const clocks = []
@@ -70,22 +73,24 @@ export async function verifyDiagnosticContext(app, page, launch) {
     await preserveDiagnosticSmokeEvidence(app, page, directory).catch(() => console.warn('Synthetic diagnostic evidence unavailable'))
     throw error
   } finally {
-    try {
-      let receipt
-      /** @type {number[]} */
-      let rendererClocks = []
-      try { receipt = await writeProbe.evaluate(probe => probe.finish()) }
-      finally {
-        try { rendererClocks = rendererProbe ? await rendererProbe.evaluate(probe => probe.finish()) : [] }
-        finally { await Promise.allSettled([writeProbe.dispose(), rendererProbe?.dispose()]) }
+    if (writeProbe) {
+      try {
+        let receipt
+        /** @type {number[]} */
+        let rendererClocks = []
+        try { receipt = await writeProbe.evaluate(probe => probe.finish()) }
+        finally {
+          try { rendererClocks = rendererProbe ? await rendererProbe.evaluate(probe => probe.finish()) : [] }
+          finally { await Promise.allSettled([writeProbe.dispose(), rendererProbe?.dispose()]) }
+        }
+        const output = join('release', 'native-smoke', process.platform)
+        await mkdir(output, { recursive: true })
+        await writeFile(join(output, 'diagnostic-write-receipt.json'), JSON.stringify({ ...receipt, rendererClocks }, null, 2), { mode: 0o600 })
+        console.log('Synthetic native diagnostic write receipt:', JSON.stringify({ ...receipt, rendererClocks }))
+      } catch (error) {
+        if (smokeFailed) console.warn('Synthetic receipt unavailable; the original smoke failure is retained')
+        else { receiptFailed = true; receiptError = error }
       }
-      const output = join('release', 'native-smoke', process.platform)
-      await mkdir(output, { recursive: true })
-      await writeFile(join(output, 'diagnostic-write-receipt.json'), JSON.stringify({ ...receipt, rendererClocks }, null, 2), { mode: 0o600 })
-      console.log('Synthetic native diagnostic write receipt:', JSON.stringify({ ...receipt, rendererClocks }))
-    } catch (error) {
-      if (smokeFailed) console.warn('Synthetic receipt unavailable; the original smoke failure is retained')
-      else { receiptFailed = true; receiptError = error }
     }
   }
   if (receiptFailed) throw receiptError
