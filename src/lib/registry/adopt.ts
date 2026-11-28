@@ -14,7 +14,7 @@ import type { WorkspaceScope } from '../types/world-ownership'
 import {
   copyHistoryAuthorOriginV1, copyHistoryAuthorSelectionV1, copyHistoryTextPatchV1,
   historyAuthorRecordV1, HISTORY_TEXT_DEFAULTS_V1,
-  type History,
+  type History, type HistoryAuthorOriginV1, type HistoryAuthorPartitionV1, type HistoryTextPatchV1,
 } from '../types/history'
 import { resolveWorldAuthoringOwnershipV1 } from '../workspace/ownership'
 import { hashChapterText, sha256Text, CHAPTER_TEXT_NORMALIZATION_VERSION } from '../ai/chapter-memory/text-normalization'
@@ -113,6 +113,7 @@ export function adopt(input: AdoptWorldHistoryTextInputV1, owner?: CallerOwnedAd
 export function adopt(input: AdoptPowerAuthoringInputV1, owner?: CallerOwnedAdoptionV1): Promise<AdoptResult>
 export function adopt(input: AdoptInput, owner?: CallerOwnedAdoptionV1): Promise<AdoptResult>
 export async function adopt(input: AdoptInput | AdoptWorldHistoryTextInputV1 | AdoptPowerAuthoringInputV1, owner?: CallerOwnedAdoptionV1): Promise<AdoptResult> {
+  if (Object.prototype.hasOwnProperty.call(input, 'historyTextBaseline')) return adoptWorkHistoryTextV1(input as AdoptInput, owner)
   if (isPowerAuthoringAdoptionV1(input)) return adoptPowerAuthoringInTransactionV1(input, owner)
   if (isWorldHistoryAdoptionV1(input)) return adoptWorldHistoryTextV1(input, owner)
   assertCallerAdoptionTransaction(owner, owner ? callerOwnedAdoptionEffectTablesV1(input.target) : [])
@@ -208,26 +209,42 @@ async function adoptWorldHistoryTextV1(input: AdoptWorldHistoryTextInputV1, owne
   const origin = copyHistoryAuthorOriginV1({ version: 1, kind: 'world', scope: input.ownerScope })
   const selection = copyHistoryAuthorSelectionV1(input.selection)
   if (selection.kind !== 'partition') throw new Error('[adopt] 历史一览为只读')
-  const data = copyHistoryTextPatchV1(input.data)
+  return adoptHistoryTextInTransactionV1(origin, selection, copyHistoryTextPatchV1(input.data), undefined, owner)
+}
+
+async function adoptWorkHistoryTextV1(input: AdoptInput, owner?: CallerOwnedAdoptionV1): Promise<AdoptResult> {
+  historyAuthorRecordV1(input, ['target', 'projectId', 'scope', 'worldGroupId', 'mode', 'data', 'historyTextBaseline'], '作品候选采纳')
+  if (input.target !== 'histories' || input.mode !== 'replace' || !input.scope || input.scope.projectId !== input.projectId) throw new Error('[adopt] 历史候选须固定原作品单例文字')
+  const origin = copyHistoryAuthorOriginV1({ version: 1, kind: 'work', scope: input.scope })
+  const selection = copyHistoryAuthorSelectionV1({ kind: 'partition', worldGroupId: input.worldGroupId })
+  if (selection.kind !== 'partition') throw new Error('[adopt] 历史一览为只读')
+  const expected = { ...historyAuthorRecordV1(input.historyTextBaseline, ['recordId', 'overview', 'eraSystem'], '采纳基线') }
+  if ((expected.recordId !== null && (!Number.isSafeInteger(expected.recordId) || Number(expected.recordId) < 1))
+    || typeof expected.overview !== 'string' || typeof expected.eraSystem !== 'string') throw new Error('[adopt] 历史采纳基线无效')
+  return adoptHistoryTextInTransactionV1(origin, selection, copyHistoryTextPatchV1(input.data), expected, owner)
+}
+
+/** One registered singleton writer shared by the existing real World entry and
+ * the Work-bound AI entry. Neither changes the other's owner admission. */
+async function adoptHistoryTextInTransactionV1(origin: HistoryAuthorOriginV1, selection: HistoryAuthorPartitionV1, data: HistoryTextPatchV1,
+  expected: Record<string, unknown> | undefined, owner?: CallerOwnedAdoptionV1): Promise<AdoptResult> {
   const tableSpec = REGISTRY_BY_NAME.get('histories')!
-  const fieldSpecs = FIELD_BY_TARGET.get('histories') ?? []
   const result = emptyResult()
-  // An explicitly selected empty string clears author text. Old generic/Work
-  // normalization intentionally keeps its established empty-string behavior.
-  const patch = normalizeAndValidate(data, fieldSpecs, result, { preserveEmptyStrings: true })
+  const patch = normalizeAndValidate(data, FIELD_BY_TARGET.get('histories') ?? [], result, { preserveEmptyStrings: true, preserveAuthorText: !!expected })
   if (!patch) return result
-  const tables = worldHistoryAdoptionTransactionTablesV1()
+  const tables = [...worldHistoryAdoptionTransactionTablesV1(), ...(origin.kind === 'work' ? [db.works] : [])]
   assertCallerAdoptionTransaction(owner, tables)
   await runRegisteredAdoptionTransaction(owner, tables, async () => {
-    const { scope } = await awaitCallerAdoptionRead(owner, () => resolveWorldAuthoringOwnershipV1(origin.scope))
+    const scope = await awaitCallerAdoptionRead(owner, async () => origin.kind === 'work'
+      ? resolveScope({ projectId: origin.scope.projectId, scope: origin.scope }) : (await resolveWorldAuthoringOwnershipV1(origin.scope)).scope)
     const groupId = selection.worldGroupId
     if (groupId != null && !await awaitCallerAdoptionRead(owner, async () =>
-      assertRecordInScope(scope, 'worldGroups', await db.worldGroups.get(groupId), { owner: 'world' }))) {
-      throw new Error('[adopt] 历史分区不属于指定 World')
-    }
+      assertRecordInScope(scope, 'worldGroups', await db.worldGroups.get(groupId), { owner: 'world' }))) throw new Error('[adopt] 历史分区不属于指定 World')
     const matches = (await awaitCallerAdoptionRead(owner, () => readOwnedRows<History>(scope, 'histories', { owner: 'world' })))
       .filter(row => (row.worldGroupId ?? null) === groupId)
     if (matches.length > 1) throw new Error('[adopt] 该历史分区有多条单例记录，请先核对原始数据')
+    if (expected && ((matches[0]?.id ?? null) !== expected.recordId || (matches[0]?.overview ?? '') !== expected.overview
+      || (matches[0]?.eraSystem ?? '') !== expected.eraSystem)) throw new Error('[HistoryText] 原历史内容已变化，候选保留，请重新对照。')
     await persistRegisteredSingletonPatchV1(tableSpec, matches[0], patch, result, owner, ts =>
       stampNewRecord(scope, 'histories', { ...HISTORY_TEXT_DEFAULTS_V1, ...patch,
         projectId: scope.projectId, worldGroupId: groupId, createdAt: ts, updatedAt: ts }, { owner: 'world' }), true)

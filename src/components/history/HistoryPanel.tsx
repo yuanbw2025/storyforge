@@ -1,3 +1,4 @@
+import HistoryTextAuthoring from './HistoryTextAuthoring'
 import { useState, useEffect, useMemo, useRef } from 'react'
 import {
   Plus, Clock,
@@ -367,7 +368,7 @@ export default function HistoryPanel({ project, resizableInputs = false, confirm
         !canEdit ? <p className="text-sm text-text-muted">请切换到具体世界查看和编辑历史总述与纪年体系。</p>
         : historyLoadError ? <p role="alert" className="text-sm text-error">历史读取失败：{historyLoadError}</p>
         : loadingHistory || !historyReady ? <p role="status" className="text-sm text-text-muted">正在读取历史…</p>
-        : <HistoryOverviewTab
+        : <HistoryTextEntry project={project} worldGroupId={scopeGroupId} onAdopted={() => loadHistory({ origin: historyOrigin, selection: historySelection })} key={historyViewKey}><HistoryOverviewTab
           key={historyViewKey}
           resizableInputs={resizableInputs}
           overview={history?.overview ?? ''}
@@ -379,7 +380,7 @@ export default function HistoryPanel({ project, resizableInputs = false, confirm
           onSaveEraSystem={(eraSystem, confirmation) => confirmation
             ? saveHistory({ origin: historyOrigin, selection: { kind: 'partition', worldGroupId: scopeGroupId }, patch: { eraSystem }, confirmation })
             : saveHistory({ origin: historyOrigin, selection: { kind: 'partition', worldGroupId: scopeGroupId }, patch: { eraSystem } })}
-        />
+        /></HistoryTextEntry>
       )}
 
       {/* Tab 内容：历史时间轴 */}
@@ -584,4 +585,9 @@ export default function HistoryPanel({ project, resizableInputs = false, confirm
       )}
     </div>
   )
+}
+
+function HistoryTextEntry({ project, worldGroupId, onAdopted, children }: { project: Project; worldGroupId: number | null; onAdopted: () => Promise<unknown>; children: React.ReactNode }) {
+  return project.workspacePurpose !== 'world-engine' && project.activeWorkId != null
+    ? <HistoryTextAuthoring project={project} worldGroupId={worldGroupId} onAdopted={onAdopted}>{children}</HistoryTextAuthoring> : children
 }

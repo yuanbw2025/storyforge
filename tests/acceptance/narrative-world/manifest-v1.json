@@ -21,7 +21,7 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261128-novel033-whitespace-v1.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261128-history061-text-v1.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
       {
@@ -1608,6 +1608,11 @@
         "path": "tests/acceptance/narrative-world/baseline-20261128-power048-record-authority-v1.json",
         "sha256": "5cf0bcfa17ee12647695a384058e71975eb0c3b1b39c02b2f831b3c718dccd1a",
         "note": "Preserve the merged power048 record-authority receipt before the existing original-novel allocation whitespace repair. Final manifest frozen before measurement; no corpus, known-gap or acceptance changes."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261128-novel033-whitespace-v1.json",
+        "sha256": "02c95b5e95139dad2fc071a7680771539d01aab6abf0a30e181e618398e2c456",
+        "note": "Preserve the merged novel033 whitespace receipt before the history061 registered Skill and singleton text-CAS change. Deterministic findings and unsupported gaps must remain unchanged; no live-model or release acceptance inferred."
       }
     ],
     "comparison": "NW-2E checkpoint of the unchanged legacy v3 120-query comparator. Typed v4 query, exact product plans, current impact diagnostics and scale failures have separate receipts; no model or human quality acceptance is inferred."
