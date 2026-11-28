@@ -21,9 +21,19 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261128-reference050-note-v1.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261128-nw1b-reference-note-release409-v1.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
+      {
+        "path": "tests/acceptance/narrative-world/domain-projection-20261127-release409-finite-service-main685-v1.json",
+        "sha256": "752f99750b82c416dca2943a3fa51e6cb54ea6f034173495fe33b5f8b8a7a0a1",
+        "note": "Preserve the prior NW-1B domain receipt before measuring the already-merged references.note declaration. All12 deterministic family observations stay equal; no new capability is inferred."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261128-reference050-note-v1.json",
+        "sha256": "feed7330042031f0fb0cdd000870c78ede1396519020d4f61fc4fa0daba0f2e4",
+        "note": "Preserve the actual reference050-note observation before the reviewed NW-1B receipt reference changes. New measurement must retain all outcomes, gaps and unsupported cases; no model or human acceptance inferred."
+      },
       {
         "path": "tests/acceptance/narrative-world/ir-contract-20261127-cover035-runtime-v1.json",
         "sha256": "6efeeae4f0f1405467e0ff85d30f402255e18445d8587d994d032287952a190b",
