@@ -3,6 +3,8 @@ import { createRoot } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import CharacterWorldAffiliations from '../../src/components/character/CharacterWorldAffiliations'
 import { db } from '../../src/lib/db/schema'
+import { useCultivationStore } from '../../src/stores/cultivation'
+import { useCodexStore } from '../../src/stores/codex'
 import { finalizeCurrentFixtureV1 } from '../helpers/current-resource-identity'
 import { seedCurrentProject } from '../helpers/current-workspace'
 
@@ -24,6 +26,46 @@ describe('WORLD-1 · 角色种族与修炼关联视图', () => {
     await act(async () => root.unmount())
     host.remove()
     db.close()
+  })
+
+  it('native missing workspace is visible, hides cached choices and retries only on author request', async () => {
+    const projectId = await seedCurrentProject({ name: 'read failure' })
+    const workspace = (await db.projects.get(projectId))!
+    const systemId = await db.cultivationSystems.add({ projectId, name: '原体系', description: '原文', stages: '[]', createdAt: 1, updatedAt: 1 }) as number
+    await finalizeCurrentFixtureV1(projectId)
+    const before = await db.cultivationSystems.toArray()
+    await db.projects.delete(projectId)
+    useCultivationStore.setState({ systems: [{ ...before[0], projectId: projectId + 99, name: '另一作品的缓存' }] })
+    const onChange = vi.fn()
+    await act(async () => {
+      root.render(createElement(CharacterWorldAffiliations, { projectId, worldGroups: [],
+        character: { id: 1, projectId, name: '角色', cultivationSystemId: systemId, cultivationStageId: 'old' } as any, onChange }))
+    })
+    await act(async () => { await vi.waitFor(() => expect(useCultivationStore.getState().loadError).toBeTruthy()) })
+    expect(host.querySelector('[role="alert"]')?.textContent).toContain('角色关联读取失败')
+    expect(host.textContent).not.toContain('另一作品的缓存')
+    expect(host.querySelector<HTMLSelectElement>('select[aria-label="主修体系"]')?.disabled).toBe(true)
+    expect(onChange).not.toHaveBeenCalled()
+    expect(await db.cultivationSystems.toArray()).toEqual(before)
+    await db.projects.add(workspace)
+    expect(host.querySelector('[role="alert"]')).not.toBeNull()
+    const retry = Array.from(host.querySelectorAll('button')).find(button => button.textContent === '重新读取')!
+    await act(async () => { retry.click() })
+    await vi.waitFor(async () => { await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)) }); expect(host.textContent).toContain('原体系') })
+    expect(host.querySelector('[role="alert"]')).toBeNull()
+    expect(host.querySelector<HTMLSelectElement>('select[aria-label="主修体系"]')?.value).toBe(String(systemId))
+    expect(onChange).not.toHaveBeenCalled()
+    expect(await db.cultivationSystems.toArray()).toEqual(before)
+    expect(useCodexStore.getState().loadError).toBeNull()
+    const otherScope = { ...useCultivationStore.getState().loadedScope!, projectId: projectId + 99 }
+    await act(async () => useCultivationStore.setState({ loadedScope: otherScope, systems: [{ ...before[0], projectId: projectId + 99, name: '另一作品的缓存' }] }))
+    expect(host.querySelector('[role="alert"]')?.textContent).toContain('来源已切换')
+    expect(host.textContent).not.toContain('另一作品的缓存')
+    expect(host.querySelector<HTMLSelectElement>('select[aria-label="主修体系"]')?.disabled).toBe(true)
+    await act(async () => Array.from(host.querySelectorAll('button')).find(button => button.textContent === '重新读取')!.click())
+    await vi.waitFor(async () => { await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)) }); expect(host.textContent).toContain('原体系') })
+    expect(onChange).not.toHaveBeenCalled()
+    expect(await db.cultivationSystems.toArray()).toEqual(before)
   })
 
   it('普通角色只看到所属世界选项，选择体系时原子清空旧境界', async () => {
@@ -68,8 +110,9 @@ describe('WORLD-1 · 角色种族与修炼关联视图', () => {
         onChange,
       }))
     })
-    await act(async () => {
-      await vi.waitFor(() => expect(host.textContent).toContain('镜裔'))
+    await vi.waitFor(async () => {
+      await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)) })
+      expect(host.textContent).toContain('镜裔')
     })
 
     expect(host.textContent).not.toContain('雾裔')
