@@ -1,3 +1,4 @@
+import HistoryCandidateDialog from './HistoryCandidateDialog'
 import { createContext, useContext, useState, type ReactNode } from 'react'
 import { Sparkles, X } from 'lucide-react'
 import type { Project } from '../../lib/types'
@@ -56,7 +57,7 @@ export default function HistoryEventAuthoringV1({ project, worldGroupId, hasEven
     {candidate && <div role="status" className="mb-3 flex flex-wrap items-center gap-2 text-xs">时间轴有待确认候选。<button className="text-accent underline" onClick={() => { void guarded(() => setOpen(true)) }}>继续编辑：历史事件候选</button></div>}
     {error && !open && <p role="alert" className="text-xs text-error">{error}</p>}
     {children}
-    {open && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-3"><section role="dialog" aria-modal="true" aria-label="历史事件候选" className="max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-xl border border-border bg-bg-surface p-4">
+    {open && <HistoryCandidateDialog label="历史事件候选" onClose={() => { void guarded(() => setOpen(false)) }}>
       <div className="mb-3 flex items-center justify-between"><h2>历史事件候选</h2><button aria-label="关闭事件候选" onClick={() => { void guarded(() => setOpen(false)) }}><X className="h-4 w-4"/></button></div>
       <p className="mb-3 text-xs text-text-muted">先选择并编辑事件，再加入时间轴。已有事件保持原样；具体日期文字保留，不自动推断数字年份，候选也不自动标为已核实史实。</p>
       {(error || copilot.error || parseError) && <p role="alert" className="mb-3 text-xs text-error">{error || copilot.error || parseError}</p>}
@@ -79,6 +80,6 @@ export default function HistoryEventAuthoringV1({ project, worldGroupId, hasEven
         </CandidateSaveFeedback>
         <div className="mt-4 flex justify-end gap-3"><button disabled={copilot.busy} onClick={() => { void guarded(() => copilot.rejectCandidate(candidate)) }} className="text-xs">拒绝整批候选</button><button disabled={copilot.busy || !ready} onClick={() => { void guarded(async () => { if (await copilot.adoptCandidate(candidate)) { await onAdopted(); setOpen(false) } }) }} className="rounded bg-accent px-4 py-2 text-sm text-white disabled:opacity-40">加入所选事件（{data?.selectedIds?.length ?? 0}）</button></div>
       </>}
-    </section></div>}
+    </HistoryCandidateDialog>}
   </Context.Provider>
 }
