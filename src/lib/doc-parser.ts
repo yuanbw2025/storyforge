@@ -184,7 +184,7 @@ export async function extractTextFromFile(file: File, options: { signal?: AbortS
       }
       return base
     }
-    case 'pdf':  return extractPdf(file)
+    case 'pdf':  return extractPdf(file, options.signal)
     case 'docx': return extractDocx(file, options.signal, options.includeDocxStructure === true)
     case 'xlsx': {
       const { extractXlsxTextV1 } = await import('./import/xlsx-text')
@@ -195,23 +195,43 @@ export async function extractTextFromFile(file: File, options: { signal?: AbortS
   }
 }
 
-async function extractPdf(file: File): Promise<ExtractResult> {
+async function extractPdf(file: File, signal?: AbortSignal): Promise<ExtractResult> {
   const pdfjs = await import('pdfjs-dist')
   pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl
   const buf = await file.arrayBuffer()
-  const pdf = await pdfjs.getDocument({ data: buf }).promise
-  const pages: string[] = []
-  for (let i = 1; i <= pdf.numPages; i++) {
-    const page = await pdf.getPage(i)
-    const content = await page.getTextContent()
-    const line = content.items
-      .map((it) => ('str' in it ? (it as { str: string }).str : ''))
-      .join(' ')
-    pages.push(line)
+  signal?.throwIfAborted()
+  const task = pdfjs.getDocument({ data: buf })
+  let disposal: Promise<void> | undefined, failed = false, failure: unknown, result: ExtractResult | undefined
+  const dispose = () => disposal ??= task.destroy()
+  const abort = () => { void dispose().catch(() => undefined) }
+  signal?.addEventListener('abort', abort, { once: true })
+  try {
+    signal?.throwIfAborted()
+    const pdf = await task.promise
+    const pages: string[] = []
+    for (let i = 1; i <= pdf.numPages; i++) {
+      signal?.throwIfAborted()
+      const page = await pdf.getPage(i)
+      try {
+        const content = await page.getTextContent()
+        signal?.throwIfAborted()
+        // Preserve the existing projection: old frozen session hashes depend on it.
+        pages.push(content.items.map(it => ('str' in it ? it.str : '')).join(' '))
+      } finally { page.cleanup() }
+    }
+    const text = pages.join('\n\n')
+    result = { text, rawChars: text.length, pageCount: pdf.numPages,
+      formatNotices: ['PDF 仅提取可复制文字；多栏阅读顺序、表格结构、图片和排版请对照原件。扫描页不自动 OCR，不保证逐字保真。'],
+      ...assessExtractionQualityV1({ format: 'pdf', text, pages }) }
+  } catch (cause) {
+    failed = true
+    failure = signal?.aborted ? signal.reason : cause
+  } finally {
+    signal?.removeEventListener('abort', abort)
+    try { await dispose() } catch (cause) { if (!failed) { failed = true; failure = cause } }
   }
-  const text = pages.join('\n\n')
-  // 扫描件/图片型 PDF 的文本层为空：显式标记，交给调用方拦截，不在这里造内容。
-  return { text, rawChars: text.length, pageCount: pdf.numPages, ...assessExtractionQualityV1({ format: 'pdf', text, pages }) }
+  if (failed) throw failure
+  return result!
 }
 
 async function extractDocx(file: File, signal?: AbortSignal, includeStructure = false): Promise<ExtractResult> {
