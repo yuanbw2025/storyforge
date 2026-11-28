@@ -177,7 +177,7 @@ export const useHistoricalStore = create<HistoricalStore>((set, get) => ({
 
   addEvent: async (event, scopeInput) => {
     event = { ...event }; scopeInput = typeof scopeInput === 'object' ? { ...scopeInput } : scopeInput
-    const { id, scope } = await db.transaction('rw', scopeTransactionTables(db.historicalTimelineEvents, db.worldGroups), async () => {
+    const { id, scope } = await db.transaction('rw', scopeTransactionTables(db.historicalTimelineEvents, ...(event.worldGroupId != null ? [db.worldGroups] : [])), async () => {
       const scope = await resolveWorldOwnerScopeLike(scopeInput ?? event.projectId)
       if (scope.projectId !== event.projectId) throw new Error('历史事件工作区与目标不一致。')
       await assertNewHistoryGroup(scope, event.worldGroupId)
@@ -254,7 +254,7 @@ export const useHistoricalStore = create<HistoricalStore>((set, get) => ({
   addKeyword: async (keyword, scopeInput) => {
     const caller = Dexie.currentTransaction
     keyword = { ...keyword }; scopeInput = typeof scopeInput === 'object' ? { ...scopeInput } : scopeInput
-    const { id, scope } = await db.transaction('rw', scopeTransactionTables(db.historicalKeywords, db.worldGroups), async () => {
+    const { id, scope } = await db.transaction('rw', scopeTransactionTables(db.historicalKeywords, ...(keyword.worldGroupId != null ? [db.worldGroups] : [])), async () => {
       const scope = await resolveWorldOwnerScopeLike(scopeInput ?? keyword.projectId)
       if (scope.projectId !== keyword.projectId) throw new Error('历史关键词工作区与目标不一致。')
       await assertNewHistoryGroup(scope, keyword.worldGroupId)
