@@ -557,8 +557,10 @@ test('050 History native six-field save evidence, quota retry and reopened-tab r
   const url = `./workspace/${scope.projectId}?module=history`
   await page.goto(url)
   await page.getByRole('button', { name: '历史总述与纪年', exact: true }).click()
-  const overview = page.locator('div.p-5.space-y-2').filter({ has: page.locator('label').filter({ hasText: /^历史总述$/ }) })
-  const era = page.locator('div.p-5.space-y-2').filter({ has: page.locator('label').filter({ hasText: /^纪年体系$/ }) })
+  const overview = page.locator('div.p-5.space-y-2').filter({ has: page.locator('label').filter({ hasText: /^历史总述/ }) })
+  const era = page.locator('div.p-5.space-y-2').filter({ has: page.locator('label').filter({ hasText: /^纪年体系/ }) })
+  await expect(overview).toHaveCount(1)
+  await expect(era).toHaveCount(1)
   const enter = async (box: ReturnType<Page['locator']>, value: string) => {
     await expect(box.locator('[data-local-save-status]')).toBeVisible()
     await box.getByRole('button', { name: '编辑源码', exact: true }).or(box.locator('div.cursor-text')).first().click()
