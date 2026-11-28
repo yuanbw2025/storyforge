@@ -1498,7 +1498,7 @@ export const AGENT_SKILLS = [
     },
     maxOutputTokens: 8_000, // Team forecast; transport uses the routed model capacity.
     writeTargets: [{ table: 'histories', fields: ['overview', 'eraSystem'] }],
-    lastVerifiedAt: '2026-11-28', regressionTests: ['R-BUG061-history-text-copilot'],
+    lastVerifiedAt: '2026-11-28', regressionTests: ['R-BUG061-history-text-copilot', 'R-BUG061-history-joint-text'],
   },
   {
     version: 1, id: 'world-origin.history-events', agentId: 'world-origin', defaultForAgent: false,

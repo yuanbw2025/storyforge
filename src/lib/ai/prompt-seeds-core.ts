@@ -205,6 +205,13 @@ const CORE_PROMPT_BASE_SEEDS: PromptSeed[] = [
     systemPrompt: '保留作者已填事实、创作意图和幻想边界。只输出固定草稿身份和本次字段；新增设想需可辨认，创作方向只是待确认建议。禁止改名、自动关联章节、替作者宣称意见或覆盖未选字段。',
     userPromptTemplate: '作者方向：{{userHint}}\n已确认世界与历史：\n{{worldContext}}',
     variables: ['userHint', 'worldContext'], isActive: true,
+  },
+  {
+    scope: 'system', moduleKey: 'history.overview-calendar', promptType: 'generate', name: '内置-历史总述纪年联合起草',
+    description: '同一份输入起草一致的历史总述与纪年候选，作者分别选择采纳。',
+    systemPrompt: '使历史时代转折与纪年起点、跨纪元和年/月/日表达相互一致。保留已确认事实与幻想边界，不默认地球历法；新增前提标为待确认设想，不伪造史料。两份文字分别等待作者选择，不自动改事件日期。',
+    userPromptTemplate: '生成方式：{{generationMode}}\n原总述与纪年：{{currentValue}}\n当前正式上下文：\n{{worldContext}}\n作者要求：{{userHint}}',
+    variables: ['generationMode', 'currentValue', 'worldContext', 'userHint'], isActive: true,
   },  // 1. 世界观-单维度生成
   {
     scope: 'system',

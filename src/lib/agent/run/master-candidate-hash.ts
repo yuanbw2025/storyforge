@@ -14,7 +14,7 @@ export function masterCandidateWriteTargetV1(payload: MasterCandidatePayload): s
   if (payload.skillId === 'world-origin.history-keyword-content') return 'agentEvents'
   if (payload.skillId === 'world-origin.history-keyword-suggestions') return 'agentEvents'
   if (payload.skillId === 'world-origin.history-events') return 'historicalTimelineEvents.title'
-  if (payload.skillId === 'world-origin.history-text' && payload.historyTextRequest) return `histories.${payload.historyTextRequest.field}`
+  if (payload.skillId === 'world-origin.history-text' && payload.historyTextRequest) return `histories.${payload.historyTextRequest.field === 'joint' ? 'overview' : payload.historyTextRequest.field}`
   if (payload.skillId === 'world-origin.power-authoring' && payload.powerAuthoringRequest) return `${payload.powerAuthoringRequest.target.table}.${payload.powerAuthoringRequest.target.field}`
   if (payload.skillId === 'outline.details') return 'detailedOutlines.scenes'
   if (payload.skillId === 'outline.story-arcs') return 'storyArcs.name'

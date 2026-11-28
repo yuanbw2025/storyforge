@@ -5,7 +5,7 @@ import { parseHistoryKeywordSuggestionRequestV1, parseHistoryKeywordSuggestionsV
 import { prepareHistoryEventsCopilotV1, adoptRestoredHistoryEventsCandidateV1 } from './history-events-copilot'
 import { parseHistoryEventCreationRequestV1, parseHistoryEventCandidatesV1, type HistoryEventCreationRequestV1 } from '../history/event-creation-contract'
 import type { HistoryEventCreationSnapshotV1 } from '../history/event-creation-adoption'
-import { prepareHistoryTextCopilotV1, parseHistoryTextCandidateV1, parseHistoryTextRequestV1, adoptRestoredHistoryTextCandidateV1, type HistoryTextRequestV1, type HistoryTextSnapshotV1 } from './history-text-copilot'
+import { prepareHistoryTextCopilotV1, parseHistoryTextOutputV1, parseHistoryTextRequestV1, adoptRestoredHistoryTextCandidateV1, type HistoryTextRequestV1, type HistoryTextSnapshotV1 } from './history-text-copilot'
 import { preparePowerAuthoringCopilotV1, parsePowerAuthoringCandidateV1, parsePowerAuthoringRequestV1, adoptRestoredPowerAuthoringCandidateV1, type PowerAuthoringRequestV1, type PowerAuthoringCopilotSnapshotV1 } from './power-authoring-copilot'
 import { requireFixedBudgetValueV1 } from './finite-budget'
 import { INSPIRATION_PREPARATION_MODULES, inspirationPreparationModeFromRequest } from '../inspiration/preparation'
@@ -457,7 +457,7 @@ function governedPromptModuleForTaskV1(
   if (skill.executionMode === 'history-keyword-content') return 'history.keyword-content'
   if (skill.executionMode === 'history-keyword-suggestions') return 'history.keyword-suggestions'
   if (skill.executionMode === 'history-events') return 'history.timeline'
-  if (skill.executionMode === 'history-text') return task.historyTextRequest?.field === 'eraSystem' ? 'history.calendar' : 'history.overview'
+  if (skill.executionMode === 'history-text') return task.historyTextRequest?.field === 'joint' ? 'history.overview-calendar' : task.historyTextRequest?.field === 'eraSystem' ? 'history.calendar' : 'history.overview'
   if (skill.executionMode === 'worldview-field') return 'worldview.dimension'
   if (skill.executionMode === 'story-core') return 'story.generate'
   if (task.agentId === 'character' && skill.executionMode === 'create') return 'character.generate'
@@ -1337,7 +1337,7 @@ async function executeSequentialMasterAgentPlan(
           const observed = observeMasterRawModelV1(task, prepared.runRaw, input.executionTrace)
           assertModelEvidenceSaved = observed.assertSaved
           const result = await runBudgetedGenerationNode({ node: { ...prepared.node,
-            run: async messages => parseHistoryTextCandidateV1((await observed.runRaw(messages)).output) },
+            run: async messages => parseHistoryTextOutputV1((await observed.runRaw(messages)).output, prepared.snapshot.request, false) },
             prepared: prepared.prepared, budget, callLabel: '历史文本创作 Skill', maxOutputTokens: requireFixedBudgetValueV1(skill.maxOutputTokens) })
           const draft = JSON.stringify(result.output, null, 2)
           candidates.push({ payload: { version: 1, taskId: task.id, agentId: task.agentId, skillId: skill.id as AgentSkillId, executionBinding,

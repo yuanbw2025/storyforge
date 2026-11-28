@@ -21,18 +21,43 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261128-history061-keyword-content-main832-v1.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261128-history061-joint-text-main835-v1.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
       {
-        "path": "tests/acceptance/narrative-world/baseline-20261128-history061-keyword-content-v1.json",
-        "sha256": "a35268c9ca7a5ab42d85c0a7eb8914be1427e041d4db0d3d26264fc4d9aa1f08",
-        "note": "Preserve measured PR835 keyword content receipt before integrating main832 checkpoint/build changes."
+        "path": "tests/acceptance/narrative-world/baseline-20261128-history061-joint-text-main832-v1.json",
+        "sha256": "c681ccb589edd91152d1eca7b46e129e6a13f03b61aa0f39de277184d6b927f2",
+        "note": "Preserve measured joint-text integration receipt before current main835 integration."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261128-history061-keyword-content-main832-v1.json",
+        "sha256": "9ca4c7dde1ec33ec223820db434cc2e53d35d0a025b378582e047cfc152098e3",
+        "note": "Preserve delivered main835 keyword-content receipt while integrating one-call joint history drafting."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261128-history061-joint-text-v1.json",
+        "sha256": "1456a6224bc11a9b455c57a6bbc01724ec958f84c21a17e6971f856f584271d4",
+        "note": "Preserve measured joint-text receipt before integrating current main832 checkpoint/build changes."
       },
       {
         "path": "tests/acceptance/narrative-world/baseline-20261128-issue833-main830-guard-v1.json",
         "sha256": "2e04d30b52aff842d03b39d1f9e47fd9c484588a46763db6c3b44eaaeef83e8a",
-        "note": "Preserve main832 measured guard receipt while integrating independent keyword-content fixes."
+        "note": "Preserve main832 measured guard receipt while integrating independent history fixes."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/domain-projection-20261128-history061-keyword-content-v1.json",
+        "sha256": "d8ebec13b0fa65d096f6be181e478ef3f03939aa15c3b28211e104afc5e784bf",
+        "note": "Preserve measured keyword content receipt before original history text Skill gains one-call joint drafting with independent selection. Compare deterministic outcomes and known gaps unchanged; no model, release or human acceptance inferred."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/ir-contract-20261128-history061-keyword-content-v1.json",
+        "sha256": "d72570b23fc9da32aa81e99c9653be214c30573a079563f895ae5a8ad82a4153",
+        "note": "Preserve measured keyword content receipt before original history text Skill gains one-call joint drafting with independent selection. Compare deterministic outcomes and known gaps unchanged; no model, release or human acceptance inferred."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261128-history061-keyword-content-v1.json",
+        "sha256": "a35268c9ca7a5ab42d85c0a7eb8914be1427e041d4db0d3d26264fc4d9aa1f08",
+        "note": "Preserve measured keyword content receipt before original history text Skill gains one-call joint drafting with independent selection. Compare deterministic outcomes and known gaps unchanged; no model, release or human acceptance inferred."
       },
       {
         "path": "tests/acceptance/narrative-world/domain-projection-20261128-history061-keyword-draft-extension-v1.json",
