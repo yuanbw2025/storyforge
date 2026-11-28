@@ -1,10 +1,13 @@
-import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
+import { useState, useRef, useEffect, useCallback, useMemo, useContext } from 'react'
 import { Plus, Trash2, ArrowRightLeft, ArrowRight, Users, GitFork, List, Sparkles, Check, X, AlertCircle } from 'lucide-react'
 import { useCharacterRelationStore } from '../../stores/character-relation'
 import { useCharacterStore } from '../../stores/character'
 import type { MatchedRelation } from '../../lib/ai/relation-extractor'
-import type { Project, RelationType } from '../../lib/types'
-import { CInput, CTextarea } from '../shared/CompositionInput'
+import type { Project, RelationType, CharacterRelation, Character, WorkspaceScope } from '../../lib/types'
+import AcknowledgedTextField from '../shared/AcknowledgedTextField'
+import { AuthorRecordSaveScopeV1, useAuthorRecordSavesV1 } from '../shared/AuthorRecordSaveScope'
+import ScopedWorldAuthoringBoundary from '../world-group/ScopedWorldAuthoringBoundary'
+import { flushPendingEditsV1 } from '../../lib/authoring/pending-edit-coordinator'
 import { useToast } from '../shared/Toast'
 import { useAIConfigStore } from '../../stores/ai-config'
 import { resolveScopeLike } from '../../lib/workspace/scope'
@@ -40,9 +43,42 @@ interface Props {
   initialRelationId?: number | null
 }
 
-export default function CharacterRelationPanel({ project, worldGroupId, initialRelationId }: Props) {
-  const { relations, addRelation, updateRelation, deleteRelation } = useCharacterRelationStore()
-  const { characters } = useCharacterStore()
+function RelationTextField({ relation, field, scope }: { relation: CharacterRelation; field: 'description' | 'label'; scope?: WorkspaceScope }) {
+  const admitted = useContext(AuthorRecordSaveScopeV1) !== null
+  const localSave = useAuthorRecordSavesV1('characterRelations', relation)
+  const update = useCharacterRelationStore(state => state.updateRelation)
+  return <AcknowledgedTextField label={field === 'description' ? '关系描述' : '关系标签'} input={field === 'label'} rows={3}
+    markdownRead={field === 'description' && admitted} value={relation[field]} localSave={field === 'description' ? localSave(field) : undefined}
+    placeholder={field === 'description' ? '描述这段关系的背景、变化、冲突等...' : '关系标签，如：父子、宿敌、暗恋对象'}
+    className={field === 'description' ? 'w-full bg-bg-base border border-border rounded-lg px-3 py-2 text-sm text-text-primary resize-none focus:outline-none focus:border-accent' : 'w-full bg-bg-base border border-border rounded px-2 py-1 text-sm text-text-primary'}
+    onCommit={(value, expected, confirmation) => confirmation && scope
+      ? update(relation.id!, { [field]: value }, { scope, expected: { [field]: expected, fromCharacterId: relation.fromCharacterId, toCharacterId: relation.toCharacterId }, confirmation })
+      : update(relation.id!, { [field]: value }, { scope, expected: { [field]: expected } })} />
+}
+
+export default function CharacterRelationPanel(props: Props) {
+  const admitted = useContext(AuthorRecordSaveScopeV1) !== null
+  return <ScopedWorldAuthoringBoundary project={props.project} activeGroupId={props.worldGroupId}>
+    {view => <AuthorRecordSaveScopeV1.Provider value={admitted ? { projectId: view.project.id!, worldId: view.project.activeWorldId!, workId: view.project.activeWorkId! } : null}>
+      <ScopedCharacterRelationPanel project={view.project} worldGroupId={view.activeGroupId} initialRelationId={props.initialRelationId} />
+    </AuthorRecordSaveScopeV1.Provider>}
+  </ScopedWorldAuthoringBoundary>
+}
+
+function ScopedCharacterRelationPanel({ project, worldGroupId, initialRelationId }: Props) {
+  const confirmed = useContext(AuthorRecordSaveScopeV1) !== null
+  const { relations: liveRelations, loadedScope, addRelation, updateRelation, deleteRelation } = useCharacterRelationStore()
+  const { characters: liveCharacters, loadedScope: characterScope } = useCharacterStore()
+  const retainedRelations = useRef<CharacterRelation[]>([]), retainedCharacters = useRef<Character[]>([])
+  if (!confirmed || loadedScope?.projectId === project.id && loadedScope?.worldId === project.activeWorldId) retainedRelations.current = liveRelations
+  if (!confirmed || characterScope?.projectId === project.id && characterScope?.worldId === project.activeWorldId) retainedCharacters.current = liveCharacters
+  const relations = retainedRelations.current, characters = retainedCharacters.current
+  const workspaceScope = useMemo<WorkspaceScope | undefined>(() => project.id != null && project.activeWorldId != null && project.activeWorkId != null
+    ? { projectId: project.id, worldId: project.activeWorldId, workId: project.activeWorkId } : undefined, [project.id, project.activeWorldId, project.activeWorkId])
+  const [operationError, setOperationError] = useState('')
+  const runAfterInputs = (action: () => void | Promise<unknown>) => {
+    void flushPendingEditsV1().then(action).then(() => setOperationError('')).catch(cause => setOperationError(cause instanceof Error ? cause.message : '关系输入未保存，请重试。'))
+  }
   const toast = useToast()
   const projectId = project.id!
 
@@ -61,6 +97,7 @@ export default function CharacterRelationPanel({ project, worldGroupId, initialR
   const [showExtractPanel, setShowExtractPanel] = useState(false)
   const [savingId, setSavingId] = useState<number | null>(null)
   const [savedId, setSavedId] = useState<number | null>(null)
+  const metadataRequest = useRef(0)
 
   const projectCharacters = useMemo(
     () => characters.filter((c) => (
@@ -193,7 +230,7 @@ export default function CharacterRelationPanel({ project, worldGroupId, initialR
       isBidirectional: true,
     }
     try {
-      await addRelation(relation)
+      await addRelation(relation, workspaceScope)
       toast.success('关系已保存。')
     } catch (err) {
       toast.error(`保存关系失败：${err instanceof Error ? err.message : '未知错误'}`)
@@ -205,18 +242,22 @@ export default function CharacterRelationPanel({ project, worldGroupId, initialR
     data: Parameters<typeof updateRelation>[1],
     options: { notify?: boolean } = {},
   ) => {
+    const request = ++metadataRequest.current
     setSavingId(id)
+    setSavedId(null)
     try {
-      await updateRelation(id, data)
+      await flushPendingEditsV1()
+      await updateRelation(id, data, { scope: workspaceScope })
+      if (request !== metadataRequest.current) return
       setSavedId(id)
       window.setTimeout(() => {
-        setSavedId(current => current === id ? null : current)
+        if (request === metadataRequest.current) setSavedId(current => current === id ? null : current)
       }, 1600)
       if (options.notify) toast.success('关系已保存。')
     } catch (err) {
       toast.error(`保存关系失败：${err instanceof Error ? err.message : '未知错误'}`)
     } finally {
-      setSavingId(null)
+      if (request === metadataRequest.current) setSavingId(null)
     }
   }
 
@@ -234,7 +275,8 @@ export default function CharacterRelationPanel({ project, worldGroupId, initialR
   }
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6" ref={containerRef}>
+    <div className="max-w-4xl mx-auto space-y-6" ref={containerRef} onInputCapture={() => setSavedId(null)} onCompositionStartCapture={() => setSavedId(null)}>
+      {operationError && <p role="alert" className="text-xs text-error">{operationError}</p>}
       {/* 标题 */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">
@@ -246,7 +288,7 @@ export default function CharacterRelationPanel({ project, worldGroupId, initialR
           {/* 视图切换 */}
           <div className="flex bg-bg-elevated rounded-lg p-0.5">
             <button
-              onClick={() => setView('graph')}
+              onClick={() => runAfterInputs(() => setView('graph'))}
               className={`flex items-center gap-1 px-3 py-1.5 rounded-md text-sm transition-colors ${
                 view === 'graph' ? 'bg-accent text-white' : 'text-text-muted hover:text-text-primary'
               }`}
@@ -254,7 +296,7 @@ export default function CharacterRelationPanel({ project, worldGroupId, initialR
               <GitFork className="w-3.5 h-3.5" /> 关系图
             </button>
             <button
-              onClick={() => setView('list')}
+              onClick={() => runAfterInputs(() => setView('list'))}
               className={`flex items-center gap-1 px-3 py-1.5 rounded-md text-sm transition-colors ${
                 view === 'list' ? 'bg-accent text-white' : 'text-text-muted hover:text-text-primary'
               }`}
@@ -263,7 +305,7 @@ export default function CharacterRelationPanel({ project, worldGroupId, initialR
             </button>
           </div>
           <button
-            onClick={handleAIExtract}
+            onClick={() => runAfterInputs(handleAIExtract)}
             disabled={projectCharacters.length < 2 || extracting || extractRunId != null}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-accent/10 text-accent rounded-lg text-sm hover:bg-accent/20 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             title="AI 从大纲和章节中自动提取角色关系"
@@ -272,7 +314,7 @@ export default function CharacterRelationPanel({ project, worldGroupId, initialR
             {extracting ? 'AI 提取中...' : 'AI 提取'}
           </button>
           <button
-            onClick={handleAdd}
+            onClick={() => runAfterInputs(handleAdd)}
             disabled={projectCharacters.length < 2}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-accent text-white rounded-lg text-sm hover:bg-accent/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             title={projectCharacters.length < 2 ? '需要至少 2 个当前项目角色才能创建关系' : '添加关系'}
@@ -378,7 +420,7 @@ export default function CharacterRelationPanel({ project, worldGroupId, initialR
                   取消
                 </button>
                 <button
-                  onClick={handleAcceptExtracted}
+                  onClick={() => runAfterInputs(handleAcceptExtracted)}
                   disabled={selectedExtracted.size === 0}
                   className="flex items-center gap-1.5 px-4 py-1.5 bg-accent text-white rounded-lg text-sm hover:bg-accent/90 disabled:opacity-40 transition-colors"
                 >
@@ -493,7 +535,7 @@ export default function CharacterRelationPanel({ project, worldGroupId, initialR
 
                 {/* 展开/折叠 & 删除 */}
                 <button
-                  onClick={() => setEditingId(isEditing ? null : rel.id!)}
+                  onClick={() => runAfterInputs(() => setEditingId(isEditing ? null : rel.id!))}
                   className="text-xs text-text-muted hover:text-text-primary transition-colors"
                 >
                   {isEditing ? '收起' : '编辑'}
@@ -501,7 +543,7 @@ export default function CharacterRelationPanel({ project, worldGroupId, initialR
                 {savingId === rel.id && <span className="text-xs text-text-muted">保存中...</span>}
                 {savingId !== rel.id && savedId === rel.id && <span className="text-xs text-accent">已自动保存</span>}
                 <button
-                  onClick={() => handleDeleteRelation(rel.id!)}
+                  onClick={() => runAfterInputs(() => handleDeleteRelation(rel.id!))}
                   className="text-text-muted hover:text-red-400 transition-colors"
                   title="删除关系"
                 >
@@ -518,12 +560,7 @@ export default function CharacterRelationPanel({ project, worldGroupId, initialR
                 <span className="font-medium text-text-primary">{getCharacterName(rel.toCharacterId)}</span>
                 <span className="text-text-muted">：</span>
                 {isEditing ? (
-                  <CInput
-                    value={rel.label}
-                    onChange={(e) => handleUpdateRelation(rel.id!, { label: e.target.value })}
-                    className="bg-bg-base border border-border rounded px-2 py-1 text-sm text-text-primary flex-1"
-                    placeholder="关系标签，如：父子、宿敌、暗恋对象"
-                  />
+                  <RelationTextField relation={rel} field="label" scope={workspaceScope} />
                 ) : (
                   <span className="text-accent font-medium">{rel.label || '未命名关系'}</span>
                 )}
@@ -533,13 +570,7 @@ export default function CharacterRelationPanel({ project, worldGroupId, initialR
               {isEditing && (
                 <div className="mt-3 pt-3 border-t border-border">
                   <label className="block text-xs text-text-muted mb-1">关系描述</label>
-                  <CTextarea
-                    value={rel.description}
-                    onChange={(e) => handleUpdateRelation(rel.id!, { description: e.target.value })}
-                    rows={3}
-                    className="w-full bg-bg-base border border-border rounded-lg px-3 py-2 text-sm text-text-primary placeholder-text-muted resize-none focus:outline-none focus:border-accent"
-                    placeholder="描述这段关系的背景、变化、冲突等..."
-                  />
+                  <RelationTextField relation={rel} field="description" scope={workspaceScope} />
                 </div>
               )}
             </div>
