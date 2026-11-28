@@ -59,7 +59,7 @@ it('isolates actual Work and World partitions, denies readonly overview and neve
   await expect(saveHistoryKeywordDraftsV1({ ...f.origin, scope: { ...f.scope, workId: other.scope.workId }, expectedRevision: null, value: f.value })).rejects.toThrow()
   await db.projects.update(f.scope.projectId, { enableMultiWorld: true })
   await expect(saveHistoryKeywordDraftsV1({ ...f.origin, expectedRevision: null, value: f.value })).rejects.toThrow('具体历史分区')
-  const now = Date.now(), groupId = await db.worldGroups.add({ projectId: f.scope.projectId, worldId: f.scope.worldId, name: '灰潮世界组', icon: '🌊', order: 0, createdAt: now, updatedAt: now }) as number
+  const now = Date.now(), groupId = await db.worldGroups.add({ projectId: f.scope.projectId, worldId: f.scope.worldId, description: '', type: 'custom', name: '灰潮世界组', icon: '🌊', order: 0, createdAt: now, updatedAt: now }) as number
   const origin = { ...f.origin, worldGroupId: groupId }
   const saved = await saveHistoryKeywordDraftsV1({ ...origin, expectedRevision: null, value: f.value })
   expect((await readHistoryKeywordDraftsV1(origin)).revision).toBe(saved.revision)

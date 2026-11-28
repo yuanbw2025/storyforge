@@ -82,7 +82,7 @@ describe('HEALTH-5 · 构建产物体积预算', () => {
       fs.writeFileSync(path.join(distDir, 'assets', filename), 'x'.repeat(BUNDLE_BUDGETS.scriptChunk.raw + 1))
     }
     const result = checkBundleBudget(distDir)
-    expect(result.violations.map(item => item.filename)).toEqual(['ai-context-test.js', 'world-input-contracts-test.js'])
-    expect(result.violations.every(item => item.category === 'scriptChunk' && item.budget === BUNDLE_BUDGETS.scriptChunk)).toBe(true)
+    expect(result.violations.map((item: { filename: string }) => item.filename)).toEqual(['ai-context-test.js', 'world-input-contracts-test.js'])
+    expect(result.violations.every((item: { category: string; budget: unknown }) => item.category === 'scriptChunk' && item.budget === BUNDLE_BUDGETS.scriptChunk)).toBe(true)
   })
 })
