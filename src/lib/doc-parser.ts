@@ -1,7 +1,7 @@
 /**
  * 多格式文档文本抽取器
  *
- * 2026-05-11 增加 — 支持 txt / md / csv / pdf / docx 五种格式。
+ * 支持 txt / md / csv / pdf / docx / xlsx；旧格式的文本投影保持不变。
  * .doc（Word 97-2003 二进制格式）mammoth 不支持，会抛明确错误提示用户转成 .docx。
  *
  * 所有大小限制是「本地文件大小上限」，与 AI 一次处理能力无关——
@@ -9,6 +9,7 @@
  */
 // Vite URL import — pdfjs 的 worker 必须走 URL 引入（仅 URL 字符串，不进主包）
 import { parseCsvGridV1, type CsvGridV1 } from './import/csv-grid'
+import { XLSX_MAX_FILE_BYTES_V1 } from './import/xlsx-text'
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.mjs?url'
 
 // pdfjs / mammoth 体积大（~870KB）且仅在用户导入文件时才需要，改为动态导入按需加载，
@@ -21,6 +22,7 @@ export const FILE_SIZE_LIMITS = {
   csv:  2 * 1024 * 1024,  // 2 MB
   pdf: 20 * 1024 * 1024,  // 20 MB —— pdfjs 能吃更大，但 20M 以上浏览器内抽文本很慢
   docx: 10 * 1024 * 1024, // 10 MB
+  xlsx: XLSX_MAX_FILE_BYTES_V1,
 } as const
 
 export type SupportedExt = keyof typeof FILE_SIZE_LIMITS
@@ -29,7 +31,7 @@ export type SupportedExt = keyof typeof FILE_SIZE_LIMITS
 export const UNSUPPORTED_EXTS = ['doc'] as const
 
 /** 浏览器 <input accept> 字符串 */
-export const ACCEPT_ATTR = '.txt,.md,.csv,.pdf,.docx'
+export const ACCEPT_ATTR = '.txt,.md,.csv,.pdf,.docx,.xlsx'
 
 /** 人类可读的大小说明（给 UI 用） */
 export const FILE_LIMIT_HINTS: Array<{ ext: string; label: string; mb: number }> = [
@@ -38,6 +40,7 @@ export const FILE_LIMIT_HINTS: Array<{ ext: string; label: string; mb: number }>
   { ext: 'csv',  label: 'CSV',      mb: FILE_SIZE_LIMITS.csv  / 1024 / 1024 },
   { ext: 'pdf',  label: 'PDF',      mb: FILE_SIZE_LIMITS.pdf  / 1024 / 1024 },
   { ext: 'docx', label: 'Word',     mb: FILE_SIZE_LIMITS.docx / 1024 / 1024 },
+  { ext: 'xlsx', label: 'Excel / WPS 表格', mb: FILE_SIZE_LIMITS.xlsx / 1024 / 1024 },
 ]
 
 export interface ExtractResult {
@@ -54,6 +57,9 @@ export interface ExtractResult {
   diagnostics: ExtractDiagnosticsV1
   /** 032-L1-c：仅 csv 扩展名且 status===ok 时填入；纯只读对照侧车，不参与 AI/adopt/persistence。 */
   csvGrid?: CsvGridV1
+  /** 新格式的保真边界，必须随抽取结果展示给作者。 */
+  formatNotices?: string[]
+  sheetCount?: number
 }
 
 /** 032-L1-a 阈值：PDF 全篇非空白字符下限。低于此值视为"没有可复制文本层"
@@ -127,8 +133,13 @@ export function textLayerReportLineV1(input: {
 }
 
 /** 统一入口：给一个 File，返回提取到的纯文本 */
-export async function extractTextFromFile(file: File): Promise<ExtractResult> {
+export async function extractTextFromFile(file: File, options: { signal?: AbortSignal } = {}): Promise<ExtractResult> {
   const extRaw = file.name.split('.').pop()?.toLowerCase() || ''
+  options.signal?.throwIfAborted()
+
+  if (extRaw === 'xls' || extRaw === 'xlsm' || extRaw === 'xlsb') {
+    throw new Error(`.${extRaw} 暂不支持，请在 Excel / WPS 中另存为无宏 .xlsx 后上传；原文件未改动。`)
+  }
 
   // 明确不支持的
   if ((UNSUPPORTED_EXTS as readonly string[]).includes(extRaw)) {
@@ -172,6 +183,12 @@ export async function extractTextFromFile(file: File): Promise<ExtractResult> {
     }
     case 'pdf':  return extractPdf(file)
     case 'docx': return extractDocx(file)
+    case 'xlsx': {
+      const { extractXlsxTextV1 } = await import('./import/xlsx-text')
+      const result = await extractXlsxTextV1(file, options.signal)
+      return { text: result.text, rawChars: result.text.length, sheetCount: result.sheetCount,
+        formatNotices: [result.notice], ...assessExtractionQualityV1({ format: 'plain', text: result.hasContent ? result.text : '' }) }
+    }
   }
 }
 

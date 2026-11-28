@@ -142,7 +142,7 @@ describe('032-L1-c extractTextFromFile csv sidecar', () => {
   })
 
   it('preserves ACCEPT_ATTR / .doc refusal wording unchanged', () => {
-    expect(ACCEPT_ATTR).toBe('.txt,.md,.csv,.pdf,.docx')
+    expect(ACCEPT_ATTR).toBe('.txt,.md,.csv,.pdf,.docx,.xlsx')
     expect(async () => extractTextFromFile(new File(['legacy'], 'old.doc')))
       .rejects.toThrow('Word 97-2003 二进制格式')
   })
