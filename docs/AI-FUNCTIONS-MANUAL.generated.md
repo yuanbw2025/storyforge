@@ -418,8 +418,7 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 | `product-production-artifacts` | `productBuildArtifacts` | `PRODUCT_PRODUCTION_ARTIFACT_POLICY + AVG_PROFESSIONAL_OUTPUTS_V1 + assertAvgMediaRawProducerAdmissionV2 + PROJECT_TABLES` | `src/lib/product-production/commands.ts`<br/>`src/lib/product-production/artifact-store.ts`<br/>`src/lib/product-production/text-adventure-artifact-store.ts`<br/>`src/lib/avg/author-artifacts.ts`<br/>`src/lib/product-production/adoption.ts`<br/>`src/lib/product-production/scheduler.ts` | 2027-08-21 |
 | `product-production-release-adoption` | `productReleases` | `PRODUCT_PRODUCTION_PACKAGE_ADOPTION_V1 + PRODUCT_DISTRIBUTION_BUNDLE_V2 + PROJECT_TABLES + product validators` | `src/lib/product/releases.ts`<br/>`src/lib/product-production/adoption.ts`<br/>`src/lib/product-platform/distribution-bundle.ts` | 2027-08-21 |
 | `ttrpg-rule-pack-library` | `ttrpgRulePacks` | `RULE_PACK_V1 parser + fixture verifier + immutable version identity + PROJECT_TABLES` | `src/lib/ttrpg/rule-pack-library.ts` | 2027-08-21 |
-| `history-keyword-content-v1` | `agentEvents` | `HistoryKeywordContentSnapshotV1 + exact host draft/field request + author selection + original CAS/native Master receipt` | `src/lib/history/keyword-content.ts` | 2027-02-28 |
-| `history-keyword-suggestions-v1` | `agentEvents` | `HistoryKeywordSuggestionsSnapshotV1 + original author-draft message CAS + original Master confirmation and atomic receipt` | `src/lib/history/keyword-suggestions.ts` | 2027-02-28 |
+| `history-keyword-suggestions-v1` | `agentEvents` | `HistoryKeywordSuggestionsSnapshotV1 / HistoryKeywordContentSnapshotV1 + exact request/selection + original author-draft message CAS + original Master confirmation and atomic receipt` | `src/lib/history/keyword-suggestions.ts`<br/>`src/lib/history/keyword-content.ts` | 2027-02-28 |
 | `narrative-annotation-historicalTimelineEvents` | `historicalTimelineEvents` | `PROJECT_TABLES.worldSemantic.projector + FIELD_REGISTRY + source hash CAS` | `src/lib/world-engine/narrative-domain-authoring.ts`<br/>`src/lib/narrative-domain/lifecycle.ts`<br/>`src/lib/agent/run/narrative-annotation-durable.ts` | 2027-01-01 |
 | `narrative-annotation-importantLocations` | `importantLocations` | `PROJECT_TABLES.worldSemantic.projector + FIELD_REGISTRY + source hash CAS` | `src/lib/world-engine/narrative-domain-authoring.ts`<br/>`src/lib/narrative-domain/lifecycle.ts`<br/>`src/lib/agent/run/narrative-annotation-durable.ts` | 2027-01-01 |
 | `narrative-annotation-characterRelations` | `characterRelations` | `PROJECT_TABLES.worldSemantic.projector + FIELD_REGISTRY + source hash CAS` | `src/lib/world-engine/narrative-domain-authoring.ts`<br/>`src/lib/narrative-domain/lifecycle.ts`<br/>`src/lib/agent/run/narrative-annotation-durable.ts` | 2027-01-01 |
@@ -614,4 +613,4 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 
 ---
 
-生成时间基准:commit `94440a95c`
+生成时间基准:commit `30b58f9e3`

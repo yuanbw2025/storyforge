@@ -21,9 +21,24 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261128-history061-keyword-draft-extension-v1.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261128-history061-keyword-content-v1.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
+      {
+        "path": "tests/acceptance/narrative-world/domain-projection-20261128-history061-keyword-draft-extension-v1.json",
+        "sha256": "64b14d26955cea39b14d442f0562c2eb9d2ee32800ae05ae03afdf66afb2487d",
+        "note": "Preserve delivered PR830 private-draft extension receipt before keyword-content selected-field integration. Compare deterministic outcomes and known gaps unchanged; no model, release or human acceptance inferred."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/ir-contract-20261128-history061-keyword-draft-extension-v1.json",
+        "sha256": "650b285e64f4ba0c4802e72762e3b5659e3b3cbe7b72a4499be3b1d31e8e879a",
+        "note": "Preserve delivered PR830 private-draft extension receipt before keyword-content selected-field integration. Compare deterministic outcomes and known gaps unchanged; no model, release or human acceptance inferred."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261128-history061-keyword-draft-extension-v1.json",
+        "sha256": "123168d0aa694c9941c502e25281566d17812075683718fae5aedee2a5e2c074",
+        "note": "Preserve delivered PR830 private-draft extension receipt before keyword-content selected-field integration. Compare deterministic outcomes and known gaps unchanged; no model, release or human acceptance inferred."
+      },
       {
         "path": "tests/acceptance/narrative-world/domain-projection-20261128-history061-keyword-suggestions-v1.json",
         "sha256": "d89b092f23e1e594da02c31c328953133313c74f73cb86a720f68b9b69969183",
