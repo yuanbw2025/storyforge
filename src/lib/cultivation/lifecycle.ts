@@ -5,6 +5,7 @@ import {
   cultivationLifecycleTableV1,
   detachCultivationProgressSystems,
   refreshCultivationProgressStageSources,
+  verifyCultivationReferencePatchV1,
 } from './progress-lifecycle'
 
 /** 必须在 transactionTablesForReferences('cultivationSystems') 的 rw 事务中调用。 */
@@ -71,13 +72,15 @@ export async function clearRemovedCultivationStageReferences(
   for (const character of characters) {
     if (character.id != null && character.cultivationSystemId === systemId
       && character.cultivationStageId && removedStageIds.has(character.cultivationStageId)) {
-      await updateCharacter(character.id, { cultivationStageId: null, updatedAt: Date.now() })
+      const patch = { cultivationStageId: null, updatedAt: Date.now() }
+      await verifyCultivationReferencePatchV1(characterTable, character, patch, await updateCharacter(character.id, patch))
     }
   }
   for (const entry of entries) {
     if (entry.id != null && entry.cultivationSystemId === systemId
       && entry.cultivationStageId && removedStageIds.has(entry.cultivationStageId)) {
-      await updateEntry(entry.id, { cultivationStageId: null, updatedAt: Date.now() })
+      const patch = { cultivationStageId: null, updatedAt: Date.now() }
+      await verifyCultivationReferencePatchV1(entryTable, entry, patch, await updateEntry(entry.id, patch))
     }
   }
 }
