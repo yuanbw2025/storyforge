@@ -21,9 +21,24 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261128-history061-keyword-content-v1.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261128-history061-joint-text-v1.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
+      {
+        "path": "tests/acceptance/narrative-world/domain-projection-20261128-history061-keyword-content-v1.json",
+        "sha256": "d8ebec13b0fa65d096f6be181e478ef3f03939aa15c3b28211e104afc5e784bf",
+        "note": "Preserve measured keyword content receipt before original history text Skill gains one-call joint drafting with independent selection. Compare deterministic outcomes and known gaps unchanged; no model, release or human acceptance inferred."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/ir-contract-20261128-history061-keyword-content-v1.json",
+        "sha256": "d72570b23fc9da32aa81e99c9653be214c30573a079563f895ae5a8ad82a4153",
+        "note": "Preserve measured keyword content receipt before original history text Skill gains one-call joint drafting with independent selection. Compare deterministic outcomes and known gaps unchanged; no model, release or human acceptance inferred."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261128-history061-keyword-content-v1.json",
+        "sha256": "a35268c9ca7a5ab42d85c0a7eb8914be1427e041d4db0d3d26264fc4d9aa1f08",
+        "note": "Preserve measured keyword content receipt before original history text Skill gains one-call joint drafting with independent selection. Compare deterministic outcomes and known gaps unchanged; no model, release or human acceptance inferred."
+      },
       {
         "path": "tests/acceptance/narrative-world/domain-projection-20261128-history061-keyword-draft-extension-v1.json",
         "sha256": "64b14d26955cea39b14d442f0562c2eb9d2ee32800ae05ae03afdf66afb2487d",
