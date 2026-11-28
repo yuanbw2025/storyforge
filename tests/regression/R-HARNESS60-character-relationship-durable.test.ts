@@ -159,7 +159,7 @@ describe.sequential('R-HARNESS60 · 角色关系 durable 提取与采纳', () =>
     expect(source).not.toContain('syncRelationToCharacterFields')
     expect(source).toContain('generateCharacterRelationshipCandidateV1')
     expect(source).toContain('adoptCharacterRelationshipCandidateV1')
-    expect(source).toContain('await addRelation(relation)')
+    expect(source).toContain('await addRelation(relation, workspaceScope)')
   })
 
   it('采纳八个持久化边界逐一中断均恢复同一 Run，且只产生一条正式关系', async () => {
