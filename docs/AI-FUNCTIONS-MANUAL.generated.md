@@ -427,8 +427,8 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 
 | category | 触发文件 |
 |---|---|
-| `agent.orchestrator` | `src/lib/agent/orchestrator.ts:893` |
-| `agent.orchestrator.replan` | `src/lib/agent/orchestrator.ts:1008` |
+| `agent.orchestrator` | `src/lib/agent/orchestrator.ts:900` |
+| `agent.orchestrator.replan` | `src/lib/agent/orchestrator.ts:1015` |
 | `agent.readonly` | `src/lib/agent/client-adapter.ts:118` |
 | `authoring.ttrpg-campaign` | `src/lib/ttrpg/campaign-proposal-harness.ts:438` |
 | `canon.narrative.extract` | `src/lib/agent/run/narrative-annotation-durable.ts:218` |
@@ -506,10 +506,11 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 
 ## 五、正式 AI 入口（FormalAIEntryBindingV1）
 
-共 77 个操作级绑定。运行时按 entryId 校验 category 和 Skill；采纳权限不由文字说明决定。显式 outputModality=audio/image 分别使用冻结音频执行器或临时图片预览执行器，文本入口不补默认字段。
+共 78 个操作级绑定。运行时按 entryId 校验 category 和 Skill；采纳权限不由文字说明决定。显式 outputModality=audio/image 分别使用冻结音频执行器或临时图片预览执行器，文本入口不补默认字段。
 
 | entryId | Skill | category | 边界 | 候选 | 采纳目标 | 调用方 |
 |---|---|---|---|---|---|---|
+| `world.power-authoring` | `world-origin.power-authoring` | `agent.world-foundation.power-authoring` | formal / durable-run | `power-authoring-candidate-v1` | `worldviews`<br/>`powerSystems`<br/>`cultivationSystems` | `src/lib/agent/power-authoring-copilot.ts` |
 | `world.worldview-field.v2` | `world-origin.worldview-field.v2` | `agent.world-origin.worldview-field.v2` | formal / durable-run | `worldview-field-candidate-v2` | `worldviews` | `src/lib/agent/run/worldview-field-v2-durable.ts` |
 | `world.codex.extract.v2` | `world-origin.codex-extract.v2` | `codex.extract` | formal / durable-run | `codex-extraction-candidate-v2` | `codexEntries` | `src/lib/agent/run/codex-extraction-v2-runtime.ts` |
 | `world.map.paint-preview` | `world-origin.map-config` | `geography.world-map-paint` | auxiliary / authoring-draft / image | `map-paint-image-preview` | 禁止 | `src/lib/world-map/atlas/paint-preview.ts` |
@@ -602,4 +603,4 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 
 ---
 
-生成时间基准:commit `73ab20d5c`
+生成时间基准:commit `1c510ba2e`
