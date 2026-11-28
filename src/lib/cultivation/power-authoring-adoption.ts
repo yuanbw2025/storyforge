@@ -153,7 +153,15 @@ export async function adoptPowerAuthoringInTransactionV1(untrusted: AdoptPowerAu
       || await hashCanonicalValue(actual) !== await hashCanonicalValue({ ...before.snapshot.record, ...prepared.patch, updatedAt })) fail('力量采纳后态不匹配，已回滚')
     return { written: [{ id: intent.edit.recordId, fields }], unknown: [], typeErrors: [], fkErrors: [], skipped: [] }
   }
-  if (owner) return Dexie.waitFor(write(owner.transaction))
+  if (owner) {
+    try { return await Dexie.waitFor(write(owner.transaction)) }
+    catch (error) {
+      // A Run may catch the domain error in order to journal it. It must not
+      // thereby commit the field or any earlier reference lifecycle writes.
+      if (owner.transaction.active) owner.transaction.abort()
+      throw error
+    }
+  }
   return db.transaction('rw', tables, () => {
     const transaction = Dexie.currentTransaction!
     return Dexie.waitFor(write(transaction))

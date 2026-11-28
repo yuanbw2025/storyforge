@@ -46,11 +46,28 @@ test('048 native exact power adoption rolls back with its Run owner, preserves o
       return Dexie.Promise.resolve(adopt(request,{transaction})).then(()=>{throw new Error('synthetic receipt fault')})
     })}catch(cause){error=cause instanceof Error?cause.message:String(cause)}
     const rolledBack=await read()
+    const originalUpdate=db.cultivationProgress.update
+    let caughtLifecycle='',caughtTransaction='',nativeAborted=false
+    db.cultivationProgress.update=(async()=>0) as typeof db.cultivationProgress.update
+    try{await db.transaction('rw',policy.powerAuthoringTransactionTablesV1('cultivationSystems'),()=>{
+      const transaction=Dexie.currentTransaction!
+      transaction.idbtrans!.addEventListener('abort',()=>{nativeAborted=true},{once:true})
+      return Dexie.Promise.resolve(adopt(request,{transaction})).catch(cause=>{caughtLifecycle=String(cause)})
+    })}catch(cause){caughtTransaction=cause instanceof Error?cause.name:String(cause)}
+    finally{db.cultivationProgress.update=originalUpdate}
+    const caughtRolledBack=await read()
     const receipt=await adopt(request),saved=await read()
-    return {before,rolledBack,error,receipt,saved}
+    return {before,rolledBack,error,caughtLifecycle,caughtTransaction,nativeAborted,caughtRolledBack,receipt,saved}
   },seeded)
   expect(result.error).toContain('synthetic receipt fault')
   expect(result.rolledBack).toEqual(result.before)
+  expect(result.caughtLifecycle).toContain('0行')
+  // Dexie may surface AbortError or PrematureCommitError after an explicitly
+  // aborted body swallows its inner error. Native abort + full readback prove
+  // rollback; the wrapper error name is not evidence of commit or rollback.
+  expect(result.caughtTransaction).not.toBe('')
+  expect(result.nativeAborted).toBe(true)
+  expect(result.caughtRolledBack).toEqual(result.before)
   expect(result.receipt.written).toEqual([{id:seeded.id,fields:['stages']}])
   expect(JSON.parse(result.saved.system!.stages)).toEqual(JSON.parse(result.before.system!.stages).slice(0,3))
   expect(result.saved.character).toMatchObject({cultivationSystemId:seeded.id,cultivationStageId:null})

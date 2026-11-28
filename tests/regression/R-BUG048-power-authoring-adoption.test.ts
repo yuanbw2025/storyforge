@@ -145,3 +145,22 @@ it('keeps Canon source status in the same native adoption and refuses a false ze
  await adopt(input)
  expect((await db.temporalFacts.get(factId))!.status).toBe('stale')
 })
+
+it('aborts an original Run transaction even if its caller catches a lifecycle failure after the formal write', async () => {
+ const f=await fixture(), r=await refs(f), edit:PowerAuthoringTargetV1={table:'cultivationSystems',recordId:f.id,field:'stages'}
+ const input=await intent(f,edit,{version:1,updates:[],additions:[],removals:['merge']})
+ const before=await readPowerAuthoringBaselineV1(f.powerScope,edit)
+ input.powerAuthoring.confirmedRemovalHash=await powerRemovalImpactHashV1(before,['merge'])
+ const zero=vi.spyOn(db.cultivationProgress,'update').mockResolvedValueOnce(0)
+ let caught=''
+ try{
+  await expect(db.transaction('rw',powerAuthoringTransactionTablesV1('cultivationSystems'),()=>{
+   const transaction=Dexie.currentTransaction!
+   return Dexie.Promise.resolve(adopt(input,{transaction})).catch(error=>{caught=String(error)})
+  })).rejects.toThrow()
+ }finally{zero.mockRestore()}
+ expect(caught).toContain('0行')
+ expect((await db.cultivationSystems.get(f.id))!.stages).toBe(stages)
+ expect((await db.characters.get(r.character))!.cultivationStageId).toBe('merge')
+ expect((await db.cultivationProgress.get(r.progress))!.status).toBe('confirmed')
+})
