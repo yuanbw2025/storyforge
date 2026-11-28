@@ -17,7 +17,20 @@ export async function verifyDiagnosticContext(app, page, launch) {
   assert.equal(await page.evaluate(() => window.localStorage.getItem('storyforge-diagnostic-context-v1')), null)
   const directory = await app.evaluate(({app}) => app.getPath('userData'))
   const writeProbe = await beginDiagnosticWriteProbe(app, directory)
+  /** @type {import('playwright').JSHandle<{ finish(): number[] }> | undefined} */
+  let rendererProbe
+  let smokeFailed = false
+  let receiptFailed = false
+  /** @type {unknown} */
+  let receiptError
   try {
+    rendererProbe = await page.evaluateHandle(() => {
+      const original = Date.now
+      /** @type {number[]} */
+      const clocks = []
+      Date.now = () => { const at = original(); if (clocks.length < 128) clocks.push(at); return at }
+      return { finish() { Date.now = original; return clocks } }
+    })
     // Use the installed operation collector: a direct IPC fixture can be replaced
     // by a later real UI update. Button content must never enter the stored trail.
     await page.evaluate(() => {
@@ -36,16 +49,46 @@ export async function verifyDiagnosticContext(app, page, launch) {
     }, { timeout: 10000, message: 'Real operation trail must reach native storage before the crash' }).toMatchObject({
       enabled: true, trail: expect.arrayContaining([expect.objectContaining({action:'save'})]),
     })
+    // Sixteen independent real events fit inside the existing 20-step trail.
+    // Fail on the first missing exact event; these are not retries of a failure.
+    for (let sample = 1; sample <= 16; sample++) {
+      await page.locator('#native-diagnostic-save-probe').click()
+      const expected = await page.evaluate(() => {
+        const rows = JSON.parse(window.localStorage.getItem('storyforge-operation-trail-v1') ?? '[]')
+        const step = Array.isArray(rows) ? rows.at(-1) : undefined
+        return { at: typeof step?.at === 'string' ? Date.parse(step.at) : NaN, action: step?.action === 'save' ? 'save' : null }
+      })
+      assert.ok(Number.isFinite(expected.at)); assert.equal(expected.action, 'save')
+      console.log('Synthetic native diagnostic event:', JSON.stringify({ sample, at: expected.at, action: expected.action }))
+      await expect.poll(async () => {
+        const state = JSON.parse(await readFile(join(directory, 'native-diagnostics.json'), 'utf8'))
+        return state.context?.trail?.some((/** @type {{ at?: string, action?: string }} */ step) => step.action === 'save' && typeof step.at === 'string' && Date.parse(step.at) === expected.at) === true
+      }, { timeout: 10000, message: `Exact synthetic save event ${sample} must reach native storage` }).toBe(true)
+    }
   } catch (error) {
+    smokeFailed = true
     await preserveDiagnosticSmokeEvidence(app, page, directory).catch(() => console.warn('Synthetic diagnostic evidence unavailable'))
     throw error
   } finally {
-    const receipt = await writeProbe.evaluate(probe => probe.finish()).finally(() => writeProbe.dispose())
-    const output = join('release', 'native-smoke', process.platform)
-    await mkdir(output, { recursive: true })
-    await writeFile(join(output, 'diagnostic-write-receipt.json'), JSON.stringify(receipt, null, 2), { mode: 0o600 })
-    console.log('Synthetic native diagnostic write receipt:', JSON.stringify(receipt))
+    try {
+      let receipt
+      /** @type {number[]} */
+      let rendererClocks = []
+      try { receipt = await writeProbe.evaluate(probe => probe.finish()) }
+      finally {
+        try { rendererClocks = rendererProbe ? await rendererProbe.evaluate(probe => probe.finish()) : [] }
+        finally { await Promise.allSettled([writeProbe.dispose(), rendererProbe?.dispose()]) }
+      }
+      const output = join('release', 'native-smoke', process.platform)
+      await mkdir(output, { recursive: true })
+      await writeFile(join(output, 'diagnostic-write-receipt.json'), JSON.stringify({ ...receipt, rendererClocks }, null, 2), { mode: 0o600 })
+      console.log('Synthetic native diagnostic write receipt:', JSON.stringify({ ...receipt, rendererClocks }))
+    } catch (error) {
+      if (smokeFailed) console.warn('Synthetic receipt unavailable; the original smoke failure is retained')
+      else { receiptFailed = true; receiptError = error }
+    }
   }
+  if (receiptFailed) throw receiptError
   // Await the handle so the main-process listener is installed before the CDP
   // command can crash the renderer. The event may arrive before we read result.
   const observed = await app.evaluateHandle(({BrowserWindow}) => {

@@ -20,14 +20,15 @@ export async function beginDiagnosticWriteProbe(app, directory) {
     const errorCode = (/** @type {unknown} */ error) => error && typeof error === 'object' && 'code' in error && typeof error.code === 'string' && codes.has(error.code) ? error.code : 'OTHER'
     Date.now = () => {
       const at = original.now()
-      // Stack is inspected transiently, never retained. Return the exact original
-      // clock: do not fix a clock discrepancy or change production validation.
-      if (new Error().stack?.replaceAll('\\', '/').includes('/desktop/diagnostics.mjs:')) remember({ kind: 'diagnostic-clock', at })
+      // Keep the original value with minimal overhead. Stack construction can
+      // alter the very sub-millisecond boundary this probe must observe.
+      remember({ kind: 'main-clock', at })
       return at
     }
     fs.writeFileSync = (...args) => {
       if (args[0] !== file + '.tmp') return original.write(...args)
       const at = original.now()
+      remember({ kind: 'write-start', at })
       try {
         original.write(...args)
         // Only counts and the latest technical timestamp. Never retain file
@@ -43,7 +44,7 @@ export async function beginDiagnosticWriteProbe(app, directory) {
             }
           } catch { /* No raw parse error retained. */ }
         }
-        remember({ kind: 'write', at, result: 'ok', count, latestAt })
+        remember({ kind: 'write', at, finishedAt: original.now(), result: 'ok', count, latestAt })
       } catch (error) { remember({ kind: 'write', at, result: errorCode(error) }); throw error }
     }
     fs.renameSync = (...args) => {
