@@ -792,7 +792,12 @@ async function genericResources(
   const scopeIdentity = spec.homeWorldScoped && row.isCrossWorld === true
     ? '跨世界'
     : group?.projectId === row.projectId && isRagSelectionEnabledV1(group.ragPolicy, ['name']) ? `世界：${group.name}` : ''
-  const title = scopeIdentity ? `${baseTitle} · ${scopeIdentity}` : baseTitle
+  // Power rule records remain independent even when authors give them the same
+  // name. Preserve the registered portable record identity in the published
+  // title, so mandatory reads do not mistake distinct rules for competing Canon.
+  // Other resource kinds retain the existing same-name conflict protection.
+  const recordTitle = spec.name === 'powerSystems' ? `${baseTitle} · 规则记录 ${await hashCanonText(recordKey(spec, row))}` : baseTitle
+  const title = scopeIdentity ? `${recordTitle} · ${scopeIdentity}` : recordTitle
   const relations = await relationsForRow(spec, row)
   const refsByField = await Promise.all(fields.map(current => Promise.all(
     current.sourceFields.map(source => sourceRef(spec, row, source.key, source.exact)),
