@@ -1270,3 +1270,5 @@ export interface AssembleContextResult {
 }
 
 export type { AdoptHistoryKeywordSuggestionsInputV1 } from '../history/keyword-suggestions'
+
+export type { AdoptHistoryKeywordContentInputV1 } from '../history/keyword-content'

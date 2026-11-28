@@ -212,6 +212,7 @@ const actualCalls = []
 const actualTransports = []
 const scannedFiles = [
   'src/lib/agent/history-events-copilot.ts',
+  'src/lib/agent/history-keyword-content-copilot.ts',
   'src/lib/agent/history-keyword-suggestions-copilot.ts',
   'src/lib/agent/history-text-copilot.ts',
   'src/lib/agent/power-authoring-copilot.ts',

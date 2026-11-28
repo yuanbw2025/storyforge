@@ -1,3 +1,4 @@
+import { adoptHistoryKeywordContentV1, type AdoptHistoryKeywordContentInputV1 } from '../history/keyword-content'
 import { adoptHistoryKeywordSuggestionsV1, type AdoptHistoryKeywordSuggestionsInputV1 } from '../history/keyword-suggestions'
 import { adoptHistoryEventCreationInTransactionV1, type AdoptHistoryEventCreationInputV1 } from '../history/event-creation-adoption'
 /** 当前架构唯一的结构化采纳入口。只接受 FIELD_REGISTRY 的规范字段与规范类型。 */
@@ -111,12 +112,14 @@ function runRegisteredAdoptionTransaction<T>(owner: CallerOwnedAdoptionV1 | unde
   return body()
 }
 
+export function adopt(input: AdoptHistoryKeywordContentInputV1, owner?: CallerOwnedAdoptionV1): Promise<AdoptResult>
 export function adopt(input: AdoptHistoryKeywordSuggestionsInputV1, owner?: CallerOwnedAdoptionV1): Promise<AdoptResult>
 export function adopt(input: AdoptHistoryEventCreationInputV1, owner?: CallerOwnedAdoptionV1): Promise<AdoptResult>
 export function adopt(input: AdoptWorldHistoryTextInputV1, owner?: CallerOwnedAdoptionV1): Promise<AdoptResult>
 export function adopt(input: AdoptPowerAuthoringInputV1, owner?: CallerOwnedAdoptionV1): Promise<AdoptResult>
 export function adopt(input: AdoptInput, owner?: CallerOwnedAdoptionV1): Promise<AdoptResult>
-export async function adopt(input: AdoptInput | AdoptWorldHistoryTextInputV1 | AdoptPowerAuthoringInputV1 | AdoptHistoryEventCreationInputV1 | AdoptHistoryKeywordSuggestionsInputV1, owner?: CallerOwnedAdoptionV1): Promise<AdoptResult> {
+export async function adopt(input: AdoptInput | AdoptWorldHistoryTextInputV1 | AdoptPowerAuthoringInputV1 | AdoptHistoryEventCreationInputV1 | AdoptHistoryKeywordSuggestionsInputV1 | AdoptHistoryKeywordContentInputV1, owner?: CallerOwnedAdoptionV1): Promise<AdoptResult> {
+  if (isHistoryKeywordContentAdoptionV1(input)) return adoptHistoryKeywordContentV1(input, owner)
   if (isHistoryKeywordSuggestionsAdoptionV1(input)) return adoptHistoryKeywordSuggestionsV1(input, owner)
   if (input.target === 'agentEvents') throw new Error('[adopt] 关键词建议只可通过专用草稿确认入口，不得修改对话记录。')
   if (isHistoryEventCreationAdoptionV1(input)) return adoptHistoryEventCreationInTransactionV1(input, owner)
@@ -196,7 +199,10 @@ export async function adopt(input: AdoptInput | AdoptWorldHistoryTextInputV1 | A
   return adoptSingleton(scopedInput, fieldSpecs, tableSpec, result, owner)
 }
 
-function isHistoryKeywordSuggestionsAdoptionV1(input: AdoptInput | AdoptWorldHistoryTextInputV1 | AdoptPowerAuthoringInputV1 | AdoptHistoryEventCreationInputV1 | AdoptHistoryKeywordSuggestionsInputV1): input is AdoptHistoryKeywordSuggestionsInputV1 {
+function isHistoryKeywordContentAdoptionV1(input: AdoptInput | AdoptWorldHistoryTextInputV1 | AdoptPowerAuthoringInputV1 | AdoptHistoryEventCreationInputV1 | AdoptHistoryKeywordSuggestionsInputV1 | AdoptHistoryKeywordContentInputV1): input is AdoptHistoryKeywordContentInputV1 {
+  return Object.prototype.hasOwnProperty.call(input, 'historyKeywordContent')
+}
+function isHistoryKeywordSuggestionsAdoptionV1(input: AdoptInput | AdoptWorldHistoryTextInputV1 | AdoptPowerAuthoringInputV1 | AdoptHistoryEventCreationInputV1 | AdoptHistoryKeywordSuggestionsInputV1 | AdoptHistoryKeywordContentInputV1): input is AdoptHistoryKeywordSuggestionsInputV1 {
   return Object.prototype.hasOwnProperty.call(input, 'historyKeywordSuggestions')
 }
 function isHistoryEventCreationAdoptionV1(input: AdoptInput | AdoptWorldHistoryTextInputV1 | AdoptPowerAuthoringInputV1 | AdoptHistoryEventCreationInputV1): input is AdoptHistoryEventCreationInputV1 {

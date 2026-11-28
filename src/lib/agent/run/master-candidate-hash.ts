@@ -11,6 +11,7 @@ export function masterCandidateWriteTargetV1(payload: MasterCandidatePayload): s
     return `storyCores.${payload.storyCoreField}`
   }
   // The closed extension appends private author drafts; no canonical message field grant.
+  if (payload.skillId === 'world-origin.history-keyword-content') return 'agentEvents'
   if (payload.skillId === 'world-origin.history-keyword-suggestions') return 'agentEvents'
   if (payload.skillId === 'world-origin.history-events') return 'historicalTimelineEvents.title'
   if (payload.skillId === 'world-origin.history-text' && payload.historyTextRequest) return `histories.${payload.historyTextRequest.field}`

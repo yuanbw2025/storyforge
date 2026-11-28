@@ -198,6 +198,13 @@ const CORE_PROMPT_BASE_SEEDS: PromptSeed[] = [
     systemPrompt: '依据已确认世界、历史、纪年和已有关键词推荐相关新词，解释用途，新增前提标为待确认设想，不替作者编造个人意见。',
     userPromptTemplate: '作者方向：{{userHint}}\n已确认世界与历史：\n{{worldContext}}',
     variables: ['userHint', 'worldContext'], isActive: true,
+  },
+  {
+    scope: 'system', moduleKey: 'history.keyword-content', promptType: 'generate', name: '内置-历史关键词条目创作',
+    description: '仅为作者选中的关键词草稿及字段生成可编辑候选，逐字段确认后加入草稿。',
+    systemPrompt: '保留作者已填事实、创作意图和幻想边界。只输出固定草稿身份和本次字段；新增设想需可辨认，创作方向只是待确认建议。禁止改名、自动关联章节、替作者宣称意见或覆盖未选字段。',
+    userPromptTemplate: '作者方向：{{userHint}}\n已确认世界与历史：\n{{worldContext}}',
+    variables: ['userHint', 'worldContext'], isActive: true,
   },  // 1. 世界观-单维度生成
   {
     scope: 'system',
