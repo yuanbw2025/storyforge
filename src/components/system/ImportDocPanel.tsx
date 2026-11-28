@@ -638,7 +638,8 @@ export default function ImportDocPanel({ project, onNavigate }: Props) {
       />
 
       {/* 标题 + 介绍 */}
-      <ImportDocIntro chunkSize={chunkSize} automaticChunking={automaticChunking} />
+      <ImportDocIntro chunkSize={chunkSize} automaticChunking={automaticChunking}
+        docxStructure={filename || rawText ? source.docxStructure : recovery.docxStructure} />
 
       {/* 未完成会话提示 */}
       {unfinished && phase === 'idle' && (

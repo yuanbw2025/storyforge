@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { extractTextFromFile, textLayerReportLineV1 } from '../../../lib/doc-parser'
 import type { CsvGridV1 } from '../../../lib/import/csv-grid'
+import type { DocxStructureV1 } from '../../../lib/import/docx-structure'
 import { publishTextLayerNoticeV1, publishCsvGridViewV1 } from './ImportDocOverview'
 import { recoverFrozenImportSourceV1, registerBlobImportSourceV1, verifyBlobImportSourceV1 } from '../../../lib/import/frozen-source-recovery'
 import type { ImportSession } from '../../../lib/types/import-session'
@@ -18,6 +19,8 @@ export default function useImportSessionRecovery(projectId: number, activeWorldI
   const [textLayerBlocked, setTextLayerBlocked] = useState<string | null>(null)
   /** 032-L1-c：仅 csv blob 恢复成功时出现的只读侧车快照，不进 AI/adopt/persistence。 */
   const [csvGrid, setCsvGrid] = useState<CsvGridV1 | null>(null)
+  const scopeKey = `${projectId}:${activeWorldId}:${activeWorkId}`
+  const [docxPreview, setDocxPreview] = useState<{ key: string; value: DocxStructureV1 | null } | null>(null)
 
   useEffect(() => {
     if (!navigator.storage?.persist) return
@@ -28,6 +31,7 @@ export default function useImportSessionRecovery(projectId: number, activeWorldI
 
   useEffect(() => {
     let cancelled = false
+    setDocxPreview(null)
     const controller = new AbortController()
     const scan = async () => {
       const store = useImportSessionStore.getState()
@@ -73,7 +77,7 @@ export default function useImportSessionRecovery(projectId: number, activeWorldI
           setBlobRestored(true)
           return
         }
-        const result = await extractTextFromFile(file, { signal: controller.signal })
+        const result = await extractTextFromFile(file, { signal: controller.signal, includeDocxStructure: true })
         if (cancelled) return
         if (result.status === 'empty') {
           // 不切块、不登记块文本、不产生候选：扫描件恢复只能停在原件。
@@ -95,6 +99,7 @@ export default function useImportSessionRecovery(projectId: number, activeWorldI
         await readImportSessionAuthorityV1(session.id, projectId, frozen)
         if (cancelled) return
         registerChunkTexts(session.id, plans.map(plan => ({ index: plan.index, text: plan.text })))
+        setDocxPreview({ key: scopeKey, value: result.docxStructure ?? null })
         setBlobRestored(true)
       } catch (error) {
         console.error('[import] 从 Blob 恢复失败：', error)
@@ -105,7 +110,7 @@ export default function useImportSessionRecovery(projectId: number, activeWorldI
     }
     scan()
     return () => { cancelled = true; controller.abort() }
-  }, [activeWorldId, activeWorkId, projectId])
+  }, [activeWorldId, activeWorkId, projectId, scopeKey])
 
   return {
     unfinished,
@@ -114,12 +119,14 @@ export default function useImportSessionRecovery(projectId: number, activeWorldI
     restoringBlob,
     textLayerBlocked,
     csvGrid,
+    docxStructure: docxPreview?.key === scopeKey ? docxPreview.value : null,
     clearUnfinished: () => {
       setUnfinished(null)
       setBlobRestored(false)
       setTextLayerBlocked(null)
       publishTextLayerNoticeV1(null)
       setCsvGrid(null)
+      setDocxPreview(null)
       publishCsvGridViewV1(null)
     },
     clearReusable: () => setReusable(null),

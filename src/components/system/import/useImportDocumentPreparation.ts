@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { extractTextFromFile, textLayerReportLineV1, type ExtractResult } from '../../../lib/doc-parser'
 import type { CsvGridV1 } from '../../../lib/import/csv-grid'
+import type { DocxStructureV1 } from '../../../lib/import/docx-structure'
 import { publishCsvGridViewV1 } from './ImportDocOverview'
 import { chunkDocument, type ChunkPlan } from '../../../lib/import/chunker'
 import { detectVolumeStructure, type VolumeDetectResult } from '../../../lib/import/volume-detector'
@@ -29,6 +30,7 @@ export default function useImportDocumentPreparation() {
   const [textLayerBlocked, setTextLayerBlocked] = useState<TextLayerBlockedV1 | null>(null)
   /** 032-L1-c：仅 csv 成功抽取后出现的只读侧车快照，不进 AI/adopt/persistence。 */
   const [csvGrid, setCsvGrid] = useState<CsvGridV1 | null>(null)
+  const [docxStructure, setDocxStructure] = useState<DocxStructureV1 | null>(null)
   const lastUploadedFile = useRef<File | null>(null)
   const sourceReadSequence = useRef(0)
   useEffect(() => () => { sourceReadSequence.current++; readController.current?.abort() }, [])
@@ -52,6 +54,7 @@ export default function useImportDocumentPreparation() {
     setAutomaticChunking(true)
     setTextLayerBlocked(null)
     setCsvGrid(null)
+    setDocxStructure(null)
     publishCsvGridViewV1(null)
     setLoadingFile(true)
     lastUploadedFile.current = file
@@ -71,7 +74,7 @@ export default function useImportDocumentPreparation() {
         if (!streamed.hasText) setFileError('原文件没有可解析的正文。')
         return
       }
-      const result = await extractTextFromFile(file, { signal: controller.signal })
+      const result = await extractTextFromFile(file, { signal: controller.signal, includeDocxStructure: true })
       if (request !== sourceReadSequence.current) return
       if (result.status === 'empty') {
         // 不进入分块/候选/adopt，也不清掉已选文件：原件仍可由既有 saveBlob 路径存档。
@@ -83,6 +86,7 @@ export default function useImportDocumentPreparation() {
         return
       }
       setCsvGrid(result.csvGrid ?? null)
+      setDocxStructure(result.docxStructure ?? null)
       publishCsvGridViewV1(result.csvGrid ?? null)
       setRawText(result.text)
       const parts = [
@@ -112,6 +116,7 @@ export default function useImportDocumentPreparation() {
     setFilename('')
     setExtractInfo(null)
     setTextLayerBlocked(null); setFileError(null); setCsvGrid(null); publishCsvGridViewV1(null)
+    setDocxStructure(null)
     setRawText(text)
     setPlans(null)
     setShowConfirm(false)
@@ -172,6 +177,7 @@ export default function useImportDocumentPreparation() {
     previewPlans,
     textLayerBlocked,
     csvGrid,
+    docxStructure,
     handleFile,
     handleRawTextChange,
     prepareConfirmation,
