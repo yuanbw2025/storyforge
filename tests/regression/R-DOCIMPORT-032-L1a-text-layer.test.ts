@@ -25,9 +25,11 @@ vi.mock('pdfjs-dist/build/pdf.worker.mjs?url', () => ({ default: 'data:applicati
 vi.mock('pdfjs-dist', () => ({
   GlobalWorkerOptions: { workerSrc: '' },
   getDocument: vi.fn(() => ({
+    destroy: vi.fn(async () => {}),
     promise: Promise.resolve({
       numPages: state.pdfPages.length,
       getPage: async (pageNo: number) => ({
+        cleanup: vi.fn(() => true),
         getTextContent: async () => ({ items: (state.pdfPages[pageNo - 1] ?? []).map(str => ({ str })) }),
       }),
     }),
