@@ -1,3 +1,5 @@
+import { canonRowResourceKeysV1 } from '../context-gateway/canon-provider'
+import { db } from '../db/schema'
 import { executeRegisteredAIEntryV1 } from './formal-ai-entry'
 import Dexie, { type Transaction } from 'dexie'
 import { useAIConfigStore } from '../../stores/ai-config'
@@ -5,8 +7,8 @@ import { resolveRequestConfig, type ChatResult } from '../ai/client'
 import { appendSimplifiedChineseOutputConstraint } from '../ai/adapters/prompt-guards'
 import { prepareGenerationNode, type GenerationNode } from '../generation/generation-node'
 import { adopt } from '../registry/adopt'
-import type { AIConfig, ChatMessage, WorkspaceScope } from '../types'
-import { resolveReadScopeLike } from '../workspace/scope'
+import type { AIConfig, ChatMessage, WorkspaceScope, Worldview, PowerSystem } from '../types'
+import { readOwnedRows, resolveReadScopeLike } from '../workspace/scope'
 import { readPowerAuthoringBaselineV1, powerRemovalImpactHashV1, type PowerAuthoringBaselineV1 } from '../cultivation/power-authoring-adoption'
 import { decodePowerStagesStrictV1, preparePowerAuthoringEditV1, type PowerAuthoringScopeV1, type PowerAuthoringTargetV1 } from '../cultivation/power-authoring-contract'
 import { executeContextGatewayV1 } from '../context-gateway/execution'
@@ -58,7 +60,7 @@ export function powerAuthoringLabelV1(target: PowerAuthoringTargetV1): string {
   if (target.table === 'cultivationSystems' && target.field === 'stages') {
     return target.stageId ? ({ name: '阶段名称', features: '能力与限制', breakthrough: '突破与代价', parentStageIds: '前置阶段', tier: '阶段层级', branchLabel: '分支名称' })[target.stageField] : '整路径阶段规划'
   }
-  return ({ name: target.table === 'cultivationSystems' ? '路径名称' : '体系名称', description: target.table === 'cultivationSystems' ? '路径原理' : '体系总体', rules: '规则与代价', levels: '旧版层级说明', powerHierarchy: '世界力量概览' } as Record<string, string>)[target.field]
+  return ({ name: target.table === 'cultivationSystems' ? '路径名称' : '体系名称', description: target.table === 'cultivationSystems' ? '路径原理' : '规则明细·体系描述', rules: '规则与代价', levels: '旧版层级说明', powerHierarchy: '世界力量概览' } as Record<string, string>)[target.field]
 }
 export function powerAuthoringCurrentValueV1(snapshot: PowerAuthoringCopilotSnapshotV1): unknown {
   const { target } = snapshot.request
@@ -100,6 +102,14 @@ export function parsePowerAuthoringSnapshotV1(value: unknown): PowerAuthoringCop
   preparePowerCandidateV1(result, { version: 1, value: powerAuthoringCurrentValueV1(result) })
   return result
 }
+function assertPowerAuthoringAdmissionV1(scope: WorkspaceScope, transaction?: Transaction) {
+  const projects = transaction ? transaction.table(db.projects.name) : db.projects
+  const works = transaction ? transaction.table(db.works.name) : db.works
+  return Dexie.Promise.all([projects.get(scope.projectId), works.get(scope.workId)]).then(([project, work]) => {
+    if (!project || project.activeWorldId !== scope.worldId || project.activeWorkId !== scope.workId
+      || work?.kind !== 'novel' || work.novelProfile !== 'long' || work.projectId !== scope.projectId || work.worldId !== scope.worldId) throw new Error('力量创作入口需要当前活动的长篇作品；请回到原作品重新核对。')
+  })
+}
 async function assertSnapshotIntegrity(snapshot: PowerAuthoringCopilotSnapshotV1) {
   if (await hashCanonicalValue(snapshot.baseline.snapshot.record) !== snapshot.baseline.recordHash
     || await hashCanonicalValue(snapshot.baseline.references) !== snapshot.baseline.referenceHash) throw new Error('力量候选基线哈希不匹配。')
@@ -111,6 +121,7 @@ function assertSameScope(scope: WorkspaceScope, worldGroupId: number | null, sna
 export async function assertPowerAuthoringCandidateReadyV1(input: { scope: WorkspaceScope; worldGroupId: number | null; snapshot: PowerAuthoringCopilotSnapshotV1; draft: string }) {
   const snapshot = parsePowerAuthoringSnapshotV1(input.snapshot)
   assertSameScope(input.scope, input.worldGroupId, snapshot)
+  await assertPowerAuthoringAdmissionV1(input.scope)
   await assertSnapshotIntegrity(snapshot)
   const candidate = parsePowerAuthoringCandidateV1(input.draft, snapshot), prepared = preparePowerCandidateV1(snapshot, candidate)
   if (prepared.removedStageIds.length && candidate.confirmedRemovalHash !== await powerRemovalImpactHashV1(snapshot.baseline, prepared.removedStageIds)) throw new Error('请先核对并确认当前删除阶段及引用影响。')
@@ -122,8 +133,13 @@ export async function adoptRestoredPowerAuthoringCandidateV1(input: {
 }) {
   const snapshot = parsePowerAuthoringSnapshotV1(input.snapshot)
   assertSameScope(input.scope, input.worldGroupId, snapshot)
-  if (input.owner) await Dexie.waitFor(assertSnapshotIntegrity(snapshot))
-  else await assertSnapshotIntegrity(snapshot)
+  if (input.owner) {
+    await Dexie.waitFor(assertPowerAuthoringAdmissionV1(input.scope, input.owner.transaction))
+    await Dexie.waitFor(assertSnapshotIntegrity(snapshot))
+  } else {
+    await assertPowerAuthoringAdmissionV1(input.scope)
+    await assertSnapshotIntegrity(snapshot)
+  }
   const candidate = parsePowerAuthoringCandidateV1(input.draft, snapshot)
   return adopt({ target: snapshot.request.target.table, mode: 'replace', data: candidate.value, powerAuthoring: {
     scope: snapshot.scope, edit: snapshot.request.target, recordHash: snapshot.baseline.recordHash,
@@ -149,6 +165,7 @@ export async function preparePowerAuthoringCopilotV1(input: {
   const request = parsePowerAuthoringRequestV1(input.request)
   const scope = { ...await (input.scope ?? resolveReadScopeLike(input.projectId)), worldGroupId: input.worldGroupId }
   if (scope.projectId !== input.projectId) throw new Error('力量任务项目不匹配。')
+  await assertPowerAuthoringAdmissionV1(scope)
   const baseline = await readPowerAuthoringBaselineV1(scope, request.target)
   const snapshot = parsePowerAuthoringSnapshotV1({ version: 1, scope, request, baseline })
   await assertSnapshotIntegrity(snapshot)
@@ -159,10 +176,27 @@ export async function preparePowerAuthoringCopilotV1(input: {
   // Reuse the existing registered Canon record provider. Power and cultivation
   // records already publish worldview-field resources; no duplicate source/store.
   const targetKey = `worldview-field:${Reflect.get(baseline.snapshot.record, 'ragDocumentId')}`
+  const workspace = { projectId: scope.projectId, worldId: scope.worldId, workId: scope.workId }
+  const [worldviews, powerRules] = await Promise.all([
+    readOwnedRows<Worldview>(workspace, 'worldviews', { owner: 'world' }), readOwnedRows<PowerSystem>(workspace, 'powerSystems', { owner: 'world' }),
+  ])
+  const overviewKeys = await Promise.all(worldviews.filter(row => (row.worldGroupId ?? null) === input.worldGroupId && row.powerHierarchy?.trim()).map(async row => {
+    const key = (await canonRowResourceKeysV1('worldviews', { ...row })).fields.powerHierarchy
+    if (!key) throw new Error('共享力量概述缺少可验证原文来源，未调用模型。')
+    return key
+  }))
+  const ruleKeys = await Promise.all(powerRules.filter(row => (row.worldGroupId ?? null) === input.worldGroupId
+    && [row.name, row.description, row.levels, row.rules].some(value => value?.trim())).map(async row => {
+      const key = (await canonRowResourceKeysV1('powerSystems', { ...row })).record
+      if (!key) throw new Error('共享力量规则缺少可验证来源，未调用模型。')
+      return key
+    }))
+  const mandatoryKeys = [...new Set([targetKey, ...overviewKeys, ...ruleKeys])]
+
   const contextGatewayExecution = await executeContextGatewayV1({ modelConfig: config, skill, scope: { projectId: scope.projectId, worldId: scope.worldId, workId: scope.workId }, worldGroupId: input.worldGroupId,
     budgetTokens: Math.min(policy.maxInputTokens, skill.contextGateway!.maxRetrievedTokens),
     query: `为${powerAuthoringLabelV1(request.target)}生成候选。${input.authorRequest}。世界力量概览仅是背景，体系规则是通用机制，各路径 stages 是稳定 ID 阶段图；旧 levels 说明或词条不得替代 stages。`,
-    mandatoryResourceKeys: [targetKey], mandatoryFullResourceKeys: [targetKey], targetResourceKeys: [targetKey],
+    mandatoryResourceKeys: mandatoryKeys, mandatoryFullResourceKeys: mandatoryKeys, targetResourceKeys: [targetKey],
     additionalReadsEnabled: false, signal: input.signal })
   const assembled = assembleContextGatewayPacketV1(contextGatewayExecution, contextGatewayExecution.modelBudget?.inputBudget ?? policy.maxInputTokens)
   const state = projectContextGatewayInputStateV1(skill, contextGatewayExecution, assembled)
@@ -170,6 +204,7 @@ export async function preparePowerAuthoringCopilotV1(input: {
   const contextEvidence = attachAgentContextInputStateV1(evidenceFromContextResult(profile, assembled), state)
   contextEvidence.inputStateSourceKeys = contextGatewayInputStateSourceKeysV1(skill, contextGatewayExecution)
   const assertFresh = async () => {
+    await assertPowerAuthoringAdmissionV1(scope)
     const current = await readPowerAuthoringBaselineV1(scope, request.target)
     if (current.recordHash !== baseline.recordHash || current.referenceHash !== baseline.referenceHash) throw new Error('力量原记录或引用已变化，未继续生成；请重新核对。')
   }

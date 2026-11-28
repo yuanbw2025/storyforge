@@ -1,3 +1,5 @@
+import { exportProjectJSON, importProjectJSON } from '../../src/lib/export/json-export'
+import { stampNewRecord } from '../../src/lib/workspace/scope'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { useCultivationStore } from '../../src/stores/cultivation'
@@ -6,7 +8,7 @@ import { preparePowerAuthoringCopilotV1, parsePowerAuthoringRequestV1, parsePowe
 import { runGenerationNode } from '../../src/lib/generation/generation-node'
 import { createMasterAgentPlan } from '../../src/lib/agent/orchestrator'
 import { parseMasterAgentPlanV1, restoreMasterAgentCandidatesV1, runDurableMasterAgentPlanV1 } from '../../src/lib/agent/run/master-durable'
-import { commitMasterAgentCandidateAdoptionV1 } from '../../src/lib/agent/run/master-adoption'
+import { beginMasterAgentCandidateAdoptionV1, rejectMasterAgentCandidateV1, commitMasterAgentCandidateAdoptionV1 } from '../../src/lib/agent/run/master-adoption'
 import { verifyMasterAgentRunV1 } from '../../src/lib/agent/run/master-verification'
 import { getOrCreateAgentConversation, updateAgentEventCandidate } from '../../src/lib/agent/conversations'
 import { AgentTeamBudgetTracker } from '../../src/lib/agent/team-budget'
@@ -121,5 +123,64 @@ it('preserves an invalid author draft for correction and rejection without writi
   await updateAgentEventCandidate(candidate.event.id!, f.scope.projectId, JSON.stringify({ version: 1, value: '作者修正稿' }), f.scope)
   await commitMasterAgentCandidateAdoptionV1({ scope: f.scope, worldGroupId: null, runId: run.runId, candidateEventId: candidate.event.id! })
   expect(JSON.parse((await db.cultivationSystems.get(f.id))!.stages)[0].features).toBe('作者修正稿')
+  expect(run.fetch).toHaveBeenCalledTimes(1)
+})
+
+it('admits only the actual active longform Work before dispatch and refuses adoption after an active-Work switch', async () => {
+  const f = await fixture(), runAI = vi.fn(async () => '{"version":1,"value":"候选"}')
+  const input = { projectId: f.scope.projectId, scope: f.scope, worldGroupId: null, request: f.request, authorRequest: '定点测试' }
+  await db.works.update(f.scope.workId, { novelProfile: 'short' })
+  await expect(preparePowerAuthoringCopilotV1(input, { runAI })).rejects.toThrow('活动的长篇')
+  await db.works.update(f.scope.workId, { novelProfile: 'long' })
+  const prepared = await preparePowerAuthoringCopilotV1(input, { runAI })
+  await db.projects.update(f.scope.projectId, { activeWorkId: f.scope.workId + 100 })
+  await expect(prepared.runRaw(prepared.prepared.messages)).rejects.toThrow('活动的长篇')
+  await expect(adoptRestoredPowerAuthoringCandidateV1({ scope: f.scope, worldGroupId: null, snapshot: prepared.snapshot, draft: '{"version":1,"value":"候选"}' })).rejects.toThrow('活动的长篇')
+  expect(runAI).not.toHaveBeenCalled(); expect((await db.cultivationSystems.get(f.id))!.stages).toBe(f.stages)
+})
+
+it('reads the shared overview and every same-group rule record without inferring a parent or writing the first record', async () => {
+  const f = await fixture(), now = Date.now()
+  await db.worldviews.add(stampNewRecord(f.scope, 'worldviews', { projectId: f.scope.projectId, worldGroupId: null, powerHierarchy: '共享概述：世间热量守恒', createdAt: now, updatedAt: now }, { owner: 'world' }) as never)
+  const ids: number[] = []
+  for (const name of ['同名规则甲', '同名规则乙']) ids.push(await db.powerSystems.add(stampNewRecord(f.scope, 'powerSystems', { projectId: f.scope.projectId, worldGroupId: null, name, description: name + '独立说明', levels: name + '原等级', rules: name + '原规则', createdAt: now, updatedAt: now }, { owner: 'world' }) as never) as number)
+  const request: PowerAuthoringRequestV1 = { target: { table: 'powerSystems', recordId: ids[1], field: 'rules' }, allocatedStageIds: [] }
+  const prepared = await preparePowerAuthoringCopilotV1({ projectId: f.scope.projectId, scope: f.scope, worldGroupId: null, request, authorRequest: '只改乙规则' })
+  const prompt = prepared.prepared.messages.map(message => message.content).join('\n')
+  expect(prompt).toContain('世间热量守恒'); expect(prompt).toContain('同名规则甲原等级'); expect(prompt).toContain('同名规则乙原等级')
+  const first = await db.powerSystems.get(ids[0])
+  await adoptRestoredPowerAuthoringCandidateV1({ scope: f.scope, worldGroupId: null, snapshot: prepared.snapshot, draft: JSON.stringify({ version: 1, value: '只变更乙规则' }) })
+  expect(await db.powerSystems.get(ids[0])).toEqual(first)
+  expect((await db.powerSystems.get(ids[1]))!.rules).toBe('只变更乙规则')
+  expect((await db.cultivationSystems.get(f.id))!.stages).toBe(f.stages)
+})
+
+it('keeps an exported pending candidate as immutable history, cancels its local-ID execution after import and preserves both original and imported formal graphs', async () => {
+  const f = await fixture(), run = await runMaster(f)
+  const backup = await exportProjectJSON(f.scope.projectId), importedId = await importProjectJSON(backup)
+  expect(importedId).not.toBe(f.scope.projectId)
+  const imported = await db.agentRuns.where('projectId').equals(importedId).first()
+  expect(imported?.status).toBe('cancelled')
+  const events = await db.agentRunEvents.where('runId').equals(imported!.id!).toArray()
+  expect(events.some(event => event.type === 'run.cancelled' && JSON.parse(event.payloadJson).reason === 'project-import-nonportable-checkpoint')).toBe(true)
+  const importedSystem = await db.cultivationSystems.where('projectId').equals(importedId).first()
+  expect(importedSystem?.stages).toBe(f.stages)
+  expect((await db.cultivationSystems.get(f.id))!.stages).toBe(f.stages)
+  const importedCandidate = await db.agentEvents.where('projectId').equals(importedId).filter(event => event.kind === 'candidate').first()
+  expect(importedCandidate?.content).toBe(run.candidates[0].draft)
+  expect((await readAgentRunV1(f.scope, run.runId)).projection.state).not.toBe('cancelled')
+  expect(run.fetch).toHaveBeenCalledTimes(1)
+})
+
+it('keeps a source change between confirmation and commit rejectable as stale rather than trapping the original Run in running', async () => {
+  const f = await fixture(), run = await runMaster(f), ref = { scope: f.scope, worldGroupId: null, runId: run.runId, candidateEventId: run.candidates[0].event.id! }
+  await beginMasterAgentCandidateAdoptionV1(ref)
+  await db.cultivationSystems.update(f.id, { description: '确认之后作者更新原原理' })
+  await expect(commitMasterAgentCandidateAdoptionV1(ref)).rejects.toThrow('已变化')
+  const current = await readAgentRunV1(f.scope, run.runId)
+  expect(current.projection.steps[`master:${run.plan.tasks[0].id}`].status).toBe('stale')
+  await rejectMasterAgentCandidateV1(ref)
+  expect((await db.cultivationSystems.get(f.id))!.stages).toBe(f.stages)
+  expect((await db.cultivationSystems.get(f.id))!.description).toBe('确认之后作者更新原原理')
   expect(run.fetch).toHaveBeenCalledTimes(1)
 })

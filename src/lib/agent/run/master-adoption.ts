@@ -308,6 +308,15 @@ export async function beginMasterAgentCandidateAdoptionV1(
   return resolveCandidate(input)
 }
 
+async function stalePowerCandidateAfterSourceChangeV1(input: MasterAgentCandidateAdoptionRefV1, resolved: ResolvedMasterCandidateV1): Promise<void> {
+  if (resolved.candidate.payload.skillId !== 'world-origin.power-authoring') return
+  const current = await readAgentRunV1(input.scope, input.runId), step = current.projection.steps[resolved.stepId]
+  if (!step?.candidateHash || !['awaiting_confirmation', 'running'].includes(step.status) || step.candidateHash !== resolved.candidate.payload.candidateHash) return
+  await appendAgentRunEventV1({ scope: input.scope, runId: input.runId, type: 'candidate.staled',
+    payload: { stepId: resolved.stepId, candidateHash: step.candidateHash, reason: '力量采纳前原作用域、原记录、引用或上下文已变化。原候选保留，请核对后拒绝并重新生成。' },
+    expectedLastSequence: current.projection.lastSequence })
+}
+
 export async function commitMasterAgentCandidateAdoptionV1(
   input: MasterAgentCandidateAdoptionRefV1,
   dependencies: MasterAgentAdoptionDependenciesV1 = {},
@@ -333,7 +342,13 @@ export async function commitMasterAgentCandidateAdoptionV1(
 
   // Confirmation and the business write are separate crash-recovery boundaries;
   // re-check freshness immediately before the only Canon mutation.
-  await assertRequiredContextGatewayFresh(input, resolved)
+  try {
+    if (resolved.candidate.payload.skillId === 'world-origin.power-authoring') await assertPowerAuthoringCandidateReadyV1({ scope: input.scope, worldGroupId: resolved.snapshot.run.worldGroupId ?? null, snapshot: resolved.candidate.payload.baseSnapshot as PowerAuthoringCopilotSnapshotV1, draft: resolved.candidate.draft })
+    await assertRequiredContextGatewayFresh(input, resolved)
+  } catch (error) {
+    await stalePowerCandidateAfterSourceChangeV1(input, resolved)
+    throw error
+  }
 
   if (!startedFor(resolved.snapshot, resolved.stepId, resolved.candidate.payload.candidateHash!)) {
     await appendAgentRunEventV1({
@@ -392,6 +407,9 @@ export async function commitMasterAgentCandidateAdoptionV1(
               attempt: original.projection.steps[resolved.stepId].attempt, outputHash: resolved.candidate.payload.candidateHash! } })))
         }).then(succeeded => { snapshot = succeeded })
       })
+    }).catch(async error => {
+      if (error instanceof Error && error.message.includes('[PowerAuthoring] 原记录或引用已变化')) await stalePowerCandidateAfterSourceChangeV1(input, resolved)
+      throw error
     })
   } else {
   const adopt = dependencies.adopt ?? adoptMasterCandidate

@@ -42,7 +42,7 @@ export default function PowerSystemDetails({ project, initialRecordId, resizable
       <InlineInput value={record?.name ?? ''} localSave={localSave('name')} onChange={(name, intent) => save({ name }, intent)} placeholder="如：灵气修炼体系、魔法等级…"/>
     </div>
     <div className="grid gap-4 xl:grid-cols-2">{([
-      ['description', '体系总体', '简述力量体系的核心原理…'],
+      ['description', '规则明细·体系描述', '简述力量体系的核心原理…'],
       ['rules', '规则与代价', '修炼条件、突破瓶颈、禁忌…'],
     ] as const).map(([key, label, placeholder]) => <div key={key}>
       <h3 className="mb-1 text-sm font-medium">{label}<PowerAuthoringButtonV1 target={record?.id ? { table: 'powerSystems', recordId: record.id, field: key } : null}/></h3>

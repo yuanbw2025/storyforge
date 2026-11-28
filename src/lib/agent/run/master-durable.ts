@@ -151,6 +151,8 @@ export const MAX_MASTER_AGENT_REPLANS_V1 = 1
 const MAX_TASK_ID_CHARS = 80
 
 export interface MasterAgentPlanCheckpointV1 {
+  /** Power targets contain local record/scope IDs. Imported backups keep history, never resume it against remapped rows. */
+  portable?: false
   version: typeof MASTER_AGENT_PLAN_CHECKPOINT_VERSION_V1
   kind: typeof MASTER_AGENT_PLAN_CHECKPOINT_KIND_V1
   plan: MasterAgentPlan
@@ -922,14 +924,15 @@ function budgetEvidence(value: unknown, label: string): AgentTeamBudgetEvidence 
 
 function parsePlanCheckpoint(value: unknown): MasterAgentPlanCheckpointV1 {
   if (!isRecord(value)) fail('主 Agent 计划检查点必须是对象')
-  assertExactKeys(value, ['version', 'kind', 'plan', 'planHash', 'budgetEvidence'], '主 Agent 计划检查点')
+  assertKeysWithOptional(value, ['version', 'kind', 'plan', 'planHash', 'budgetEvidence'], ['portable'], '主 Agent 计划检查点')
+  if (value.portable !== undefined && value.portable !== false) fail('主 Agent 计划检查点 portable 无效')
   if (value.version !== MASTER_AGENT_PLAN_CHECKPOINT_VERSION_V1 || value.kind !== MASTER_AGENT_PLAN_CHECKPOINT_KIND_V1) {
     fail('主 Agent 计划检查点版本或类型不匹配')
   }
   const plan = parseMasterAgentPlanV1(value.plan)
   const planHash = readHash(value.planHash, '主 Agent 计划检查点 planHash')
   const parsedBudget = budgetEvidence(value.budgetEvidence, '主 Agent 计划检查点 budgetEvidence')
-  return { version: 1, kind: MASTER_AGENT_PLAN_CHECKPOINT_KIND_V1, plan, planHash, budgetEvidence: parsedBudget }
+  return { version: 1, kind: MASTER_AGENT_PLAN_CHECKPOINT_KIND_V1, plan, planHash, budgetEvidence: parsedBudget, ...(value.portable === false ? { portable: false } : {}) }
 }
 
 function taskStepId(taskId: string): string {
@@ -1217,6 +1220,7 @@ export async function replanDurableMasterAgentRunV1(
         resumePayload: {
           version: 1,
           kind: MASTER_AGENT_PLAN_CHECKPOINT_KIND_V1,
+          ...(nextPlan.tasks.some(task => task.skillId === 'world-origin.power-authoring') ? { portable: false as const } : {}),
           plan: nextPlan,
           planHash: nextPlanHash,
           budgetEvidence: parsedBudget,
@@ -1968,6 +1972,7 @@ export async function runDurableMasterAgentPlanV1(
     const checkpointPayload: MasterAgentPlanCheckpointV1 = {
       version: 1,
       kind: MASTER_AGENT_PLAN_CHECKPOINT_KIND_V1,
+      ...(plan.tasks.some(task => task.skillId === 'world-origin.power-authoring') ? { portable: false as const } : {}),
       plan,
       planHash: await hashMasterAgentPlanV1(plan),
       budgetEvidence: evidence,
@@ -3012,6 +3017,7 @@ export async function runDurableMasterAgentPlanV1(
           resumePayload: {
             version: 1,
             kind: MASTER_AGENT_PLAN_CHECKPOINT_KIND_V1,
+            ...(plan.tasks.some(task => task.skillId === 'world-origin.power-authoring') ? { portable: false as const } : {}),
             plan,
             planHash: await hashMasterAgentPlanV1(plan),
             budgetEvidence: budget.snapshot(),
@@ -3057,6 +3063,7 @@ export async function runDurableMasterAgentPlanV1(
               resumePayload: {
                 version: 1,
                 kind: MASTER_AGENT_PLAN_CHECKPOINT_KIND_V1,
+                ...(plan.tasks.some(task => task.skillId === 'world-origin.power-authoring') ? { portable: false as const } : {}),
                 plan,
                 planHash: await hashMasterAgentPlanV1(plan),
                 budgetEvidence: budget.snapshot(),
