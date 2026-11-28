@@ -7,6 +7,10 @@ on:
         type: choice
         default: all
         options: [all, windows, macos, android, arch, consent]
+      diagnostic_probe:
+        description: 'Explicit optional clock/filesystem probe for isolated Windows diagnosis'
+        type: boolean
+        default: false
   workflow_call:
     inputs:
       release:
@@ -72,7 +76,7 @@ jobs:
       GIT_CONFIG_KEY_0: core.longpaths
       GIT_CONFIG_VALUE_0: 'true'
       # Explicit Windows diagnosis only; formal reusable release jobs stay uninstrumented.
-      STORYFORGE_NATIVE_DIAGNOSTIC_PROBE: ${{ github.event_name == 'workflow_dispatch' && !inputs.release && inputs.target == 'windows' && '1' || '' }}
+      STORYFORGE_NATIVE_DIAGNOSTIC_PROBE: ${{ github.event_name == 'workflow_dispatch' && !inputs.release && inputs.target == 'windows' && inputs.diagnostic_probe && '1' || '' }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
