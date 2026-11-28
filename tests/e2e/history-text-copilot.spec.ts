@@ -9,7 +9,7 @@ test('061 original history fields start empty, retain an independent candidate a
     if (req.method() === 'POST' && url.pathname.endsWith('/synthetic-history/v1/chat/completions')) {
       calls++
       const payload = JSON.parse(req.postData()!), sent = payload.messages.map((m: { content: string }) => m.content).join('\n')
-      expect(sent).toContain('不默认套地球历法');expect(sent).toContain(calls === 1 ? '历史总述' : '纪年体系')
+      expect(sent).toContain('不默认套地球历法');expect(sent).toContain(calls === 1 ? '历史总述' : '纪年体系');if (calls === 1) expect(sent).toContain('仅本次 UI 模板要求：描写灰潮后的文明转折')
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ choices: [{ message: { content: JSON.stringify({ version: 1, value: calls === 1 ? '待确认设想：先有灰潮，后有炭火纪元。' : '待确认设想：以炭火初燃为纪元起点，每年九月，每月九日。' }) }, finish_reason: 'stop' }], usage: { prompt_tokens: 800, completion_tokens: 100, total_tokens: 900 } }) })
     }
     return url.origin === origin && ['GET', 'HEAD'].includes(req.method()) ? route.continue() : route.abort()
@@ -27,6 +27,10 @@ test('061 original history fields start empty, retain an independent candidate a
   await page.getByRole('button', { name: '历史总述与纪年', exact: true }).click()
   await page.getByRole('button', { name: 'AI 历史总述', exact: true }).click()
   let dialog = page.getByRole('dialog', { name: '历史 AI · 历史总述', exact: true })
+  await expect(dialog.getByText('内置-历史总述起草', { exact: false })).toBeVisible()
+  await dialog.getByRole('button', { name: /当前模板/ }).click()
+  await dialog.getByText('高级：临时修改 Prompt 文字（不写回模板）', { exact: true }).click()
+  await dialog.locator('details textarea').first().fill('仅本次 UI 模板要求：描写灰潮后的文明转折')
   await dialog.getByRole('button', { name: '生成候选', exact: true }).click()
   const editor = dialog.getByRole('textbox', { name: '历史字段候选', exact: true })
   await expect(editor).toHaveValue('待确认设想：先有灰潮，后有炭火纪元。')

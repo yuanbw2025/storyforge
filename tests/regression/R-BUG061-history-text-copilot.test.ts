@@ -1,3 +1,4 @@
+import { usePromptStore } from '../../src/stores/prompt'
 import { beforeEach, afterEach, expect, it, vi } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { seedCurrentWorkspace } from '../helpers/current-workspace'
@@ -12,8 +13,8 @@ import { verifyMasterAgentRunV1 } from '../../src/lib/agent/run/master-verificat
 import { AgentTeamBudgetTracker } from '../../src/lib/agent/team-budget'
 import { exportProjectJSON, importProjectJSON } from '../../src/lib/export/json-export'
 
-beforeEach(async () => { await db.delete(); await db.open() })
-afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); db.close() })
+beforeEach(async () => { await db.delete(); await db.open(); usePromptStore.setState({ templates: [], loaded: false }) })
+afterEach(() => { usePromptStore.setState({ templates: [], loaded: false }); vi.unstubAllGlobals(); vi.restoreAllMocks(); db.close() })
 async function fixture(empty = false) {
   const f = await seedCurrentWorkspace('061 原历史字段')
   if (!empty) await useHistoryStore.getState().saveForHistoryAuthorV1({ origin: { version: 1, kind: 'work', scope: f.scope }, selection: { kind: 'partition', worldGroupId: null }, patch: { overview: '作者原历史 α', eraSystem: '第三纪元；月有九日' } })
@@ -114,4 +115,30 @@ it('reads complete registered history events only in the selected partition', as
   const sent = JSON.stringify(prepared.prepared.messages)
   expect(sent).toContain('不可遗忘的历史因果 Ω');expect(sent).toContain('作者原历史 α');expect(sent).not.toContain('FOREIGN-HISTORY-MUST-NOT-LEAK')
   expect(prepared.contextGatewayExecution.contextPacket.sourceRefs.some(ref => ref.table === 'historicalTimelineEvents' && ref.recordId === eventId)).toBe(true)
+})
+
+it('freezes the selected per-field template and real overrides across changes and recovery, while retaining the mandatory formal packet', async () => {
+  const f = await fixture(), store = usePromptStore.getState()
+  const template = { ...store.getActive('history.overview'), id: 987, scope: 'user' as const, name: '作者总述模板 A', systemPrompt: 'Frozen-template-A', userPromptTemplate: '可选模板正文', updatedAt: 1, createdAt: 1 }
+  usePromptStore.setState({ templates: [template] })
+  const plan = await createMasterAgentPlan({ projectId: f.scope.projectId, scope: f.scope, worldGroupId: null, request: '按作者总述模板起草', pinnedTask: { agentId: 'world-origin', skillId: 'world-origin.history-text', instruction: '仅生成历史总述', historyTextRequest: { field: 'overview', mode: 'rewrite' }, promptExecution: { version: 1, moduleKey: 'history.overview', userOverride: '本次用户覆盖，仅做正文，不自行拼接资料。' } } })
+  const frozen = plan.tasks[0].promptExecution!
+  const oldPlan = structuredClone(plan);delete oldPlan.tasks[0].promptExecution
+  expect(parseMasterAgentPlanV1(oldPlan).tasks[0].promptExecution).toBeUndefined()
+  expect(frozen.template.name).toBe('作者总述模板 A');expect(frozen.userOverride).toContain('本次用户覆盖')
+  usePromptStore.setState({ templates: [{ ...template, systemPrompt: 'Later-template-B', name: '后来模板 B', updatedAt: 2 }] })
+  const conversation = await getOrCreateAgentConversation({ projectId: f.scope.projectId, scope: f.scope, worldGroupId: null, purpose: 'history061-template' })
+  const fetch = vi.fn(async (_url: unknown, init?: RequestInit) => {
+    const sent = JSON.parse(String(init?.body)).messages.map((m: { content: string }) => m.content).join('\n')
+    expect(sent).toContain('Frozen-template-A');expect(sent).not.toContain('Later-template-B');expect(sent).toContain('本次用户覆盖');expect(sent).toContain('作者原历史 α');expect(sent).toContain('只输出本次固定字段')
+    return new Response(JSON.stringify({ choices: [{ message: { content: '{"version":1,"value":"按原模板的历史候选"}' } }], usage: { prompt_tokens: 800, completion_tokens: 100, total_tokens: 900 } }), { status: 200 })
+  })
+  vi.stubGlobal('fetch', fetch)
+  const run = await runDurableMasterAgentPlanV1({ scope: f.scope, worldGroupId: null, conversationId: conversation.id!, plan, budget: new AgentTeamBudgetTracker('balanced') })
+  const c = (await restoreMasterAgentCandidatesV1({ scope: f.scope, runId: run.runId })).candidates[0]
+  expect(c.payload.promptExecutionEvidence).toMatchObject({ moduleKey: 'history.overview', templateName: '作者总述模板 A', templateHash: frozen.templateHash, overridesHash: frozen.overridesHash })
+  expect(() => parseMasterAgentPlanV1({ ...plan, tasks: [{ ...plan.tasks[0], historyTextRequest: { field: 'eraSystem', mode: 'rewrite' } }] })).toThrow('Skill')
+  expect(fetch).toHaveBeenCalledTimes(1)
+  await commitMasterAgentCandidateAdoptionV1({ scope: f.scope, worldGroupId: null, runId: run.runId, candidateEventId: c.event.id! })
+  expect((await db.histories.toArray())[0].overview).toBe('按原模板的历史候选')
 })

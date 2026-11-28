@@ -510,6 +510,7 @@ function promptModuleForPlanTaskV1(
   agentId: DomainAgentId,
   skillId: AgentSkillId | undefined,
   instruction: string,
+  historyTextRequest?: MasterAgentTask['historyTextRequest'],
 ): GovernedPromptModuleKeyV1 | null {
   const skill = resolveAgentSkillV1(agentId, skillId)
   if (skill.id === 'inspiration.prepare') return INSPIRATION_PREPARATION_MODULES[inspirationPreparationModeFromRequest(instruction)]
@@ -517,6 +518,7 @@ function promptModuleForPlanTaskV1(
     const mode = /灵感反推模式=(single|multiworld)\b/.exec(instruction)?.[1]
     if (mode) return mode === 'multiworld' ? 'inspiration.reverse.multiworld' : 'inspiration.reverse'
   }
+  if (skill.executionMode === 'history-text') return historyTextRequest?.field === 'eraSystem' ? 'history.calendar' : 'history.overview'
   if (skill.executionMode === 'worldview-field') return 'worldview.dimension'
   if (skill.executionMode === 'story-core') return 'story.generate'
   if (agentId === 'character' && skill.executionMode === 'create') return 'character.generate'
@@ -633,7 +635,7 @@ export function parseMasterAgentPlanV1(value: unknown): MasterAgentPlan {
       skillId,
       '主 Agent 计划任务 ' + id,
     )
-    const expectedPromptModule = promptModuleForPlanTaskV1(agentId, skillId, instruction)
+    const expectedPromptModule = promptModuleForPlanTaskV1(agentId, skillId, instruction, historyTextRequest)
     const promptExecution = item.promptExecution === undefined
       ? undefined
       : expectedPromptModule
