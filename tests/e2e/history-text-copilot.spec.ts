@@ -27,6 +27,7 @@ test('061 original history fields start empty, retain an independent candidate a
   await page.getByRole('button', { name: '历史总述与纪年', exact: true }).click()
   await page.getByRole('button', { name: 'AI 历史总述', exact: true }).click()
   let dialog = page.getByRole('dialog', { name: '历史 AI · 历史总述', exact: true })
+  await expect(dialog.getByText('内置-历史总述起草', { exact: false })).toBeVisible()
   await dialog.getByRole('button', { name: '生成候选', exact: true }).click()
   const editor = dialog.getByRole('textbox', { name: '历史字段候选', exact: true })
   await expect(editor).toHaveValue('待确认设想：先有灰潮，后有炭火纪元。')

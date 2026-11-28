@@ -18,6 +18,8 @@ export const MAX_PROMPT_AUTHOR_INSTRUCTION_CHARS_V1 = 8_000
 
 export type GovernedPromptModuleKeyV1 =
   | 'worldview.dimension'
+  | 'history.overview'
+  | 'history.calendar'
   | 'story.generate'
   | 'character.generate'
   | InspirationPreparationPromptModuleKey
@@ -85,7 +87,7 @@ export interface PromptExecutionEvidenceV1 {
 const GOVERNED_MODULES = new Set<PromptModuleKey>([
   'inspiration.reverse', 'inspiration.reverse.multiworld',
   ...Object.values(INSPIRATION_PREPARATION_MODULES),
-  'worldview.dimension',
+  'worldview.dimension', 'history.overview', 'history.calendar',
   'story.generate',
   'character.generate',
 ])

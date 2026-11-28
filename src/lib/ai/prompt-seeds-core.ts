@@ -168,6 +168,16 @@ const DEAI_SYSTEM = `你是一位文字风格化专家。你的任务是将 AI �
 // ── 13 条种子 ────────────────────────────────────────────────────────────
 
 const CORE_PROMPT_BASE_SEEDS: PromptSeed[] = [
+  ...(['history.overview', 'history.calendar'] as const).map(moduleKey => ({
+    scope: 'system' as const, moduleKey, promptType: 'generate',
+    name: moduleKey === 'history.overview' ? '内置-历史总述起草' : '内置-纪年体系起草',
+    description: '为当前历史字段起草可编辑候选，作者确认后才写入正式设定。',
+    systemPrompt: moduleKey === 'history.overview'
+      ? '依照当前已确认世界和事件，组织文明起点、时代转折、因果与当下局势。幻想设想标为待确认，不伪造真实史料。'
+      : '依照当前历史和幻想前提设计纪元起点、年/月/日表达、跨纪元规则及示例。不默认套地球天文或朝代，不自动换算已有事件。',
+    userPromptTemplate: '目标字段：{{dimension}}\n生成方式：{{generationMode}}\n原字段：{{currentValue}}\n当前正式上下文：\n{{worldContext}}\n作者要求：{{userHint}}',
+    variables: ['dimension', 'generationMode', 'currentValue', 'worldContext', 'userHint'], isActive: true,
+  })),
   // 1. 世界观-单维度生成
   {
     scope: 'system',

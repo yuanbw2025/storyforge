@@ -1,3 +1,4 @@
+import { renderFrozenPromptExecutionV1, type PromptExecutionOptionsV1, type PromptExecutionEvidenceV1 } from './prompt-execution'
 import Dexie, { type Transaction } from 'dexie'
 import { db } from '../db/schema'
 import { historyAuthorRecordV1, copyHistoryAuthorOriginV1, copyHistoryAuthorSelectionV1, type History, type HistoricalTimelineEvent } from '../types/history'
@@ -93,7 +94,7 @@ export async function historyTextCandidateMatchesBusinessV1(input: { scope: Work
 }
 function otherField(field: HistoryTextFieldV1): HistoryTextFieldV1 { return field === 'overview' ? 'eraSystem' : 'overview' }
 
-export async function prepareHistoryTextCopilotV1(input: { projectId: number; scope?: WorkspaceScope; worldGroupId: number | null; request: HistoryTextRequestV1; authorRequest: string; contextProfile?: AgentContextProfile; configOverride?: AIConfig; signal?: AbortSignal }, dependencies: { runAI?: (messages: ChatMessage[]) => Promise<string> } = {}) {
+export async function prepareHistoryTextCopilotV1(input: { projectId: number; scope?: WorkspaceScope; worldGroupId: number | null; request: HistoryTextRequestV1; authorRequest: string; promptExecution?: PromptExecutionOptionsV1; contextProfile?: AgentContextProfile; configOverride?: AIConfig; signal?: AbortSignal }, dependencies: { runAI?: (messages: ChatMessage[]) => Promise<string> } = {}) {
   input = { ...input, scope: input.scope ? { ...input.scope } : undefined, request: parseHistoryTextRequestV1(input.request) }
   copyHistoryAuthorSelectionV1({ kind: 'partition', worldGroupId: input.worldGroupId })
   const request = input.request
@@ -122,20 +123,37 @@ export async function prepareHistoryTextCopilotV1(input: { projectId: number; sc
   const contextEvidence = attachAgentContextInputStateV1(evidenceFromContextResult(profile, assembled), state)
   contextEvidence.inputStateSourceKeys = contextGatewayInputStateSourceKeysV1(skill, contextGatewayExecution)
   const assertFresh = () => assertHistoryTextCandidateReadyV1({ scope, worldGroupId: input.worldGroupId, snapshot, draft: '{"version":1,"value":""}' })
-  const messages = appendSimplifiedChineseOutputConstraint([{ role: 'system', content: [
+  let messages = appendSimplifiedChineseOutputConstraint([{ role: 'system', content: [
     '你是叙事熔炉历史文本创作 Skill。只输出本次固定字段的可编辑候选，不直接写正式设定。',
     '总述组织时代、文明兴衰与转折因果；纪年组织起点、跨纪元、年/月/日和示例。保留作者已确认事实与幻想前提，不默认套地球历法、朝代或太阳。',
     '没有既有资料时允许纯幻想起步，把新增前提明确写成待确认设想；真实史实、未核实推断与创作假设分开，不伪造考证来源。',
     request.mode === 'expand' ? '扩写：完整保留原事实与因果边界，补充细节；输出完整替代文字，不能只给补丁。' : request.mode === 'polish' ? '润色：保留原事实，只改善表达。' : '按作者要求重写选中字段，保持未选字段约束。',
     buildAgentSkillInputGuidanceV1(skill, state), '只输出 JSON：{"version":1,"value":"完整候选文字"}。不要输出其他字段或事件数组。',
   ].join('\n') }, { role: 'user', content: `目标：${HISTORY_TEXT_LABELS_V1[request.field]}\n作者要求：${input.authorRequest}\n\n${assembled.text}` }])
+  let promptExecutionEvidence: PromptExecutionEvidenceV1 | undefined
+  let generationOverrides: { temperature?: number; maxTokens?: number } = { temperature: 0.35 }
+  if (input.promptExecution) {
+    const expectedModule = request.field === 'overview' ? 'history.overview' : 'history.calendar'
+    if (input.promptExecution.moduleKey !== expectedModule) throw new Error('历史模板与原字段不匹配。')
+    const rendered = await renderFrozenPromptExecutionV1({ options: input.promptExecution,
+      context: { dimension: HISTORY_TEXT_LABELS_V1[request.field], generationMode: request.mode,
+        currentValue: baseline[request.field], worldContext: assembled.text, userHint: input.authorRequest },
+      hardSystem: messages[0].content, authorInstruction: input.authorRequest,
+      // The editable template cannot omit or replace the registered formal packet.
+      additionalUserMessages: [`目标：${HISTORY_TEXT_LABELS_V1[request.field]}\n【已登记正式上下文】\n${assembled.text}`],
+    })
+    messages = rendered.messages
+    generationOverrides = { ...generationOverrides, ...rendered.generationOverrides }
+    promptExecutionEvidence = { ...rendered.evidence, effectiveTemperature: generationOverrides.temperature ?? null,
+      effectiveMaxTokens: generationOverrides.maxTokens ?? null }
+  }
   const runRaw = async (sent: ChatMessage[], result?: ChatResult) => {
     await assertFresh()
     const observedResult = result ?? {}
     observedResult.beforeModelDispatch = assertFresh
     const output = dependencies.runAI ? await dependencies.runAI(sent) : await executeRegisteredAIEntryV1('world.history-text', sent, config, {
       category: 'agent.world-foundation.history-text', projectId: input.projectId,
-      configOverrides: { temperature: 0.35 }, contextOverflowPolicy: 'reject',
+      configOverrides: generationOverrides, contextOverflowPolicy: 'reject',
     }, input.signal, observedResult, undefined, resolution)
     return { output }
   }
@@ -147,5 +165,5 @@ export async function prepareHistoryTextCopilotV1(input: { projectId: number; sc
   }
   await assertFresh()
   return { node, prepared: prepareGenerationNode(node, {}), input: { assembled }, snapshot, contextSources: contextEvidence.included,
-    contextEvidence, contextGatewayExecution, label: HISTORY_TEXT_LABELS_V1[request.field], modelIdentity: { provider: config.provider, model: config.model }, runRaw }
+    contextEvidence, contextGatewayExecution, promptExecutionEvidence, label: HISTORY_TEXT_LABELS_V1[request.field], modelIdentity: { provider: config.provider, model: config.model }, runRaw }
 }

@@ -430,7 +430,7 @@ export interface MasterAgentReplanFailureV1 {
 }
 
 function governedPromptModuleForTaskV1(
-  task: Pick<MasterAgentTask, 'agentId' | 'skillId' | 'instruction'>,
+  task: Pick<MasterAgentTask, 'agentId' | 'skillId' | 'instruction' | 'historyTextRequest'>,
 ): GovernedPromptModuleKeyV1 | null {
   const skill = resolveAgentSkillV1(task.agentId, task.skillId)
   if (skill.id === 'inspiration.prepare') return INSPIRATION_PREPARATION_MODULES[inspirationPreparationModeFromRequest(task.instruction)]
@@ -438,6 +438,7 @@ function governedPromptModuleForTaskV1(
     const mode = /灵感反推模式=(single|multiworld)\b/.exec(task.instruction)?.[1]
     if (mode) return mode === 'multiworld' ? 'inspiration.reverse.multiworld' : 'inspiration.reverse'
   }
+  if (skill.executionMode === 'history-text') return task.historyTextRequest?.field === 'eraSystem' ? 'history.calendar' : 'history.overview'
   if (skill.executionMode === 'worldview-field') return 'worldview.dimension'
   if (skill.executionMode === 'story-core') return 'story.generate'
   if (task.agentId === 'character' && skill.executionMode === 'create') return 'character.generate'
@@ -1302,7 +1303,7 @@ async function executeSequentialMasterAgentPlan(
         } else if (skill.executionMode === 'history-text') {
           if (!task.historyTextRequest) throw new Error('历史任务缺少固定字段。')
           const prepared = await prepareHistoryTextCopilotV1({ projectId: input.projectId, scope, worldGroupId: input.worldGroupId,
-            request: task.historyTextRequest, authorRequest: task.instruction, contextProfile, configOverride: input.taskConfigOverrides?.[task.id], signal: input.signal })
+            request: task.historyTextRequest, authorRequest: task.instruction, promptExecution: task.promptExecution, contextProfile, configOverride: input.taskConfigOverrides?.[task.id], signal: input.signal })
           await attachMasterTaskRequestContextV1(prepared, task)
           await input.executionTrace?.contextGatewayPrepared?.(task, { execution: prepared.contextGatewayExecution, assembled: prepared.input.assembled, renderedRequest: prepared.prepared.messages })
           const observed = observeMasterRawModelV1(task, prepared.runRaw, input.executionTrace)
@@ -1313,7 +1314,7 @@ async function executeSequentialMasterAgentPlan(
           const draft = JSON.stringify(result.output, null, 2)
           candidates.push({ payload: { version: 1, taskId: task.id, agentId: task.agentId, skillId: skill.id as AgentSkillId, executionBinding,
             label: prepared.label, contextSources: prepared.contextSources, contextEvidence: prepared.contextEvidence, baseSnapshot: prepared.snapshot,
-            workspaceScope: scope, historyTextRequest: task.historyTextRequest, dependsOnTaskIds: task.dependsOn, generator: prepared.modelIdentity },
+            workspaceScope: scope, historyTextRequest: task.historyTextRequest, promptExecutionEvidence: prepared.promptExecutionEvidence, dependsOnTaskIds: task.dependsOn, generator: prepared.modelIdentity },
             draft, runtimeNode: prepared.node, runtimeOutput: result.output, contextGatewayRuntime: { execution: prepared.contextGatewayExecution,
               assembled: prepared.input.assembled, renderedRequest: prepared.prepared.messages, rawResponse: result.output } })
           outputs.set(task.id, draft)
