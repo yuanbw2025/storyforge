@@ -189,11 +189,11 @@ export default function HistoryPanel({ project, resizableInputs = false, confirm
       const newId = await addEvent({
         projectId: project.id!,
         era: 'custom',
-        year: 0,
-        date: '公元元年',
+        year: null,
+        date: '时间待定',
         title: '新历史事件',
         description: '描述该事件的发生过程...',
-        isHistorical: true,
+        isHistorical: false,
         ...(scopeGroupId != null ? { worldGroupId: scopeGroupId } : {}),
       }, { projectId: project.id!, worldId: project.activeWorldId! })
       setExpandedId(newId)
@@ -404,6 +404,7 @@ export default function HistoryPanel({ project, resizableInputs = false, confirm
               )}
             </div>
 
+            {scopedEvents.some(event => event.year === null) && <p className="text-xs text-text-muted">未填数字年份的事件按添加顺序列在后面；具体时间文字保留，不自动推断先后关系。</p>}
             {loadingEvents ? (
               <div className="flex items-center justify-center py-12 text-text-muted">
                 <Loader2 className="w-5 h-5 animate-spin mr-2" />

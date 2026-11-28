@@ -2,11 +2,11 @@ import { inputAreaLayoutV1 } from '../../lib/input-area-layout'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import type { Chapter, HistoricalEra, HistoricalTimelineEvent } from '../../lib/types'
 import { HISTORICAL_ERA_LABELS } from '../../lib/types/history'
-import { formatHistoricalYear } from '../../lib/history/year'
+import { formatHistoricalYear, parseHistoricalYearInputV1 } from '../../lib/history/year'
 import { CInput, CTextarea } from '../shared/CompositionInput'
 import HistoryAgentWorkspace, { type HistoryAgentViewState } from './HistoryAgentWorkspace'
 import HistoryChapterPicker from './HistoryChapterPicker'
-import { InlineTextarea } from '../shared/InlineEdit'
+import { InlineInput, InlineTextarea } from '../shared/InlineEdit'
 import MarkdownReadView from '../shared/MarkdownReadView'
 
 import type { LocalSaveAckV1, LocalSaveContractV1, LocalSaveIntentV1 } from '../../lib/authoring/local-save-evidence'
@@ -141,14 +141,12 @@ export default function HistoryTimelineEventCard({
                 </select>
               </div>
               <div>
-                <label className="block text-[11px] text-text-muted mb-1">数字化年份 (排序用)</label>
-                <input
-                  aria-label="数字化年份"
-                  type="number"
-                  value={event.year}
-                  onChange={change => onChange({ year: parseInt(change.target.value) || 0 })}
-                  placeholder="负数表示公元前"
-                  className="w-full px-2.5 py-1.5 bg-bg-base border border-border rounded-lg text-xs text-text-primary focus:outline-none focus:border-accent"
+                <label className="block text-[11px] text-text-muted mb-1">数字化年份（可选，排序用）</label>
+                <InlineInput label="数字化年份"
+                  value={event.year === null ? '' : String(event.year)}
+                  onChange={value => onChange({ year: parseHistoricalYearInputV1(value) })}
+                  placeholder="可留空；负数表示公元前"
+                  className="w-full px-2.5 py-1.5 bg-bg-base border border-border rounded-lg text-xs text-text-primary"
                 />
               </div>
             </div>

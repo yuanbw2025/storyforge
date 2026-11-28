@@ -1,3 +1,4 @@
+import { compareHistoricalDatesV1 } from '../lib/history/year'
 import { cascadeRegisteredReferences } from '../lib/workspace/lifecycle'
 import { transactionTablesForReferenceCascade } from '../lib/registry/lifecycle'
 import { create } from 'zustand'
@@ -83,7 +84,7 @@ function assertEventIdentityUnchanged(event: HistoricalTimelineEvent, patch: Par
 async function publishEvents(scope: WorldOwnerScope, request: number, get: () => HistoricalStore, set: (patch: Partial<HistoricalStore>) => void): Promise<void> {
   try {
     const events = (await readOwnedRows<HistoricalTimelineEvent>(scope, 'historicalTimelineEvents', { owner: 'world' }))
-      .sort((left, right) => left.year - right.year)
+      .sort(compareHistoricalDatesV1)
     const project = await db.projects.get(scope.projectId)
     if (request !== eventLoadSequence || !sameWorld(get().loadedEventsScope, scope)) return
     if (project?.activeWorldId !== scope.worldId) {
