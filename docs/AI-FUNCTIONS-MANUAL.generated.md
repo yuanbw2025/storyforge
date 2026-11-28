@@ -8,13 +8,13 @@
 
 ## 一、Prompt 模板清单（PromptModuleKey 事实源）
 
-共 72 个唯一 moduleKey，215 条内置模板定义。
+共 72 个唯一 moduleKey，217 条内置模板定义。
 
 | moduleKey | 模板数 | 代表名称 | 说明 | 读取变量 |
 |---|---:|---|---|---|
 | `worldview.dimension` | 6 | 内置-世界观维度生成 | 为世界观的单个维度（地理/历史/社会/文化/经济/规则/摘要）生成内容。 | `projectName` `genres` `dimension` `worldContext` `worldRulesContext` `userHint` `isSummary` `field_worldOrigin` `field_powerHierarchy` `field_divineDesign` `field_worldStructure` `field_worldDimensions` `field_continentLayout` `field_mountainsRivers` `field_climateByRegion` `field_naturalResourceOverview` `field_naturalResources` `field_races` `field_factionLayout` `field_regionDimensions` `field_politicsOverview` `field_economyOverview` `field_cultureOverview` `field_internalConflicts` `field_itemDesign` |
-| `history.overview` | 0 | — | — | — |
-| `history.calendar` | 0 | — | — | — |
+| `history.overview` | 1 | 内置-历史总述起草 | 为当前历史字段起草可编辑候选，作者确认后才写入正式设定。 | `dimension` `generationMode` `currentValue` `worldContext` `userHint` |
+| `history.calendar` | 1 | 内置-纪年体系起草 | 为当前历史字段起草可编辑候选，作者确认后才写入正式设定。 | `dimension` `generationMode` `currentValue` `worldContext` `userHint` |
 | `character.generate` | 6 | 内置-角色完整设计 | 基于世界观和已有角色，设计一个新角色的完整资料。 | `projectName` `genres` `worldContext` `existingCharacters` `userHint` |
 | `character.dimension` | 1 | 内置-角色维度补全 | 为指定角色的某个维度（背景/性格/能力等）补充约 200-400 字的细节。 | `characterName` `characterInfo` `worldContext` `dimension` |
 | `outline.volume` | 8 | 内置-卷级大纲生成 | 基于世界观与故事核心生成全书的卷级大纲。 | `projectName` `genres` `targetWordCount` `worldContext` `storyCore` `characterContext` `worldRulesContext` `existingVolumesContext` `userHint` |
@@ -606,4 +606,4 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 
 ---
 
-生成时间基准:commit `0ca055720`
+生成时间基准:commit `3a9a7a9ad`
