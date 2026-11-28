@@ -18,7 +18,8 @@ async function waitFor(check: () => void) {
   const deadline = Date.now() + 3000
   do { try { check(); return } catch (cause) { if (Date.now() > deadline) throw cause }
     await act(async () => { await new Promise(resolve => setTimeout(resolve, 10)) })
-  } while (true)
+  } while (Date.now() <= deadline)
+  check()
 }
 const draw = (project: Project, scope: WorkspaceScope, stage: Stage = 'plan') => <MemoryRouter><ShortNovelStudio project={project} scope={scope} activeStage={stage} structured /></MemoryRouter>
 const field = (label: string) => host.querySelector<HTMLInputElement | HTMLTextAreaElement>(`[aria-label="${label}"]`)!
