@@ -82,8 +82,13 @@ function manualChunkFor(moduleId: string): string | undefined {
     if (packagePath.startsWith('d3-hierarchy/')) return 'vendor-d3'
     if (packagePath.startsWith('lucide-react/')) return 'vendor-icons'
     if (packagePath.startsWith('zustand/')) return 'vendor-zustand'
+    if (packagePath.startsWith('@noble/hashes/') || packagePath.startsWith('hash-wasm/')) return 'narrative-json-codec'
   }
 
+  // The streaming JSON codec and its hash backends are a leaf closure: no
+  // store/adoption/runtime imports. Preserve synchronous codec calls and the
+  // existing explicit WASM initialization instead of loading inside a DB write.
+  if (/\/src\/lib\/(?:narrative-domain\/(?:json|sha256|codec)|context-gateway\/resource-uid|types\/(?:narrative-domain|narrative-ir))\.ts$/.test(id)) return 'narrative-json-codec'
   if (id.endsWith('/src/lib/ai/context-builder.ts')) return 'ai-context'
   if (id.endsWith('/src/lib/context-gateway/selector.ts')) return 'context-selector'
   // Passive codecs and policy data have no dependency back into the shared

@@ -2524,8 +2524,10 @@ test('真实世界观入口可维护修炼 DAG 并关联角色境界', async ({ 
 
   await page.getByRole('button', { name: '添加第一个起始境界', exact: true }).click()
   const stageNameField = page.getByText('境界名称', { exact: true }).locator('..')
-  // A reading div is not a native disabled control. Wait for every existing
-  // owner/read guard before sending the author click; never force the edit.
+  // An absent field also has zero disabled ancestors. Require the actual
+  // native committed field before inspecting its owner/read guards.
+  await expect(stageNameField).toBeVisible()
+  await expect(stageNameField.locator('[data-local-save-status]')).toHaveAttribute('data-local-save-status', 'saved')
   await expect(stageNameField.locator('xpath=ancestor::fieldset[@disabled or @inert]')).toHaveCount(0)
   await stageNameField.getByText('新境界', { exact: true }).click()
   await stageNameField.locator('input').fill('炼体境')
@@ -2533,8 +2535,10 @@ test('真实世界观入口可维护修炼 DAG 并关联角色境界', async ({ 
   await expect(page.getByText('炼体境', { exact: true }).first()).toBeVisible()
 
   await page.getByRole('button', { name: '添加后续境界', exact: true }).click()
-  // A reading div is not a native disabled control. Wait for every existing
-  // owner/read guard before sending the author click; never force the edit.
+  // An absent field also has zero disabled ancestors. Require the actual
+  // native committed field before inspecting its owner/read guards.
+  await expect(stageNameField).toBeVisible()
+  await expect(stageNameField.locator('[data-local-save-status]')).toHaveAttribute('data-local-save-status', 'saved')
   await expect(stageNameField.locator('xpath=ancestor::fieldset[@disabled or @inert]')).toHaveCount(0)
   await stageNameField.getByText('新境界', { exact: true }).click()
   await stageNameField.locator('input').fill('筑基境')
