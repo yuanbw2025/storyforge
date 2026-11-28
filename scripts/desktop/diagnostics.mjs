@@ -1,5 +1,6 @@
 import { mkdirSync, readFileSync, writeFileSync, renameSync, statSync } from 'node:fs'
 import { join } from 'node:path'
+import { performance as processPerformance } from 'node:perf_hooks'
 
 const names = new Set(['NativeCrash', 'NativeOutOfMemory', 'NativeUnresponsive', 'NativeInterrupted'])
 const areas = new Set(['home', 'longform', 'short', 'world', 'script', 'comic', 'motion', 'ttrpg', 'chat', 'town', 'avg', 'adventure', 'settings', 'community', 'workshop', 'player', 'other'])
@@ -30,6 +31,7 @@ function native(value) {
 /** @param {string} directory @param {string} build */
 export function desktopDiagnostics(directory, build) {
   const path = join(directory, 'native-diagnostics.json')
+  let contextGeneration = 0
   const read = () => {
     try {
       if (statSync(path).size > 65536) return { running: false, errors: /** @type {Row[]} */ ([]), context: { enabled: false, trail: /** @type {Step[]} */ ([]) } }
@@ -58,15 +60,44 @@ export function desktopDiagnostics(directory, build) {
     write(value)
   }
   return {
-    start() { const previous = read(); if (previous.running) record('NativeInterrupted', { process: 'browser', reason: 'interrupted' }); write({ ...read(), running: true, context: { enabled: false, trail: [] } }) },
-    cleanExit() { write({ ...read(), running: false, context: { enabled: false, trail: [] } }) },
+    start() { contextGeneration++; const previous = read(); if (previous.running) record('NativeInterrupted', { process: 'browser', reason: 'interrupted' }); write({ ...read(), running: true, context: { enabled: false, trail: [] } }) },
+    cleanExit() { contextGeneration++; write({ ...read(), running: false, context: { enabled: false, trail: [] } }) },
     /** @param {unknown} value */
     setContext(value) {
+      const generation = ++contextGeneration
       const item = value && typeof value === 'object' ? /** @type {Record<string, unknown>} */ (value) : {}
-      const current = read(), enabled = item.enabled === true
-      current.context = { enabled, trail: enabled ? trail(item.trail, Date.now()) : [] }
-      if (!enabled) current.errors = current.errors.map(row => { const copy = { ...row }; delete copy.details; return copy })
-      write(current)
+      const enabled = item.enabled === true
+      const apply = () => {
+        if (generation !== contextGeneration) return
+        const current = read()
+        // Keep the original validator: never persist future timestamps, widen
+        // its age/allowlist limits, or rewrite the renderer's original times.
+        current.context = { enabled, trail: enabled ? trail(item.trail, Date.now()) : [] }
+        if (!enabled) current.errors = current.errors.map(row => { const copy = { ...row }; delete copy.details; return copy })
+        write(current)
+      }
+      let latest = -Infinity
+      if (enabled && Array.isArray(item.trail)) for (const row of item.trail.slice(-20)) {
+        if (row && typeof row === 'object' && typeof row.at === 'string') {
+          const time = Date.parse(row.at)
+          if (Number.isFinite(time)) latest = Math.max(latest, time)
+        }
+      }
+      // Renderer and main Date.now() can differ by 1ms on Windows. A tiny
+      // processing budget lets the receiving clock catch up before applying
+      // the same strict validator. This is not a future-time tolerance or a
+      // claim about OS timer precision; scheduling may run later than requested.
+      const budget = 16, ahead = latest - Date.now()
+      if (!(ahead > 0 && ahead <= budget)) { apply(); return }
+      const deadline = processPerformance.now() + budget
+      return (async () => {
+        while (generation === contextGeneration && processPerformance.now() < deadline) {
+          const remaining = latest - Date.now()
+          if (remaining <= 0 || remaining > budget) break
+          await new Promise(resolve => setTimeout(resolve, Math.min(remaining, Math.max(1, deadline - processPerformance.now()))))
+        }
+        apply()
+      })()
     },
     record,
     /** Electron can report fatal Linux renderer exits as abnormal-exit.

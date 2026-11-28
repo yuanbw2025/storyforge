@@ -49,7 +49,7 @@ else {
     })
     ipcMain.handle('client-diagnostics:context', (event, value) => {
       if (!event.senderFrame || event.sender !== mainWindow.webContents || event.senderFrame !== mainWindow.webContents.mainFrame || new URL(event.senderFrame.url).origin !== origin) throw new Error('Invalid diagnostics caller')
-      diagnostics.setContext(value)
+      return diagnostics.setContext(value)
     })
     ipcMain.handle('client-diagnostics:allowed', event => {
       if (!event.senderFrame || event.sender !== mainWindow.webContents || event.senderFrame !== mainWindow.webContents.mainFrame || new URL(event.senderFrame.url).origin !== origin) throw new Error('Invalid diagnostics caller')
