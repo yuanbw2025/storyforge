@@ -108,4 +108,3 @@ export async function appendAgentEvent(input: {
     return { ...event, id }
   })
 }
-
