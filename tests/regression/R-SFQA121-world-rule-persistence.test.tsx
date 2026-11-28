@@ -404,7 +404,8 @@ it('050 retains a known committed draft as unconfirmed when native postcommit re
   const { matchesWorldRulesLocalSaveV1 } = await import('../../src/stores/world-rules')
   const f = await fixture(), original = db.worldRulesProfiles.get.bind(db.worldRulesProfiles)
   const fault = vi.spyOn(db.worldRulesProfiles, 'get').mockImplementation(key => {
-    if (!Dexie.currentTransaction && key === f.profile.id) return Promise.reject(new Error('postcommit rule readback failure'))
+    const lookup: unknown = key
+    if (!Dexie.currentTransaction && typeof lookup === 'number' && lookup === f.profile.id) return Dexie.Promise.reject(new Error('postcommit rule readback failure'))
     return original(key)
   })
   await expect(useWorldRulesStore.getState().updateGlobalNote(draft)).rejects.toThrow('postcommit rule readback failure')

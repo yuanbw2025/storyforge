@@ -56,7 +56,7 @@ it('keeps a long headingless manuscript in one original Work chapter instead of 
   const chapters = await db.chapters.where('projectId').equals(created.scope.projectId).sortBy('order')
   expect(chapters).toHaveLength(1)
   expect(chapters[0]).toMatchObject({ title: '全文', content: importedNovelTextToHtmlV1(text), workId: created.scope.workId })
-  expect(chapters[0].worldId).toBeUndefined()
+  expect(Reflect.get(chapters[0], 'worldId')).toBeUndefined()
   expect(await db.outlineNodes.get(chapters[0].outlineNodeId)).toMatchObject({ title: '全文', type: 'chapter', workId: created.scope.workId })
 })
 

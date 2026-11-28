@@ -1,4 +1,3 @@
-/* global process */
 // Isolated native smoke only. Never imported by the packaged application.
 import { basename } from 'node:path'
 

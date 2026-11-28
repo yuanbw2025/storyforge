@@ -187,7 +187,7 @@ it.each(['same-field-change', 'replaced-record'] as const)('retains the original
 
 it.each(['native-write-failure', 'corrupt-poststate'] as const)('retains both fields and the new native identity through a failed structured save and explicit retry (%s)', async kind => {
   const f = await fixture(), held = await startOwnStyle(f.scope)
-  const fail = (patch: Record<string, unknown>) => {
+  const fail = (patch: object) => {
     if (!Object.prototype.hasOwnProperty.call(patch, 'systemFictionElements')) return
     if (kind === 'native-write-failure') throw new DOMException('790 native quota failure', 'QuotaExceededError')
     return { systemFictionElements: { ...createSystemFictionElementsV1(), systemMechanism: 'invalid poststate' } }
