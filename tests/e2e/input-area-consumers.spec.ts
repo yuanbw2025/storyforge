@@ -247,7 +247,9 @@ test('047 native natural, humanity, power and cultivation editors receive only U
     await expect(frame.locator('textarea')).toHaveValue(text)
   }
   await page.locator('h2:visible').first().click()
-  await page.getByText('测试起境', { exact: true }).click()
+  const originalStage = page.getByRole('navigation', { name: '境界列表', exact: true }).getByRole('button', { name: '测试起境', exact: true })
+  await expect(originalStage).toHaveCount(1)
+  await originalStage.click()
   for (const [text, key] of [['原生境界特征', 'power.stageFeatures/current'], ['原生突破条件', 'power.breakthrough/current']]) {
     const rendered = page.getByText(text, { exact: true })
     await expect(rendered).toBeVisible()
