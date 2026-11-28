@@ -21,7 +21,7 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261128-power048-record-authority-v1.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261128-novel033-whitespace-v1.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
       {
@@ -1603,6 +1603,11 @@
         "path": "tests/acceptance/narrative-world/baseline-20261128-power048-copilot-main794-v2.json",
         "sha256": "c4d492a4b9d7b65ef06d6de4abe202b29fc494e1f0a60380bca7b0377e1a6979",
         "note": "Preserve the merged A4/main794 receipt before the exact multiple-rule source and portable rule-record title identity repair. Final manifest frozen before remeasurement; no corpus or acceptance relabeling."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261128-power048-record-authority-v1.json",
+        "sha256": "5cf0bcfa17ee12647695a384058e71975eb0c3b1b39c02b2f831b3c718dccd1a",
+        "note": "Preserve the merged power048 record-authority receipt before the existing original-novel allocation whitespace repair. Final manifest frozen before measurement; no corpus, known-gap or acceptance changes."
       }
     ],
     "comparison": "NW-2E checkpoint of the unchanged legacy v3 120-query comparator. Typed v4 query, exact product plans, current impact diagnostics and scale failures have separate receipts; no model or human quality acceptance is inferred."
