@@ -1,3 +1,4 @@
+import HistoryCandidateDialog from './HistoryCandidateDialog'
 import PromptRunPanel from '../shared/PromptRunPanel'
 import { createContext, useContext, useState, type ReactNode } from 'react'
 import { Sparkles, X } from 'lucide-react'
@@ -36,7 +37,7 @@ export default function HistoryTextAuthoring({ project, worldGroupId, onAdopted,
     {!!pending.length && <div role="status" className="mb-3 flex flex-wrap items-center gap-2 text-xs">历史有待确认候选。{pending.map(item => <button key={item.event.id} className="text-accent underline" onClick={() => item.payload.historyTextRequest && open(item.payload.historyTextRequest.field)}>继续编辑：{item.payload.label}</button>)}</div>}
     {error && !field && <p role="alert" className="text-xs text-error">{error}</p>}
     {children}
-    {field && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-3"><section role="dialog" aria-modal="true" aria-label={`历史 AI · ${HISTORY_TEXT_LABELS_V1[field]}`} className="max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-xl border border-border bg-bg-surface p-4">
+    {field && <HistoryCandidateDialog label={`历史 AI · ${HISTORY_TEXT_LABELS_V1[field]}`} onClose={() => { void guarded(() => setField(null)) }}>
       <div className="mb-3 flex items-center justify-between"><h2>{HISTORY_TEXT_LABELS_V1[field]} · AI 候选</h2><button aria-label="关闭历史候选" onClick={() => { void guarded(() => setField(null)) }}><X className="h-4 w-4"/></button></div>
       <p className="mb-3 text-xs text-text-muted">候选尚未成为正式设定。采用只修改此字段；纪年变化不会自动换算已有事件。</p>
       {(error || copilot.error || parseError) && <p role="alert" className="mb-3 text-xs text-error">{error || copilot.error || parseError}</p>}
@@ -55,6 +56,6 @@ export default function HistoryTextAuthoring({ project, worldGroupId, onAdopted,
         {parsed && <details className="mt-3 text-xs"><summary>查看修改前后</summary><WorldviewTextDiff left={parsed.snapshot.baseline[field]} right={parsed.value} identityKey={`history:${candidate.event.id}:${field}`} baselineHash={parsed.snapshot.baselineHash} rightRevision={candidate.event.createdAt} sourceKind="field-value"/></details>}
         <div className="mt-4 flex justify-end gap-3"><button disabled={copilot.busy} className="text-xs" onClick={() => { void guarded(() => copilot.rejectCandidate(candidate)) }}>拒绝候选</button><button disabled={copilot.busy || !parsed} className="rounded bg-accent px-4 py-2 text-sm text-white disabled:opacity-40" onClick={() => { void guarded(async () => { if (await copilot.adoptCandidate(candidate)) { await onAdopted(); setField(null) } }) }}>确认采用</button></div>
       </>}
-    </section></div>}
+    </HistoryCandidateDialog>}
   </Context.Provider>
 }
