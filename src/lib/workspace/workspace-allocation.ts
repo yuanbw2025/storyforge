@@ -9,7 +9,7 @@ import { scopeTransactionTables, stampNewRecord } from './scope'
 import { buildWorkRecord } from './works'
 import { deriveShortNovelStructure } from './work-kind'
 import { buildShortNovelProductionRecordV1 } from '../short-novel/service'
-import { countWords, plainTextToHtml } from '../utils/html'
+import { countWords, plainTextToHtml, importedNovelTextToHtmlV1 } from '../utils/html'
 
 
 function projectRoot(input: CreateWorkspaceInput, options: CreateWorkspaceOptions, now: number): Project {
@@ -166,7 +166,7 @@ export async function allocateWorkspace(
         const content = importedNovelText.slice(index === 0 ? 0 : chunks[index].startChar, index + 1 < chunks.length ? chunks[index + 1].startChar : importedNovelText.length)
         const title = chunks[index].label || `原作第 ${index + 1} 部分`
         const outlineNodeId = await db.outlineNodes.add(stampNewRecord(scope, 'outlineNodes', { projectId, parentId: null, type: 'chapter', title, summary: '', order: index, createdAt: now, updatedAt: now }, { owner: 'work' })) as number
-        await db.chapters.add(stampNewRecord(scope, 'chapters', { projectId, outlineNodeId, title, content: plainTextToHtml(content), wordCount: countWords(content), status: 'draft', order: index, notes: '', createdAt: now, updatedAt: now }, { owner: 'work' }))
+        await db.chapters.add(stampNewRecord(scope, 'chapters', { projectId, outlineNodeId, title, content: importedNovelTextToHtmlV1(content), wordCount: countWords(content), status: 'draft', order: index, notes: '', createdAt: now, updatedAt: now }, { owner: 'work' }))
       }
     }
     const createdWorld = { ...world, id: worldId }

@@ -5,7 +5,7 @@ import { createWorkspace } from '../../src/lib/workspace/create-workspace'
 import { splitDocumentChapters } from '../../src/lib/import/chunker'
 import { extractTextFromFile, FILE_SIZE_LIMITS } from '../../src/lib/doc-parser'
 import { createAdaptation, listActiveSourceUnits, readAdaptationSourceContent } from '../../src/lib/adaptation/source-manifest'
-import { htmlToPlainText, plainTextToHtml } from '../../src/lib/utils/html'
+import { htmlToPlainText, plainTextToHtml, importedNovelTextToHtmlV1 } from '../../src/lib/utils/html'
 
 beforeEach(async () => { await db.delete(); await db.open() })
 afterEach(() => db.close())
@@ -38,7 +38,7 @@ it('preserves prefix whitespace and CRLF at recognized chapter boundaries', asyn
     expect(chapters).toHaveLength(text.includes('第一章') ? 2 : 1)
     expect(chapters[0].title).toBe(text.includes('第一章') ? '第一章 标题' : '全文')
     const expected = text.includes('第一章') ? [text.slice(0, text.indexOf('第二章')), text.slice(text.indexOf('第二章'))] : [text]
-    expect(chapters.map(ch => ch.content)).toEqual(expected.map(plainTextToHtml))
+    expect(chapters.map(ch => ch.content)).toEqual(expected.map(importedNovelTextToHtmlV1))
   }
 })
 
@@ -55,7 +55,7 @@ it('keeps a long headingless manuscript in one original Work chapter instead of 
   const created = await create(text)
   const chapters = await db.chapters.where('projectId').equals(created.scope.projectId).sortBy('order')
   expect(chapters).toHaveLength(1)
-  expect(chapters[0]).toMatchObject({ title: '全文', content: plainTextToHtml(text), workId: created.scope.workId })
+  expect(chapters[0]).toMatchObject({ title: '全文', content: importedNovelTextToHtmlV1(text), workId: created.scope.workId })
   expect(chapters[0].worldId).toBeUndefined()
   expect(await db.outlineNodes.get(chapters[0].outlineNodeId)).toMatchObject({ title: '全文', type: 'chapter', workId: created.scope.workId })
 })
@@ -94,3 +94,21 @@ it('extracts a near-5MiB million-character source, stores all chapters, and free
   expect(await db.chapters.count()).toBe(before)
   await expect(extractTextFromFile(new File(['a'.repeat(FILE_SIZE_LIMITS.txt + 1)], '超限.txt'))).rejects.toThrow('文件最大')
 }, 60000)
+
+it('retains whitespace-only source lines and BOM as real paragraph text through native creation and backup restore', async () => {
+  const text = '\uFEFF  \r\n第一章 原稿\r\n\t  \r\n  e\u0301🌙 & <原文>  \r\n\r\n第二章 尾章\r\n  \t\r\n尾文🪶  \r\n'
+  const f = await create(text)
+  const original = await db.chapters.where('projectId').equals(f.scope.projectId).sortBy('order')
+  const paragraphText = (html: string) => { const node = document.implementation.createHTMLDocument('').createElement('div');node.innerHTML = html;return Array.from(node.children).map(p => p.textContent).join('\n') }
+  expect(original).toHaveLength(2)
+  expect(original[0].content).toContain('<p>\uFEFF  </p>')
+  expect(original[0].content).toContain('<p>\t  </p>')
+  expect(original[0].content).toContain('e\u0301🌙 &amp; &lt;原文&gt;  ')
+  const expected = [text.slice(0, text.indexOf('第二章')), text.slice(text.indexOf('第二章'))].map(value => value.replace(/\r\n/g, '\n'))
+  expect(original.map(chapter => paragraphText(chapter.content))).toEqual(expected)
+  const copyId = await importProjectJSON(await exportProjectJSON(f.scope.projectId))
+  const restored = await db.chapters.where('projectId').equals(copyId).sortBy('order')
+  expect(restored.map(chapter => chapter.content)).toEqual(original.map(chapter => chapter.content))
+  expect(restored.map(chapter => paragraphText(chapter.content))).toEqual(expected)
+  expect(plainTextToHtml('  \n\t')).toBe('<p></p><p></p>') // Original model/editor callers keep their existing contract.
+})

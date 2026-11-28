@@ -10,6 +10,16 @@ export function isHtml(s: string): boolean {
 
 /** 纯文本 → HTML：每行包装为 <p>，空行生成空段落，保留原意 */
 export function plainTextToHtml(text: string): string {
+  return encodePlainTextLines(text, false)
+}
+
+/** Imported original prose may contain meaningful whitespace-only lines or a
+ * BOM. Preserve those characters; this is not model-output normalization. */
+export function importedNovelTextToHtmlV1(text: string): string {
+  return encodePlainTextLines(text, true)
+}
+
+function encodePlainTextLines(text: string, preserveBlankWhitespace: boolean): string {
   if (!text) return ''
   const escape = (s: string) =>
     s
@@ -19,7 +29,7 @@ export function plainTextToHtml(text: string): string {
   // 统一换行符。
   const lines = text.replace(/\r\n/g, '\n').split('\n')
   return lines
-    .map(l => (l.trim().length === 0 ? '<p></p>' : `<p>${escape(l)}</p>`))
+    .map(l => ((preserveBlankWhitespace ? l.length === 0 : l.trim().length === 0) ? '<p></p>' : `<p>${escape(l)}</p>`))
     .join('')
 }
 
