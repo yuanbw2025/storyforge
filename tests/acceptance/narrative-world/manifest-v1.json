@@ -21,9 +21,14 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261128-power048-adoption-v1.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261128-release409-main784-manifest-v1.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261128-power048-adoption-v1.json",
+        "sha256": "e59ee4449fa03b44ef318470b8b53a18186d3d8b08dc03e93843b3b8ca019f87",
+        "note": "Preserve the actual main784 adoption receipt before correcting the final manifest input fingerprint. All deterministic observations and known gaps remain unchanged; no model, release or human acceptance inferred."
+      },
       {
         "path": "tests/acceptance/narrative-world/domain-projection-20261128-reference-note-release409-v1.json",
         "sha256": "e437a3bfe85d7498f6e4df6fb2fe0b436fff8541880621c34570ccf38950dc69",
