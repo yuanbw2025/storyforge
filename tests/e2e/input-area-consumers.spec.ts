@@ -235,6 +235,12 @@ test('047 native natural, humanity, power and cultivation editors receive only U
   ]) {
     await page.goto(`./workspace/${ids.projectId}?module=${module}`)
     if (module === 'worldview-humanity') await page.getByRole('button', { name: /种族与民族/ }).click()
+    if (key === 'power.levels/current') {
+      const legacyLevels = page.locator('details').filter({ has: page.locator('summary').filter({ hasText: '已有层级说明（独立保留）' }) })
+      await expect(legacyLevels).toHaveCount(1)
+      await legacyLevels.locator('summary').click()
+      await expect(legacyLevels).toHaveAttribute('open', '')
+    }
     const rendered = page.getByText(text, { exact: true })
     await expect(rendered).toBeVisible()
     const markdown = rendered.locator('xpath=ancestor::section[@data-markdown-read-view]')
