@@ -25,7 +25,8 @@ import {
 import HarnessEvidencePanel from '../agent/HarnessEvidencePanel'
 import { useActiveWork } from '../../hooks/useActiveWork'
 import { readCreativeRuleSaveWitnessesV1 } from '../../lib/authoring/creative-rules-local-save-evidence'
-import { matchingLocalSaveAckV1, type LocalSaveContractV1, type LocalSaveCreativeRuleFieldV1, type LocalSaveIntentV1, type LocalSaveWitnessV1 } from '../../lib/authoring/local-save-evidence'
+import { LOCAL_SAVE_CREATIVE_RULE_FIELDS_V1, localSaveIdentityKeyV1, matchingLocalSaveAckV1, type LocalSaveAckV1, type LocalSaveContractV1, type LocalSaveCreativeRuleFieldV1, type LocalSaveIntentV1, type LocalSaveWitnessV1 } from '../../lib/authoring/local-save-evidence'
+import { hashAdoptFieldValueV1 } from '../../lib/registry/adopt'
 import { registerPendingDraftFlusherV1 } from '../../lib/authoring/pending-edit-coordinator'
 import { useBeforeUnload } from '../../hooks/useBeforeUnload'
 
@@ -79,6 +80,8 @@ function ScopedCreativeRulesPanel({ project, initialRulesId, confirmedLocalSaves
   const elementsComposingRef = useRef(false), elementsErrorRef = useRef('')
   const elementsPending = useRef<Promise<void> | null>(null)
   const elementsBase = useRef<LocalSaveWitnessV1 | null>(null)
+  const ownFieldWrites = useRef(new Set<Promise<unknown>>())
+  const ownCreatedRecord = useRef<LocalSaveWitnessV1 | null>(null)
   const [localWitnesses, setLocalWitnesses] = useState<Partial<Record<LocalSaveCreativeRuleFieldV1, LocalSaveWitnessV1>>>({})
   const [witnessReadComplete, setWitnessReadComplete] = useState(false)
   useBeforeUnload(elementsDirty || savingElements || elementsComposing || Boolean(elementsError))
@@ -130,18 +133,52 @@ function ScopedCreativeRulesPanel({ project, initialRulesId, confirmedLocalSaves
   const localSaveFor = (field: LocalSaveCreativeRuleFieldV1): LocalSaveContractV1 | undefined => confirmedLocalSaves && scope && witnessReadComplete
     ? { identity: { ...scope, table: 'creativeRules', field, worldGroupId: null }, witness: localWitnesses[field] ?? null } : undefined
 
-  const commitField = useCallback(async (data: Record<string, unknown>, intent?: LocalSaveIntentV1) => {
-    if (!scope || !ready) throw new Error('创作规则仍在读取，请稍后保存。')
-    try {
-      const ack = intent ? await save({ projectId: scope.projectId, ...data }, scope, intent)
-        : await save({ projectId: scope.projectId, ...data }, scope)
-      setSaveError(null)
-      return ack
-    } catch (error) {
-      setSaveError(error instanceof Error ? error.message : '保存失败，当前输入已保留')
-      throw error
-    }
-  }, [scope, ready, save])
+  const expectedAfterOwnCreation = useCallback(async (expected: LocalSaveWitnessV1, selectedScope: WorkspaceScope) => {
+    const created = ownCreatedRecord.current
+    if (expected.recordId !== null || expected.resourceUid !== null || expected.present
+      || expected.identity.table !== 'creativeRules' || created?.identity.table !== 'creativeRules'
+      || created.identity.projectId !== selectedScope.projectId
+      || created.identity.worldId !== selectedScope.worldId || created.identity.workId !== selectedScope.workId) return expected
+    const current = (await readCreativeRuleSaveWitnessesV1(selectedScope))[expected.identity.field]
+    if (!current || current.recordId !== created.recordId || current.resourceUid !== created.resourceUid
+      || localSaveIdentityKeyV1(current.identity) !== localSaveIdentityKeyV1(expected.identity)) return expected
+    const unchanged = current.present === expected.present && current.value === expected.value && current.valueHash === expected.valueHash
+    // The native singleton initializes these existing scalar text fields to
+    // empty text. Accept that initialization only after our verified creation;
+    // never adopt nonempty remote text or launder a fabricated old preimage.
+    const initializedEmptyText = LOCAL_SAVE_CREATIVE_RULE_FIELDS_V1.some(field => field === expected.identity.field)
+      && expected.value === undefined && current.present && current.value === ''
+      && expected.valueHash === await hashAdoptFieldValueV1(undefined)
+    return unchanged || initializedEmptyText ? current : expected
+  }, [])
+
+  const commitField = useCallback((data: Record<string, unknown>, intent?: LocalSaveIntentV1) => {
+    if (!scope || !ready) return Promise.reject(new Error('创作规则仍在读取，请稍后保存。'))
+    const preceding = [...ownFieldWrites.current, ...(elementsPending.current ? [elementsPending.current] : [])]
+    const operation: Promise<LocalSaveAckV1 | void> = (async () => {
+      try {
+        await Promise.all(preceding)
+        const confirmation = intent ? { ...intent, expected: await expectedAfterOwnCreation(intent.expected, scope) } : undefined
+        const ack = confirmation ? await save({ projectId: scope.projectId, ...data }, scope, confirmation)
+          : await save({ projectId: scope.projectId, ...data }, scope)
+        const field = confirmation?.expected.identity.table === 'creativeRules' ? confirmation.expected.identity.field : undefined
+        if (confirmation && field && typeof data[field] === 'string' && confirmation.expected.recordId === null
+          && confirmation.expected.resourceUid === null && !confirmation.expected.present
+          && matchingLocalSaveAckV1(ack, confirmation, data[field])) {
+          // Only this page's verified first write can introduce the singleton
+          // to an already edited sibling field. A live-query echo cannot.
+          ownCreatedRecord.current = structuredClone(ack.witness)
+        }
+        setSaveError(null)
+        return ack
+      } catch (error) {
+        setSaveError(error instanceof Error ? error.message : '保存失败，当前输入已保留')
+        throw error
+      }
+    })().finally(() => { ownFieldWrites.current.delete(operation) })
+    ownFieldWrites.current.add(operation)
+    return operation
+  }, [scope, ready, save, expectedAfterOwnCreation])
   const saveField = useCallback((data: Record<string, unknown>) => { void commitField(data).catch(() => undefined) }, [commitField])
 
   const changeElements = (next: SystemFictionElementsV1) => {
@@ -153,16 +190,22 @@ function ScopedCreativeRulesPanel({ project, initialRulesId, confirmedLocalSaves
   const saveElements = () => {
     if (elementsPending.current) return elementsPending.current
     if (!scope || !ready || elementsComposingRef.current) return Promise.resolve()
-    const selectedScope = { ...scope }, snapshot = structuredClone(elements), expected = elementsBase.current
+    const selectedScope = { ...scope }, snapshot = structuredClone(elements), originalExpected = elementsBase.current
     setSavingElements(true)
     setElementsError(''); elementsErrorRef.current = ''
     const operation = (async () => {
       const validated = parseSystemFictionElementsV1(snapshot)
       if (confirmedLocalSaves) {
+        let expected = originalExpected
         if (!expected) throw new Error('尚未确认原系统文元素记录，当前输入已保留。')
+        await Promise.all([...ownFieldWrites.current])
+        expected = await expectedAfterOwnCreation(expected, selectedScope)
+        if (elementsBase.current === originalExpected) elementsBase.current = expected
         const intent: LocalSaveIntentV1 = { kind: 'natural-field-local-save-v1', expected, session: crypto.randomUUID(), generation: 1 }
         const ack = await save({ projectId: selectedScope.projectId, systemFictionElements: validated }, selectedScope, intent)
         if (!matchingLocalSaveAckV1(ack, intent, JSON.stringify(validated))) throw new Error('未收到相同系统文元素的实际提交凭据，输入已保留。')
+        if (expected.recordId === null && expected.resourceUid === null && !expected.present)
+          ownCreatedRecord.current = structuredClone(ack.witness)
         elementsBase.current = ack.witness
         setLocalWitnesses(current => ({ ...current, systemFictionElements: ack.witness }))
       } else await save({ projectId: selectedScope.projectId, systemFictionElements: validated }, selectedScope)
