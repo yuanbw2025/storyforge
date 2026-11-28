@@ -21,9 +21,19 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261128-history061-text-delivery-v1.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261128-history061-events-v1.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
+      {
+        "path": "tests/acceptance/narrative-world/ir-contract-20261128-history061-text-v1.json",
+        "sha256": "473b122e8b8b4aa504007bd43609a8db150bfb273411d7025e4bfa5ed7a0e288",
+        "note": "Preserve measured receipt before history061 event creation. Compare all deterministic outcomes unchanged; no model, release or human acceptance inferred."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261128-history061-text-delivery-v1.json",
+        "sha256": "987a31fe054720c9519b2c4a74db5cd17ff1684c1f99d834d48998dba6cc90f4",
+        "note": "Preserve measured receipt before history061 event creation. Compare all deterministic outcomes unchanged; no model, release or human acceptance inferred."
+      },
       {
         "path": "tests/acceptance/narrative-world/baseline-20261128-power048-adoption-v1.json",
         "sha256": "e59ee4449fa03b44ef318470b8b53a18186d3d8b08dc03e93843b3b8ca019f87",

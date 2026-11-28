@@ -579,6 +579,9 @@ export interface AdoptWorldHistoryTextInputV1 {
   mode: 'replace'
 }
 
+/** Fixed new history candidates; generic record-only history writes stay closed. */
+export type AdoptHistoryEventCreationInputV1 = import('../history/event-creation-adoption').AdoptHistoryEventCreationInputV1
+
 /** Exact original power record/field + native preimage and explicit DAG impact. */
 export type AdoptPowerAuthoringInputV1 = import('../cultivation/power-authoring-adoption').AdoptPowerAuthoringInputV1
 

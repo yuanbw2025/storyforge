@@ -169,6 +169,13 @@ const DEAI_SYSTEM = `你是一位文字风格化专家。你的任务是将 AI �
 
 const CORE_PROMPT_BASE_SEEDS: PromptSeed[] = [
   {
+    scope: 'system', moduleKey: 'history.timeline', promptType: 'generate', name: '内置-历史事件起草',
+    description: '从零或补充历史事件候选，作者逐项选择后增加，不改已有时间轴。',
+    systemPrompt: '依据已确认的世界、历史、纪年及已有事件，提出有前因后果的新事件候选。幻想日期保留原表达；新增前提标注待确认，不伪造考证。',
+    userPromptTemplate: '生成方式：{{generationMode}}\n作者要求：{{userHint}}\n已确认历史与世界：\n{{worldContext}}',
+    variables: ['generationMode', 'userHint', 'worldContext'], isActive: true,
+  },
+  {
     scope: 'system', moduleKey: 'history.overview', promptType: 'generate',
     name: '内置-历史总述起草',
     description: '为当前历史字段起草可编辑候选，作者确认后才写入正式设定。',

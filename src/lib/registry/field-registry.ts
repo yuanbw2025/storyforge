@@ -769,7 +769,13 @@ export const FIELD_REGISTRY: FieldSpec[] = [
   longtext('referenceChunkAnalysis', 'languageCustoms'),
   longtext('referenceChunkAnalysis', 'rawExcerpt'),
 
-  // historical dual-agent results (recordId-only adoption; see ADOPTION_SCHEMAS)
+  // Creation is admitted only through the closed history-event candidate contract.
+  // Generic collection creation remains recordId-only; consult/storm keep their result-only grant.
+  text('historicalTimelineEvents', 'title', ['历史事件名称']),
+  text('historicalTimelineEvents', 'era', ['历史事件时期']),
+  text('historicalTimelineEvents', 'date', ['历史事件时间表达']),
+  longtext('historicalTimelineEvents', 'description', ['历史事件过程']),
+  longtext('historicalTimelineEvents', 'impact', ['历史事件影响']),
   longtext('historicalTimelineEvents', 'aiConsult'),
   longtext('historicalTimelineEvents', 'aiBrainstorm'),
   longtext('historicalKeywords', 'aiConsult'),

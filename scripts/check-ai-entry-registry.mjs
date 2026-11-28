@@ -211,6 +211,7 @@ for (const entry of registry.entries ?? []) {
 const actualCalls = []
 const actualTransports = []
 const scannedFiles = [
+  'src/lib/agent/history-events-copilot.ts',
   'src/lib/agent/history-text-copilot.ts',
   'src/lib/agent/power-authoring-copilot.ts',
   'src/lib/world-map/atlas/paint-preview.ts',
