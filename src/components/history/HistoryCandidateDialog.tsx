@@ -19,7 +19,7 @@ export default function HistoryCandidateDialog({ label, onClose, children }: { l
       || (event.target as HTMLElement).closest('[role="dialog"]') !== element) return
     if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); onClose(); return }
     if (event.key !== 'Tab') return
-    const items = focusable(element), first = items[0], last = items.at(-1)
+    const items = focusable(element), first = items[0], last = items[items.length - 1]
     if (!first) { event.preventDefault(); element.focus(); return }
     if (event.shiftKey && (document.activeElement === first || document.activeElement === element)) {
       event.preventDefault(); last!.focus()
