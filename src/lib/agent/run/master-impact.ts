@@ -35,6 +35,7 @@ const TARGET_TABLE_BY_AGENT: Record<string, string> = {
 }
 
 function targetTableFor(candidate: MasterAgentDurableCandidateV1): string {
+  if (candidate.payload.skillId === 'world-origin.history-keyword-suggestions') return 'agentEvents'
   if (candidate.payload.skillId === 'world-origin.history-events') return 'historicalTimelineEvents'
   if (candidate.payload.skillId === 'world-origin.history-text') return 'histories'
   if (candidate.payload.skillId === 'world-origin.power-authoring') return candidate.payload.powerAuthoringRequest!.target.table
@@ -47,6 +48,7 @@ function targetTableFor(candidate: MasterAgentDurableCandidateV1): string {
 }
 
 function contentForReport(report: MasterAgentImpactReportV1): string {
+  if (report.changed.table === 'agentEvents') return '所选关键词建议已加入独立作者草稿。正式设定和正文均未改变，未自动运行后续生成。'
   const subject = `${report.agentId} → ${report.changed.table}`
   if (report.agentId === 'prose') {
     return [
@@ -74,7 +76,8 @@ async function buildReport(
   const { scope, snapshot, candidate } = input
   const payload = candidate.payload
   const agentId = payload.agentId
-  const downstream = await readOwnedRows<any>(scope, 'chapters', { owner: 'work' })
+  const draftOnly = payload.skillId === 'world-origin.history-keyword-suggestions'
+  const downstream = draftOnly ? [] : await readOwnedRows<any>(scope, 'chapters', { owner: 'work' })
   const report: MasterAgentImpactReportV1 = {
     version: MASTER_AGENT_IMPACT_REPORT_VERSION_V1,
     kind: 'master-agent-impact',
@@ -89,7 +92,7 @@ async function buildReport(
     downstreamChapterIds: downstream.map(row => row.id).filter((id): id is number => typeof id === 'number'),
     staleSummaryNodeIds: [],
     retrievalChunkCount: 0,
-    requiresAuthorReview: agentId !== 'prose',
+    requiresAuthorReview: !draftOnly && agentId !== 'prose',
   }
 
   if (payload.skillId === 'world-origin.power-authoring') report.changed.id = payload.powerAuthoringRequest?.target.recordId ?? null
