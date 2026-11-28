@@ -93,6 +93,9 @@ function manualChunkFor(moduleId: string): string | undefined {
   // them separately from the store/adoption context closure, keeping every
   // synchronous export and the same default script-chunk size budget.
   if (/\/src\/lib\/types\/(?:codex|world-rules)\.ts$/.test(id)) return 'world-input-contracts'
+  // Provider catalogs and error classes are also dependency-free leaves. Keep
+  // their synchronous exports separate without moving transport or credentials.
+  if (id.endsWith('/src/lib/types/ai.ts')) return 'ai-provider-contracts'
   if (id.endsWith('/src/lib/ai/context-builder.ts')) return 'ai-context'
   if (id.endsWith('/src/lib/context-gateway/selector.ts')) return 'context-selector'
   // Passive codecs and policy data have no dependency back into the shared
