@@ -21,9 +21,19 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261128-history061-keyword-content-v1.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261128-history061-keyword-content-main832-v1.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261128-history061-keyword-content-v1.json",
+        "sha256": "a35268c9ca7a5ab42d85c0a7eb8914be1427e041d4db0d3d26264fc4d9aa1f08",
+        "note": "Preserve measured PR835 keyword content receipt before integrating main832 checkpoint/build changes."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261128-issue833-main830-guard-v1.json",
+        "sha256": "2e04d30b52aff842d03b39d1f9e47fd9c484588a46763db6c3b44eaaeef83e8a",
+        "note": "Preserve main832 measured guard receipt while integrating independent keyword-content fixes."
+      },
       {
         "path": "tests/acceptance/narrative-world/domain-projection-20261128-history061-keyword-draft-extension-v1.json",
         "sha256": "64b14d26955cea39b14d442f0562c2eb9d2ee32800ae05ae03afdf66afb2487d",
