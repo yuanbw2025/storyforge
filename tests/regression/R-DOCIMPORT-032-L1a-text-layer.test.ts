@@ -221,8 +221,8 @@ describe('032-L1-a text-layer detection and original-file preservation', () => {
   })
 
   it('does not alter existing file-format limits, accept list, or .doc refusal wording', async () => {
-    expect(FILE_SIZE_LIMITS).toEqual({ txt: 5 * 1024 * 1024, md: 5 * 1024 * 1024, csv: 2 * 1024 * 1024, pdf: 20 * 1024 * 1024, docx: 10 * 1024 * 1024 })
-    expect(ACCEPT_ATTR).toBe('.txt,.md,.csv,.pdf,.docx')
+    expect(FILE_SIZE_LIMITS).toEqual({ txt: 5 * 1024 * 1024, md: 5 * 1024 * 1024, csv: 2 * 1024 * 1024, pdf: 20 * 1024 * 1024, docx: 10 * 1024 * 1024, xlsx: 10 * 1024 * 1024 })
+    expect(ACCEPT_ATTR).toBe('.txt,.md,.csv,.pdf,.docx,.xlsx')
     await expect(extractTextFromFile(new File(['legacy'], '旧版.doc'))).rejects.toThrow('Word 97-2003 二进制格式')
   })
 })

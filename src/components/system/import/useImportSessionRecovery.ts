@@ -73,7 +73,7 @@ export default function useImportSessionRecovery(projectId: number, activeWorldI
           setBlobRestored(true)
           return
         }
-        const result = await extractTextFromFile(file)
+        const result = await extractTextFromFile(file, { signal: controller.signal })
         if (cancelled) return
         if (result.status === 'empty') {
           // 不切块、不登记块文本、不产生候选：扫描件恢复只能停在原件。

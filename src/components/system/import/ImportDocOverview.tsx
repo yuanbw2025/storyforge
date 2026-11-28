@@ -55,7 +55,7 @@ export function ImportDocIntro({ chunkSize, automaticChunking = false }: { chunk
           <Info className="w-3.5 h-3.5 text-accent" />
           <span className="font-medium">支持的文件格式与大小上限</span>
         </div>
-        <div className="grid grid-cols-5 gap-2">
+        <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
           {FILE_LIMIT_HINTS.map(hint => (
             <div key={hint.ext} className="text-center px-2 py-1.5 bg-bg-base rounded">
               <div className="text-xs font-mono text-accent">.{hint.ext}</div>
@@ -68,6 +68,7 @@ export function ImportDocIntro({ chunkSize, automaticChunking = false }: { chunk
           {automaticChunking ? '自动分块会按当前连接可用容量核对完整请求，优先按章节或段落划分，AI 串行处理。'
             : <>文档按「章节边界」或「段落 / 字符数」切块，每块约 {chunkSize.toLocaleString()} 字，AI 串行处理。</>}<br />
           大文本仅显示开头预览，完整原件按需读取，不要求手工拆文件。<br />
+          XLSX 表格保留工作表、单元格坐标、合并区域及公式缓存值；不执行公式，图片、图表、批注和排版请对照原件。旧 .xls / 宏表请先另存为无宏 .xlsx。<br />
           🔍 扫描件或图片型 PDF 没有可复制文本层时不会进入解析：结果会明确提示「未识别到可复制文本，已保留原件」，原件仍可查看/下载，补上可复制文本后再开始。<br />
           ✨ <strong>上传后原文会自动存档到浏览器本地 IndexedDB</strong>，存档成功后，回到原世界和作品可以续跑；存档缺失时须重新上传同一文件。
         </div>

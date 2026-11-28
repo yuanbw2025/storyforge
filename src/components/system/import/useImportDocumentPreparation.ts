@@ -71,7 +71,7 @@ export default function useImportDocumentPreparation() {
         if (!streamed.hasText) setFileError('原文件没有可解析的正文。')
         return
       }
-      const result = await extractTextFromFile(file)
+      const result = await extractTextFromFile(file, { signal: controller.signal })
       if (request !== sourceReadSequence.current) return
       if (result.status === 'empty') {
         // 不进入分块/候选/adopt，也不清掉已选文件：原件仍可由既有 saveBlob 路径存档。
@@ -90,6 +90,8 @@ export default function useImportDocumentPreparation() {
         `抽取 ${result.rawChars.toLocaleString()} 字符`,
       ]
       if (result.pageCount) parts.push(`${result.pageCount} 页`)
+      if (result.sheetCount) parts.push(`${result.sheetCount} 个工作表`)
+      if (result.formatNotices) parts.push(...result.formatNotices)
       if (result.warnings.includes('pdf-text-layer-sparse')) parts.push('部分页面文字极少')
       setExtractInfo(parts.join(' · '))
     } catch (error) {
