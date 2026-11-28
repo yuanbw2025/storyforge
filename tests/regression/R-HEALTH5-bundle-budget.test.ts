@@ -59,9 +59,9 @@ describe('HEALTH-5 · 构建产物体积预算', () => {
     expect(source).toContain("await import('../export/json-export')")
   })
 
-  it('world input codebooks cannot acquire runtime dependencies back into stores or adoption', async () => {
+  it('separated codebooks cannot acquire runtime dependencies back into stores or adoption', async () => {
     const ts = await import('typescript')
-    for (const file of ['src/lib/types/codex.ts', 'src/lib/types/world-rules.ts']) {
+    for (const file of ['src/lib/types/codex.ts', 'src/lib/types/world-rules.ts', 'src/lib/types/ai.ts']) {
       const source = ts.createSourceFile(file, fs.readFileSync(file, 'utf8'), ts.ScriptTarget.Latest, true)
       const runtimeEdges: string[] = []
       const visit = (node: import('typescript').Node) => {
@@ -78,11 +78,11 @@ describe('HEALTH-5 · 构建产物体积预算', () => {
 
   it('the separated codebook and context chunks both retain the original script budget', () => {
     const distDir = makeDist('console.log("ok")')
-    for (const filename of ['ai-context-test.js', 'world-input-contracts-test.js']) {
+    for (const filename of ['ai-context-test.js', 'world-input-contracts-test.js', 'ai-provider-contracts-test.js']) {
       fs.writeFileSync(path.join(distDir, 'assets', filename), 'x'.repeat(BUNDLE_BUDGETS.scriptChunk.raw + 1))
     }
     const result = checkBundleBudget(distDir)
-    expect(result.violations.map((item: { filename: string }) => item.filename)).toEqual(['ai-context-test.js', 'world-input-contracts-test.js'])
+    expect(result.violations.map((item: { filename: string }) => item.filename)).toEqual(['ai-context-test.js', 'ai-provider-contracts-test.js', 'world-input-contracts-test.js'])
     expect(result.violations.every((item: { category: string; budget: unknown }) => item.category === 'scriptChunk' && item.budget === BUNDLE_BUDGETS.scriptChunk)).toBe(true)
   })
 })

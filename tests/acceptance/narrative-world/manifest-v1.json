@@ -21,6 +21,7 @@
     "edits": 48
   },
   "baseline": {
+<<<<<<< HEAD
     "path": "tests/acceptance/narrative-world/baseline-20261128-history061-joint-text-v1.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
@@ -53,6 +54,15 @@
         "path": "tests/acceptance/narrative-world/baseline-20261128-history061-keyword-draft-extension-v1.json",
         "sha256": "123168d0aa694c9941c502e25281566d17812075683718fae5aedee2a5e2c074",
         "note": "Preserve delivered PR830 private-draft extension receipt before keyword-content selected-field integration. Compare deterministic outcomes and known gaps unchanged; no model, release or human acceptance inferred."
+=======
+    "path": "tests/acceptance/narrative-world/baseline-20261128-issue833-main830-guard-v1.json",
+    "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
+    "history": [
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261128-history061-keyword-draft-extension-v1.json",
+        "sha256": "123168d0aa694c9941c502e25281566d17812075683718fae5aedee2a5e2c074",
+        "note": "Preserve the actual main830 keyword-draft extension receipt before measuring its later architecture-guard input. All deterministic observations/issues/known gaps must remain unchanged; no gold, timeout, quota or model/human acceptance change."
+>>>>>>> origin/main
       },
       {
         "path": "tests/acceptance/narrative-world/domain-projection-20261128-history061-keyword-suggestions-v1.json",
