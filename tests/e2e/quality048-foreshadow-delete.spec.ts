@@ -1,4 +1,5 @@
 import { expect, test, type BrowserContext, type Page } from '@playwright/test'
+import { expectMarkdownSourceValueV1 } from './helpers/markdown-source'
 
 const boundaries = new WeakMap<BrowserContext, string[]>()
 const errors = new WeakMap<Page, string[]>()
@@ -110,11 +111,11 @@ test('real native deletion failure keeps the selected complete description and s
   await page.getByRole('button', { name: '删除伏笔', exact: true }).click()
   await expect(page.getByRole('alert')).toContainText('隔离测试：删除未提交，原数据保留')
   await expect(page.getByRole('button', { name: '删除伏笔', exact: true })).toBeEnabled()
-  expect(await page.locator('textarea').evaluateAll(inputs => inputs.map(input => (input as HTMLTextAreaElement).value))).toContain(f.description)
+  await expectMarkdownSourceValueV1(page.getByText('伏笔描述', { exact: true }).locator('..'), page.getByLabel('伏笔描述', { exact: true }), f.description)
   expect(await read(page)).toEqual(before)
   await info.attach('foreshadow-native-failure', { contentType: 'application/json', body: JSON.stringify({ before, after: await read(page) }) })
   await page.reload()
   await selectRemoved(page)
-  expect(await page.locator('textarea').evaluateAll(inputs => inputs.map(input => (input as HTMLTextAreaElement).value))).toContain(f.description)
+  await expectMarkdownSourceValueV1(page.getByText('伏笔描述', { exact: true }).locator('..'), page.getByLabel('伏笔描述', { exact: true }), f.description)
   expect(await read(page)).toEqual(before)
 })

@@ -2524,12 +2524,18 @@ test('真实世界观入口可维护修炼 DAG 并关联角色境界', async ({ 
 
   await page.getByRole('button', { name: '添加第一个起始境界', exact: true }).click()
   const stageNameField = page.getByText('境界名称', { exact: true }).locator('..')
+  // A reading div is not a native disabled control. Wait for every existing
+  // owner/read guard before sending the author click; never force the edit.
+  await expect(stageNameField.locator('xpath=ancestor::fieldset[@disabled or @inert]')).toHaveCount(0)
   await stageNameField.getByText('新境界', { exact: true }).click()
   await stageNameField.locator('input').fill('炼体境')
   await stageNameField.locator('input').press('Enter')
   await expect(page.getByText('炼体境', { exact: true }).first()).toBeVisible()
 
   await page.getByRole('button', { name: '添加后续境界', exact: true }).click()
+  // A reading div is not a native disabled control. Wait for every existing
+  // owner/read guard before sending the author click; never force the edit.
+  await expect(stageNameField.locator('xpath=ancestor::fieldset[@disabled or @inert]')).toHaveCount(0)
   await stageNameField.getByText('新境界', { exact: true }).click()
   await stageNameField.locator('input').fill('筑基境')
   await stageNameField.locator('input').press('Enter')
@@ -3140,9 +3146,11 @@ test('世界组六字段扩写只产生可恢复候选，作者确认后一次�
 
   await page.getByRole('button', { name: 'AI 扩写世界观', exact: true }).click()
   await expect(page.getByText('六字段世界观候选尚未写入', { exact: true })).toBeVisible({ timeout: 30_000 })
-  const completeCandidate = page.getByRole('group').filter({ has: page.getByText('查看全部 6 项候选', { exact: true }) })
+  const completeCandidate = page.getByText('查看全部 6 项候选', { exact: true }).locator('xpath=ancestor::details[1]')
+  await expect(completeCandidate).toHaveCount(1)
   await completeCandidate.getByText('查看全部 6 项候选', { exact: true }).click()
-  for (const value of Object.values(modelCandidate)) await expect(completeCandidate.getByText(value, { exact: true })).toBeVisible()
+  await expect(completeCandidate.getByRole('definition')).toHaveCount(6)
+  await expect(completeCandidate.getByRole('definition')).toHaveText(Object.values(modelCandidate))
   expect(generationCalls).toBe(1)
 
   await openSidebarLeaf(page, '世界观', '世界起源')
