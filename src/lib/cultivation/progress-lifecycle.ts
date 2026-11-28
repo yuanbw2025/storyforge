@@ -1,6 +1,15 @@
 import type { Table, Transaction } from 'dexie'
 import { db } from '../db/schema'
 import { parseCultivationStages, type CultivationStage } from '../types'
+import { canonicalStringify } from '../agent/run/hash'
+
+/** A lifecycle success must describe the actual native row, including retained
+ * evidence and owner fields; a zero-row or collateral hook update is failure. */
+export async function verifyCultivationReferencePatchV1(table: Table, before: { id?: number }, patch: Record<string, unknown>, written: number): Promise<void> {
+  if (written !== 1 || before.id == null) throw new Error('修炼引用更新0行，原事务已回滚。')
+  const actual = await table.get(before.id)
+  if (!actual || canonicalStringify(actual) !== canonicalStringify({ ...before, ...patch })) throw new Error('修炼引用后态不匹配，原事务已回滚。')
+}
 
 /** Capture the original native table even after a cryptographic preimage await. */
 export function cultivationLifecycleTableV1<T>(table: Table<T, number>, transaction?: Transaction): Table<T, number> {
@@ -96,18 +105,20 @@ export async function refreshCultivationProgressStageSources(args: {
     const before = previous.get(row.stageId)
     const after = next.get(row.stageId)
     if (!after) {
-      await update(row.id, {
+      const patch = {
         stageId: null,
-        status: 'source-missing',
+        status: 'source-missing' as const,
         updatedAt: Date.now(),
-      })
+      }
+      await verifyCultivationReferencePatchV1(table, row, patch, await update(row.id, patch))
       continue
     }
     if (before && stageDefinitionChanged(before, after) && row.status === 'confirmed') {
-      await update(row.id, {
-        status: 'stale',
+      const patch = {
+        status: 'stale' as const,
         updatedAt: Date.now(),
-      })
+      }
+      await verifyCultivationReferencePatchV1(table, row, patch, await update(row.id, patch))
     }
   }
 }
