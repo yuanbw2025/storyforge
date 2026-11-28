@@ -278,15 +278,16 @@ for (const dir of UI_DIRS) {
 // ── ⑧ src/lib 的 AI/结构化写回不得绕过 adopt 或已登记领域扩展 ──
 const fieldRegistryAst = parseSource('src/lib/registry/field-registry.ts')
 const governedWriteTargets = new Set()
+const canonicalFieldTargets = new Set()
 const fieldHelpers = new Set(['text', 'longtext', 'num', 'bool', 'json', 'object', 'arr', 'enumeration', 'enumField', 'field'])
 visit(fieldRegistryAst, node => {
   if (ts.isObjectLiteralExpression(node) && stringValue(objectProperty(node, 'field')?.initializer)) {
     const target = stringValue(objectProperty(node, 'target')?.initializer)
-    if (target) governedWriteTargets.add(target)
+    if (target) canonicalFieldTargets.add(target)
   }
   if (!ts.isCallExpression(node) || !ts.isIdentifier(node.expression) || !fieldHelpers.has(node.expression.text)) return
   const target = stringValue(node.arguments[0])
-  if (target) governedWriteTargets.add(target)
+  if (target) { governedWriteTargets.add(target); canonicalFieldTargets.add(target) }
 })
 
 const adoptionAst = parseSource('src/lib/registry/adoption-schema.ts')
@@ -301,7 +302,7 @@ visit(adoptionAst, node => {
   // Scoped draft/journal operations do not make framework bookkeeping a
   // canonical AI write. This annotation cannot exempt a registered field table.
   const nonCanonicalStorage = objectProperty(node, 'nonCanonicalStorage')?.initializer?.kind === ts.SyntaxKind.TrueKeyword
-  if (nonCanonicalStorage && governedWriteTargets.has(target)) {
+  if (nonCanonicalStorage && canonicalFieldTargets.has(target)) {
     violations.push(`[⑧扩展边界] ${target}: 已登记规范字段不能声明 nonCanonicalStorage`)
   }
   if (!nonCanonicalStorage) governedWriteTargets.add(target)
