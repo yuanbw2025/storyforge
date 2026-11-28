@@ -2539,7 +2539,10 @@ test('真实世界观入口可维护修炼 DAG 并关联角色境界', async ({ 
   await stageNameField.getByText('新境界', { exact: true }).click()
   await stageNameField.locator('input').fill('筑基境')
   await stageNameField.locator('input').press('Enter')
-  await expect(page.getByText('← 炼体境', { exact: true })).toBeVisible()
+  const promotedStage = page.getByRole('navigation', { name: '境界列表', exact: true }).getByRole('button', { name: '筑基境', exact: true })
+  await expect(promotedStage).toHaveAttribute('aria-pressed', 'true')
+  await expect(promotedStage.getByText('← 炼体境', { exact: true })).toBeVisible()
+  await expect(page.getByRole('checkbox', { name: '炼体境', exact: true })).toBeChecked()
 
   await openSidebarLeaf(page, '角色设计', '角色生成')
   await page.getByRole('button', { name: /新建角色/ }).click()
