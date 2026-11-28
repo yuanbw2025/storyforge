@@ -209,3 +209,30 @@ test('⑥ 保存失败保持源码态不伪成功；重试后才返回阅读', a
   expect((await snapshot(page))[0].worldStructure).toBe('# 保存失败应保留')
   await page.screenshot({ path: info.outputPath('051-failure-retained.png'), fullPage: true })
 })
+
+test('⑦ 同一字段凭据对象重绘不丢第一次单击，不写回原稿', async ({ page }) => {
+  const md = '# 同一世界的原稿 e\u0301 😀'
+  const ids = await seed(page, md)
+  await page.goto(`./workspace/${ids.projectId}?module=worldview-natural`)
+  const field = pane(page)
+  await expect(field.locator('[data-markdown-read-view]')).toBeVisible()
+  const before = JSON.stringify(await snapshot(page))
+  await page.evaluate(async () => {
+    const load = new Function('path', 'return import(path)') as <T>(path: string) => Promise<T>
+    const { useWorldviewStore } = await load<typeof import('../../src/stores/worldview')>('/storyforge/src/stores/worldview.ts')
+    Reflect.set(window, 'sf806WitnessRefreshes', 0)
+    document.addEventListener('click', event => {
+      if (!(event.target instanceof Element) || !event.target.closest('[data-markdown-body]')) throw new Error('Expected the single Markdown body click')
+      // Re-render after the click handler schedules its original 240ms request.
+      // A capture-listener microtask can precede React bubbling and misses this race.
+      window.setTimeout(() => {
+        useWorldviewStore.setState({ localSaveWitnesses: { ...useWorldviewStore.getState().localSaveWitnesses } })
+        Reflect.set(window, 'sf806WitnessRefreshes', 1)
+      }, 50)
+    }, { capture: true, once: true })
+  })
+  await field.locator('[data-markdown-body] h1').click()
+  await expect(field.locator('textarea')).toHaveValue(md)
+  expect(await page.evaluate(() => Reflect.get(window, 'sf806WitnessRefreshes'))).toBe(1)
+  expect(JSON.stringify(await snapshot(page))).toBe(before)
+})
