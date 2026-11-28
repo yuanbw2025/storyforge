@@ -9,7 +9,6 @@ import {
   getTableSpec,
   readOwnedRows,
   resolveWorldOwnerScopeLike,
-  resolveScopeLike,
   scopeTransactionTables,
   stampNewRecord,
   type WorldOwnerScopeLike,
@@ -27,6 +26,7 @@ interface HistoricalStore {
   keywords: HistoricalKeyword[]
   loading: boolean
   loadedEventsScope: WorldOwnerScope | null
+  loadedKeywordsScope: WorldOwnerScope | null
   loadingKeywords: boolean
 
   // ── 历史时间线事件 ──
@@ -43,7 +43,7 @@ interface HistoricalStore {
   /** 加载某个项目的所有历史关键词 */
   loadKeywords: (scope: WorldOwnerScopeLike) => Promise<void>
   /** 添加历史关键词 */
-  addKeyword: (keyword: Omit<HistoricalKeyword, 'createdAt' | 'updatedAt'>) => Promise<number>
+  addKeyword: (keyword: Omit<HistoricalKeyword, 'createdAt' | 'updatedAt'>, scope?: WorldOwnerScopeLike) => Promise<number>
   /** 更新历史关键词 */
   updateKeyword: HistoricalTextUpdateV1<HistoricalKeyword>
   /** 删除历史关键词 */
@@ -63,6 +63,7 @@ function confirmedTextUpdateV1(table: 'historicalTimelineEvents' | 'historicalKe
 
 const sameWorld = (left: WorldOwnerScope | null, right: WorldOwnerScope) => left?.projectId === right.projectId && left.worldId === right.worldId
 let eventLoadSequence = 0
+let keywordLoadSequence = 0
 
 const eventIdentityFields = new Set(['id', 'projectId', 'worldId', 'workId', 'createdAt',
   getTableSpec('historicalTimelineEvents').resourceIdentity!.field])
@@ -116,11 +117,45 @@ async function refreshEvents(scope: WorldOwnerScope, get: () => HistoricalStore,
   await publishEvents(scope, ++eventLoadSequence, get, set)
 }
 
+async function publishKeywords(scope: WorldOwnerScope, request: number, get: () => HistoricalStore, set: (patch: Partial<HistoricalStore>) => void): Promise<void> {
+  try {
+    const keywords = (await readOwnedRows<HistoricalKeyword>(scope, 'historicalKeywords', { owner: 'world' })).sort((a, b) => b.updatedAt - a.updatedAt)
+    const project = await db.projects.get(scope.projectId)
+    if (request !== keywordLoadSequence || !sameWorld(get().loadedKeywordsScope, scope)) return
+    if (project?.activeWorldId !== scope.worldId) { set({ keywords: [], loadedKeywordsScope: null, loadingKeywords: false }); return }
+    set({ keywords, loadingKeywords: false })
+  } catch (error) {
+    if (request === keywordLoadSequence && sameWorld(get().loadedKeywordsScope, scope)) {
+      console.error('[HistoricalStore] loadKeywords failed:', error)
+      set({ keywords: [], loadedKeywordsScope: null, loadingKeywords: false })
+    }
+  }
+}
+
+async function refreshKeywords(scope: WorldOwnerScope, get: () => HistoricalStore, set: (patch: Partial<HistoricalStore>) => void): Promise<void> {
+  if (!sameWorld(get().loadedKeywordsScope, scope)) return
+  let transaction = Dexie.currentTransaction
+  while (transaction?.parent) transaction = transaction.parent
+  if (transaction?.db === db && transaction.mode === 'readwrite' && transaction.active) {
+    const selected = keywordLoadSequence
+    transaction.on('complete', () => {
+      if (selected === keywordLoadSequence && sameWorld(get().loadedKeywordsScope, scope)) void Dexie.ignoreTransaction(() => refreshKeywords(scope, get, set))
+    })
+    return
+  }
+  await publishKeywords(scope, ++keywordLoadSequence, get, set)
+}
+
+async function assertNewHistoryGroup(scope: WorldOwnerScope, groupId?: number | null) {
+  if (groupId != null && !await assertRecordInScope(scope, 'worldGroups', await db.worldGroups.get(groupId), { owner: 'world' })) throw new Error('历史分区不属于指定 World。')
+}
+
 export const useHistoricalStore = create<HistoricalStore>((set, get) => ({
   events: [],
   keywords: [],
   loading: false,
   loadedEventsScope: null,
+  loadedKeywordsScope: null,
   loadingKeywords: false,
 
   // ── 历史时间线事件 ──
@@ -141,8 +176,11 @@ export const useHistoricalStore = create<HistoricalStore>((set, get) => ({
   },
 
   addEvent: async (event, scopeInput) => {
-    const { id, scope } = await db.transaction('rw', scopeTransactionTables(db.historicalTimelineEvents), async () => {
+    event = { ...event }; scopeInput = typeof scopeInput === 'object' ? { ...scopeInput } : scopeInput
+    const { id, scope } = await db.transaction('rw', scopeTransactionTables(db.historicalTimelineEvents, ...(event.worldGroupId != null ? [db.worldGroups] : [])), async () => {
       const scope = await resolveWorldOwnerScopeLike(scopeInput ?? event.projectId)
+      if (scope.projectId !== event.projectId) throw new Error('历史事件工作区与目标不一致。')
+      await assertNewHistoryGroup(scope, event.worldGroupId)
       const now = Date.now()
       const row = stampNewRecord(scope, 'historicalTimelineEvents', { ...event, createdAt: now, updatedAt: now }, { owner: 'world' })
       return { id: await db.historicalTimelineEvents.add(row), scope }
@@ -198,31 +236,34 @@ export const useHistoricalStore = create<HistoricalStore>((set, get) => ({
 
   // ── 历史关键词与细节 ──
   loadKeywords: async (scopeInput) => {
-    set({ loadingKeywords: true })
+    const request = ++keywordLoadSequence
+    set({ keywords: [], loadedKeywordsScope: null, loadingKeywords: true })
     try {
       const scope = await resolveWorldOwnerScopeLike(scopeInput)
-      const keywords = (await readOwnedRows<HistoricalKeyword>(
-        scope,
-        'historicalKeywords',
-        { owner: 'world' },
-      )).sort((left, right) => right.updatedAt - left.updatedAt)
-      set({ keywords, loadingKeywords: false })
+      if (request !== keywordLoadSequence) return
+      set({ loadedKeywordsScope: scope })
+      await publishKeywords(scope, request, get, set)
     } catch (err) {
-      console.error('[HistoricalStore] loadKeywords failed:', err)
-      set({ loadingKeywords: false })
+      if (request === keywordLoadSequence) {
+        console.error('[HistoricalStore] loadKeywords failed:', err)
+        set({ keywords: [], loadedKeywordsScope: null, loadingKeywords: false })
+      }
     }
   },
 
-  addKeyword: async (keyword) => {
-    const now = Date.now()
-    const row = stampNewRecord(
-      await resolveScopeLike(keyword.projectId),
-      'historicalKeywords',
-      { ...keyword, createdAt: now, updatedAt: now },
-      { owner: 'world' },
-    ) as HistoricalKeyword
-    const id = await db.historicalKeywords.add(row) as number
-    await get().loadKeywords(keyword.projectId)
+  addKeyword: async (keyword, scopeInput) => {
+    const caller = Dexie.currentTransaction
+    keyword = { ...keyword }; scopeInput = typeof scopeInput === 'object' ? { ...scopeInput } : scopeInput
+    const { id, scope } = await db.transaction('rw', scopeTransactionTables(db.historicalKeywords, ...(keyword.worldGroupId != null ? [db.worldGroups] : [])), async () => {
+      const scope = await resolveWorldOwnerScopeLike(scopeInput ?? keyword.projectId)
+      if (scope.projectId !== keyword.projectId) throw new Error('历史关键词工作区与目标不一致。')
+      await assertNewHistoryGroup(scope, keyword.worldGroupId)
+      const now = Date.now()
+      const row = stampNewRecord(scope, 'historicalKeywords', { ...keyword, createdAt: now, updatedAt: now }, { owner: 'world' }) as HistoricalKeyword
+      return { id: await db.historicalKeywords.add(row) as number, scope }
+    })
+    if (!caller && !get().loadedKeywordsScope && !get().loadingKeywords) await get().loadKeywords(scope)
+    else await refreshKeywords(scope, get, set)
     return id
   },
 
@@ -253,16 +294,16 @@ export const useHistoricalStore = create<HistoricalStore>((set, get) => ({
         const changes = { ...patch, updatedAt: Date.now() }
         if (await table.update(id, changes) !== 1) throw new Error('历史关键词保存未完成，输入已保留')
         if (confirmation && proof) await Dexie.waitFor(historyTextSaveAckV1(await table.get(id), confirmation, proof.raw))
-        return changes
+        return { changes, scope }
       })
       const ack = confirmation && proof ? await readHistoryTextSaveAckV1(confirmation, proof.raw) : undefined
-      set({ keywords: get().keywords.map(row => row.id === id ? { ...row, ...next } : row).sort((a, b) => b.updatedAt - a.updatedAt) })
+      await refreshKeywords(next.scope, get, set)
       return ack
     }
     const existingRecord = get().keywords.find(keyword => keyword.id === id)
       ?? await db.historicalKeywords.get(id)
     if (!existingRecord) return
-    const scope = await resolveScopeLike(existingRecord.projectId)
+    const scope = await resolveWorldOwnerScopeLike(existingRecord.projectId)
     const current = await db.historicalKeywords.get(id)
     if (!current || !await assertRecordInScope(scope, 'historicalKeywords', current, { owner: 'world' })) return
     const now = Date.now()
@@ -271,19 +312,16 @@ export const useHistoricalStore = create<HistoricalStore>((set, get) => ({
       updatedAt: now,
     }
     await db.historicalKeywords.update(id, next)
-    // 同步内存并重新按更新时间排序
-    const keywords = get().keywords.map(k => k.id === id ? { ...k, ...next } as HistoricalKeyword : k)
-    keywords.sort((a, b) => b.updatedAt - a.updatedAt)
-    set({ keywords })
+    await refreshKeywords(scope, get, set)
   }) as HistoricalTextUpdateV1<HistoricalKeyword>,
 
   deleteKeyword: async (id) => {
     const existingRecord = await db.historicalKeywords.get(id)
     if (!existingRecord) return
-    const scope = await resolveScopeLike(existingRecord.projectId)
+    const scope = await resolveWorldOwnerScopeLike(existingRecord.projectId)
     const keyword = await db.historicalKeywords.get(id)
     if (!keyword || !await assertRecordInScope(scope, 'historicalKeywords', keyword, { owner: 'world' })) return
     await db.historicalKeywords.delete(id)
-    await get().loadKeywords(keyword.projectId)
+    await refreshKeywords(scope, get, set)
   },
 }))
