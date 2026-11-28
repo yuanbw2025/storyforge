@@ -260,21 +260,47 @@ function CodexCultivationLink({
   entry: CodexEntry
   onChange: (patch: Partial<CodexEntry>) => void | Promise<void>
 }) {
+  const worldIdValue: unknown = Reflect.get(entry, 'worldId')
+  const worldId = typeof worldIdValue === 'number' ? worldIdValue : undefined
   const systems = useCultivationStore(state => state.systems)
+  const systemsScope = useCultivationStore(state => state.loadedScope)
   const loadAll = useCultivationStore(state => state.loadAll)
-  useEffect(() => { loadAll(entry.projectId) }, [entry.projectId, loadAll])
-  const visible = systems.filter(system =>
-    (system.worldGroupId ?? null) === (entry.worldGroupId ?? null))
+  const [retry, setRetry] = useState(0)
+  const identity = `${entry.projectId}:${worldId}`
+  const [read, setRead] = useState<{ identity: string; ready: boolean; error: string | null } | null>(null)
+  useEffect(() => {
+    let active = true
+    setRead({ identity, ready: false, error: null })
+    void loadAll(entry.projectId).then(() => {
+      const state = useCultivationStore.getState()
+      if (state.loadError) throw new Error(state.loadError)
+      if (state.loadedScope?.projectId !== entry.projectId || (worldId != null && state.loadedScope.worldId !== worldId)) throw new Error('修炼来源已切换，请重新读取。')
+      if (active) setRead({ identity, ready: true, error: null })
+    }).catch(error => {
+      if (active) setRead({ identity, ready: false, error: error instanceof Error ? error.message : String(error) })
+    })
+    return () => { active = false }
+  }, [entry.projectId, worldId, identity, loadAll, retry])
+  const ready = read?.identity === identity && read.ready && systemsScope?.projectId === entry.projectId
+    && (worldId == null || systemsScope.worldId === worldId)
+  const readError = read?.error || (read?.ready && !ready ? '修炼来源已切换，请重新读取。' : null)
+  const visible = (ready ? systems : []).filter(system => system.projectId === entry.projectId
+    && (worldId == null || Reflect.get(system, 'worldId') === worldId)
+    && (system.worldGroupId ?? null) === (entry.worldGroupId ?? null))
   const selected = visible.find(system => system.id === entry.cultivationSystemId)
   const stages = parseCultivationStages(selected?.stages)
   return (
     <div className="grid grid-cols-2 gap-2 border-t border-border pt-3">
+      {!ready && <div className="col-span-2 text-xs text-text-muted">
+        {readError ? <><p role="alert">修炼关联读取失败：{readError}；原关联未更改。</p><button type="button" onClick={() => setRetry(value => value + 1)}>重新读取</button></> : <p role="status">正在读取修炼关联…</p>}
+      </div>}
       <label>
         <span className="block text-xs text-text-muted mb-1">结构化修炼体系</span>
         <select
           aria-label="异兽修炼体系"
+          disabled={!ready}
           value={entry.cultivationSystemId ?? ''}
-          onChange={event => onChange({
+          onChange={event => ready && onChange({
             cultivationSystemId: event.target.value ? Number(event.target.value) : null,
             cultivationStageId: null,
           })}
@@ -290,7 +316,7 @@ function CodexCultivationLink({
           aria-label="异兽当前境界"
           disabled={!selected}
           value={entry.cultivationStageId ?? ''}
-          onChange={event => onChange({ cultivationStageId: event.target.value || null })}
+          onChange={event => ready && onChange({ cultivationStageId: event.target.value || null })}
           className="w-full px-3 py-1.5 rounded-lg bg-bg-elevated border border-border text-sm disabled:opacity-40"
         >
           <option value="">未指定</option>

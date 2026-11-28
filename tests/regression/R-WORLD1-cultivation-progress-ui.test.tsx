@@ -143,10 +143,9 @@ describe('WORLD-1 · 修炼进度作者确认 UI', () => {
         createElement(CultivationProgressPanel, { project })))
       await new Promise(resolve => setTimeout(resolve, 0))
     })
-    await act(async () => {
-      await vi.waitFor(() => expect(
-        host.querySelector('select[aria-label="修炼进度来源章节"]'),
-      ).not.toBeNull())
+    await vi.waitFor(async () => {
+      await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)) })
+      expect(host.querySelector('select[aria-label="修炼进度来源章节"]')).not.toBeNull()
     })
 
     const select = host.querySelector<HTMLSelectElement>('select[aria-label="修炼进度来源章节"]')!
