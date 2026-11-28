@@ -93,7 +93,7 @@ export function PowerAuthoringWorkspaceV1({ project, copilot, onDone, children }
     {children}
     {target && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-3" role="presentation">
       <section role="dialog" aria-modal="true" aria-label={`力量 AI · ${powerAuthoringLabelV1(target)}`} className="max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-xl border border-border bg-bg-surface p-4 shadow-xl">
-        <div className="mb-3 flex items-center justify-between"><h2 className="text-base font-semibold">{powerAuthoringLabelV1(target)} · AI 候选</h2>
+        <div className="mb-3 flex items-center justify-between"><h2 className="text-base font-semibold">{candidate?.payload.label ?? powerAuthoringLabelV1(target)} · AI 候选</h2>
           <button type="button" onClick={close} aria-label="关闭力量候选" className="p-1"><X className="h-4 w-4"/></button></div>
         <p className="mb-3 text-xs text-text-muted">结果先保存为候选。采用时只修改本次选中的字段；其它字段、路径和未涉及的阶段保持原值。</p>
         {(error || copilot.error || parsed?.error) && <p role="alert" className="mb-3 rounded border border-error/30 p-2 text-xs text-error">{error || copilot.error || parsed?.error}</p>}

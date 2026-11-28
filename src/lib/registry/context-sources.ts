@@ -1425,11 +1425,11 @@ async function readGeographyContext(projectId: number, worldGroupId?: number | n
   return parts.join('\n\n')
 }
 
-async function readPowerSystem(projectId: number, worldGroupId?: number | null, scope?: WorkspaceScope): Promise<PowerSystem | null> {
+async function readPowerSystem(projectId: number, worldGroupId?: number | null, scope?: WorkspaceScope): Promise<PowerSystem[]> {
   const resolved = scope ?? await resolveScope({ projectId })
   const rows = await readOwnedRows<PowerSystem>(resolved, 'powerSystems', { owner: 'world' })
-  if (worldGroupId === undefined) return null
-  return rows.find(p => (p.worldGroupId ?? null) === worldGroupId) ?? null
+  if (worldGroupId === undefined) return []
+  return rows.filter(p => (p.worldGroupId ?? null) === worldGroupId).sort((a, b) => a.id! - b.id!)
 }
 
 async function readCharacters(projectId: number, worldGroupId?: number | null, scope?: WorkspaceScope): Promise<Character[]> {
@@ -3815,7 +3815,7 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     read: async input => {
       const [foundation, cultivation] = await Promise.all([
         readPowerSystem(input.projectId, input.worldGroupId, input.scope)
-          .then(formatPowerSystemBlock),
+          .then(rows => rows.map(formatPowerSystemBlock).filter(Boolean).join('\n\n')),
         buildCultivationContext(input.projectId, input.worldGroupId, input.scope),
       ])
       return [foundation, cultivation].filter(Boolean).join('\n')
