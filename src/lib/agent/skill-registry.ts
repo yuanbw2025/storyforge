@@ -67,6 +67,7 @@ export type RegisteredAgentId = typeof REGISTERED_AGENT_IDS[number]
 
 export type AgentSkillExecutionModeV1 =
   | 'power-authoring'
+  | 'history-text'
   | 'worldview-field'
   | 'world-suggest'
   | 'worldview-expand'
@@ -1474,6 +1475,27 @@ export const AGENT_SKILLS = [
     writeTargets: [{ table: 'worldviews', fields: ['powerHierarchy'] }, { table: 'powerSystems', fields: ['name', 'description', 'levels', 'rules'] },
       { table: 'cultivationSystems', fields: ['name', 'description', 'stages'] }],
     lastVerifiedAt: '2026-11-28', regressionTests: ['R-BUG048-power-authoring-copilot'],
+  },
+  {
+    version: 1, id: 'world-origin.history-text', agentId: 'world-origin', defaultForAgent: false,
+    label: '历史总述与纪年创作', owner: 'world-foundation-agent', promptVersion: 'history-text-copilot-v1',
+    executionMode: 'history-text', contextTaskKind: 'agent-world-origin', readToolNames: [],
+    contextSourceKeys: ['worldview', 'storyCore', 'creativeRules'], optionalContextSourceKeys: [],
+    inputPolicy: { sourceKeys: ['worldview', 'storyCore', 'creativeRules'], states: {
+      empty: { handling: 'require-author-input', instruction: '允许纯幻想起步，新增前提须标记为待确认设想，不伪造史料。' },
+      partial: { handling: 'grounded-transform', instruction: '保留已确认历史、纪年与世界边界，只起草指定字段。' },
+      complete: { handling: 'grounded-transform', instruction: '依据完整历史与事件约束创作一个字段候选。' },
+    } },
+    contextCompression: compressionPolicy(['worldview', 'storyCore', 'creativeRules']),
+    contextGateway: { version: 1, rollout: 'required', providerSourceKeys: ['ragSelection'],
+      requiredWriteTargets: ['histories.overview', 'histories.eraSystem'],
+      allowedResourceKinds: ['world', 'worldview-field', 'story-core-field', 'fact'],
+      allowedDepths: ['index', 'summary', 'focused', 'full', 'original'], retrievalBudgetMode: 'model-capacity', maxReadCalls: 4, maxRetrievedTokens: 48_000,
+      maxPlanningSteps: 1, maxPlanningModelTokens: 1, allowOriginalRead: true, additionalReadToolNames: ['list_context_catalog', 'search_context', 'read_context_resource', 'read_original_evidence'],
+    },
+    maxOutputTokens: 8_000, // Team forecast; transport uses the routed model capacity.
+    writeTargets: [{ table: 'histories', fields: ['overview', 'eraSystem'] }],
+    lastVerifiedAt: '2026-11-28', regressionTests: ['R-BUG061-history-text-copilot'],
   },
   {
     version: 1,
@@ -6497,7 +6519,7 @@ export function validateAgentSkillDefinitionsV1(
 ): void {
   const productProductionModes = new Set<AgentSkillExecutionModeV1>(['product-production'])
   const executionModesByAgent: Record<RegisteredAgentId, ReadonlySet<AgentSkillExecutionModeV1>> = {
-    'world-origin': new Set(['power-authoring', 'worldview-field', 'world-suggest', 'worldview-expand', 'world-link-context', 'constitution-extract', 'narrative-annotation-extract', 'codex-extract', 'codex-enrich', 'story-core', 'creative-rules', 'locations', 'map-config', 'history-consult', 'history-storm', 'review']),
+    'world-origin': new Set(['history-text', 'power-authoring', 'worldview-field', 'world-suggest', 'worldview-expand', 'world-link-context', 'constitution-extract', 'narrative-annotation-extract', 'codex-extract', 'codex-enrich', 'story-core', 'creative-rules', 'locations', 'map-config', 'history-consult', 'history-storm', 'review']),
     character: new Set(['create', 'supplement', 'lifecycle', 'relationships', 'character-reply', 'memory-curator']),
     inspiration: new Set(['work-cover-image', 'reference-summary', 'reference-characters', 'reference-analysis-private-chunk', 'document-import-parse', 'reverse', 'review']),
     outline: new Set(['auto', 'story-arcs', 'foreshadow-suggestions', 'storyline-progress', 'character-driven', 'character-revision', 'impact-summary-regenerate', 'volumes', 'chapters', 'details', 'adaptation-source-analysis', 'adaptation-causal-graph', 'screenplay-adaptation-brief', 'screenplay-decision-pass', 'screenplay-beat-sheet', 'screenplay-scene-card', 'screenplay-grounding-review', 'screenplay-dramaturgy-review', 'comic-adaptation-brief', 'comic-decision-pass', 'comic-script-adaptation', 'comic-page-rhythm', 'comic-panel-plan', 'comic-visual-bible', 'comic-image-request', 'comic-visual-continuity-review', 'comic-targeted-repair', 'comic-page-review', 'motion-drama-series-bible', 'motion-drama-asset-bible', 'motion-drama-episode-outline', 'motion-drama-shot-design', 'motion-drama-image-prompts', 'motion-drama-video-prompts', 'motion-drama-quality-review', 'short-intent-brief', 'short-story-design', 'short-scene-plan', 'short-continuity-review', 'character-interaction-production', 'product-production']),

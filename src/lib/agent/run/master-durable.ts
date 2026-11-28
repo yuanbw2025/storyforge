@@ -1,3 +1,4 @@
+import { parseHistoryTextRequestV1, parseHistoryTextSnapshotV1 } from '../history-text-copilot'
 import { parsePowerAuthoringRequestV1, parsePowerAuthoringSnapshotV1 } from '../power-authoring-copilot'
 import { usePromptStore } from '../../../stores/prompt'
 import { freezePromptExecutionOptionsV1 } from '../prompt-execution'
@@ -378,6 +379,13 @@ function readOptionalCharacterRevisionRequest(
   }
 }
 
+function readOptionalHistoryTextRequest(value: Record<string, unknown>, agentId: string, skillId: string, label: string) {
+  const present = Object.prototype.hasOwnProperty.call(value, 'historyTextRequest')
+  if (!present) { if (skillId === 'world-origin.history-text') fail(label + '.historyTextRequest 缺失'); return undefined }
+  if (agentId !== 'world-origin' || skillId !== 'world-origin.history-text') fail(label + '.historyTextRequest 无效')
+  return parseHistoryTextRequestV1(value.historyTextRequest)
+}
+
 function readOptionalPowerAuthoringRequest(
   value: Record<string, unknown>,
   agentId: DomainAgentId,
@@ -486,7 +494,7 @@ function readRequiredSkillId(
   if (typeof value.skillId !== 'string') fail(label + '.skillId 无效')
   const skill = getAgentSkillV1(value.skillId, agentId)
   const allowedModes: Record<DomainAgentId, ReadonlySet<string>> = {
-    'world-origin': new Set(['worldview-field', 'story-core', 'creative-rules', 'power-authoring']),
+    'world-origin': new Set(['worldview-field', 'story-core', 'creative-rules', 'power-authoring', 'history-text']),
     character: new Set(['create', 'supplement', 'lifecycle']),
     inspiration: new Set(['reverse']),
     outline: new Set(['auto', 'details', 'story-arcs', 'storyline-progress', 'character-driven', 'character-revision', 'volumes', 'chapters']),
@@ -502,6 +510,7 @@ function promptModuleForPlanTaskV1(
   agentId: DomainAgentId,
   skillId: AgentSkillId | undefined,
   instruction: string,
+  historyTextRequest?: MasterAgentTask['historyTextRequest'],
 ): GovernedPromptModuleKeyV1 | null {
   const skill = resolveAgentSkillV1(agentId, skillId)
   if (skill.id === 'inspiration.prepare') return INSPIRATION_PREPARATION_MODULES[inspirationPreparationModeFromRequest(instruction)]
@@ -509,6 +518,7 @@ function promptModuleForPlanTaskV1(
     const mode = /灵感反推模式=(single|multiworld)\b/.exec(instruction)?.[1]
     if (mode) return mode === 'multiworld' ? 'inspiration.reverse.multiworld' : 'inspiration.reverse'
   }
+  if (skill.executionMode === 'history-text') return historyTextRequest?.field === 'eraSystem' ? 'history.calendar' : 'history.overview'
   if (skill.executionMode === 'worldview-field') return 'worldview.dimension'
   if (skill.executionMode === 'story-core') return 'story.generate'
   if (agentId === 'character' && skill.executionMode === 'create') return 'character.generate'
@@ -555,7 +565,7 @@ export function parseMasterAgentPlanV1(value: unknown): MasterAgentPlan {
     assertKeysWithOptional(
       item,
       ['id', 'agentId', 'skillId', 'instruction', 'dependsOn'],
-      ['perspectiveCharacterId', 'inspirationFragmentIds', 'characterDrivenPlanId', 'characterRevisionRequest', 'characterSupplementRequest', 'powerAuthoringRequest', 'characterLifecycleRequest', 'storylineProgressChapterId', 'storyArcMutationRequest', 'promptExecution', 'requestContext'],
+      ['perspectiveCharacterId', 'inspirationFragmentIds', 'characterDrivenPlanId', 'characterRevisionRequest', 'characterSupplementRequest', 'powerAuthoringRequest', 'historyTextRequest', 'characterLifecycleRequest', 'storylineProgressChapterId', 'storyArcMutationRequest', 'promptExecution', 'requestContext'],
       '主 Agent 计划任务 ' + (index + 1),
     )
     const id = readString(item.id, `主 Agent 计划任务 ${index + 1}.id`, MAX_TASK_ID_CHARS)
@@ -599,6 +609,7 @@ export function parseMasterAgentPlanV1(value: unknown): MasterAgentPlan {
       skillId,
       '主 Agent 计划任务 ' + id,
     )
+    const historyTextRequest = readOptionalHistoryTextRequest(item, agentId, skillId, '主 Agent 计划任务 ' + id)
     const powerAuthoringRequest = readOptionalPowerAuthoringRequest(item, agentId, skillId, '主 Agent 计划任务 ' + id)
     const characterSupplementRequest = readOptionalCharacterSupplementRequest(
       item,
@@ -624,7 +635,7 @@ export function parseMasterAgentPlanV1(value: unknown): MasterAgentPlan {
       skillId,
       '主 Agent 计划任务 ' + id,
     )
-    const expectedPromptModule = promptModuleForPlanTaskV1(agentId, skillId, instruction)
+    const expectedPromptModule = promptModuleForPlanTaskV1(agentId, skillId, instruction, historyTextRequest)
     const promptExecution = item.promptExecution === undefined
       ? undefined
       : expectedPromptModule
@@ -641,6 +652,7 @@ export function parseMasterAgentPlanV1(value: unknown): MasterAgentPlan {
       ...(inspirationFragmentIds !== undefined ? { inspirationFragmentIds } : {}),
       ...(characterDrivenPlanId !== undefined ? { characterDrivenPlanId } : {}),
       ...(characterRevisionRequest !== undefined ? { characterRevisionRequest } : {}),
+      ...(historyTextRequest !== undefined ? { historyTextRequest } : {}),
       ...(powerAuthoringRequest !== undefined ? { powerAuthoringRequest } : {}),
       ...(characterSupplementRequest !== undefined ? { characterSupplementRequest } : {}),
       ...(characterLifecycleRequest !== undefined ? { characterLifecycleRequest } : {}),
@@ -688,7 +700,9 @@ function writeTargetsForPlan(plan: MasterAgentPlan): Array<{
   const byTable = new Map<string, { fields: Set<string>; adoptionExtension?: string }>()
   plan.tasks.forEach(task => {
     const skill = resolveAgentSkillV1(task.agentId, task.skillId)
-    const writeTargets = skill.executionMode === 'power-authoring'
+    const writeTargets = skill.executionMode === 'history-text'
+      ? [{ table: 'histories', fields: [task.historyTextRequest!.field] }]
+      : skill.executionMode === 'power-authoring'
       ? [{ table: task.powerAuthoringRequest!.target.table, fields: [task.powerAuthoringRequest!.target.field] }]
       : skill.executionMode === 'worldview-field'
       ? skill.writeTargets.map(target => target.table === 'worldviews'
@@ -734,7 +748,9 @@ function semanticReviewTaskIdsForPlan(plan: MasterAgentPlan): string[] {
 
 function requiredContextGatewayWriteTargetForTaskV1(task: MasterAgentTask): string | undefined {
   const skill = resolveAgentSkillV1(task.agentId, task.skillId)
-  const specializedWriteTarget = skill.executionMode === 'power-authoring'
+  const specializedWriteTarget = skill.executionMode === 'history-text'
+    ? `histories.${task.historyTextRequest!.field}`
+    : skill.executionMode === 'power-authoring'
     ? `${task.powerAuthoringRequest!.target.table}.${task.powerAuthoringRequest!.target.field}`
     : skill.executionMode === 'worldview-field'
     ? `worldviews.${resolveWorldviewAgentFieldV1(task.instruction)}`
@@ -950,6 +966,7 @@ function sameTaskIdentity(left: MasterAgentTask, right: MasterAgentTask): boolea
     && (left.characterDrivenPlanId ?? null) === (right.characterDrivenPlanId ?? null)
     && JSON.stringify(left.characterRevisionRequest ?? null)
       === JSON.stringify(right.characterRevisionRequest ?? null)
+    && JSON.stringify(left.historyTextRequest ?? null) === JSON.stringify(right.historyTextRequest ?? null)
     && JSON.stringify(left.powerAuthoringRequest ?? null) === JSON.stringify(right.powerAuthoringRequest ?? null)
     && JSON.stringify(left.characterSupplementRequest ?? null)
       === JSON.stringify(right.characterSupplementRequest ?? null)
@@ -1220,7 +1237,7 @@ export async function replanDurableMasterAgentRunV1(
         resumePayload: {
           version: 1,
           kind: MASTER_AGENT_PLAN_CHECKPOINT_KIND_V1,
-          ...(nextPlan.tasks.some(task => task.skillId === 'world-origin.power-authoring') ? { portable: false as const } : {}),
+          ...(nextPlan.tasks.some(task => ['world-origin.power-authoring', 'world-origin.history-text'].includes(task.skillId)) ? { portable: false as const } : {}),
           plan: nextPlan,
           planHash: nextPlanHash,
           budgetEvidence: parsedBudget,
@@ -1430,6 +1447,11 @@ function parseCandidatePayload(value: unknown, label: string): MasterCandidatePa
       fail(`${label} characterRevisionRequest 无效：${error instanceof Error ? error.message : String(error)}`)
     }
   }
+  if (payload.historyTextRequest !== undefined) {
+    payload.historyTextRequest = parseHistoryTextRequestV1(payload.historyTextRequest)
+    const history = parseHistoryTextSnapshotV1(payload.baseSnapshot)
+    if (JSON.stringify(history.request) !== JSON.stringify(payload.historyTextRequest)) fail(`${label}历史快照与固定请求不匹配`)
+  }
   if (payload.powerAuthoringRequest !== undefined) {
     payload.powerAuthoringRequest = parsePowerAuthoringRequestV1(payload.powerAuthoringRequest)
     const power = parsePowerAuthoringSnapshotV1(payload.baseSnapshot)
@@ -1532,6 +1554,7 @@ function assertCandidateMatchesTaskSkill(
     taskSkill.executionMode !== 'character-revision'
     && payload.characterRevisionRequest !== undefined
   ) fail(`${label} 不得携带角色变更请求`)
+  if (taskSkill.executionMode === 'history-text' ? JSON.stringify(payload.historyTextRequest ?? null) !== JSON.stringify(task.historyTextRequest ?? null) : payload.historyTextRequest !== undefined) fail(`${label}历史请求与 Skill 不匹配`)
   if (taskSkill.executionMode === 'power-authoring' ? JSON.stringify(payload.powerAuthoringRequest ?? null) !== JSON.stringify(task.powerAuthoringRequest ?? null) : payload.powerAuthoringRequest !== undefined) fail(`${label}力量请求与 Skill 不匹配`)
   if (
     taskSkill.executionMode === 'supplement'
@@ -1972,7 +1995,7 @@ export async function runDurableMasterAgentPlanV1(
     const checkpointPayload: MasterAgentPlanCheckpointV1 = {
       version: 1,
       kind: MASTER_AGENT_PLAN_CHECKPOINT_KIND_V1,
-      ...(plan.tasks.some(task => task.skillId === 'world-origin.power-authoring') ? { portable: false as const } : {}),
+      ...(plan.tasks.some(task => ['world-origin.power-authoring', 'world-origin.history-text'].includes(task.skillId)) ? { portable: false as const } : {}),
       plan,
       planHash: await hashMasterAgentPlanV1(plan),
       budgetEvidence: evidence,
@@ -3017,7 +3040,7 @@ export async function runDurableMasterAgentPlanV1(
           resumePayload: {
             version: 1,
             kind: MASTER_AGENT_PLAN_CHECKPOINT_KIND_V1,
-            ...(plan.tasks.some(task => task.skillId === 'world-origin.power-authoring') ? { portable: false as const } : {}),
+            ...(plan.tasks.some(task => ['world-origin.power-authoring', 'world-origin.history-text'].includes(task.skillId)) ? { portable: false as const } : {}),
             plan,
             planHash: await hashMasterAgentPlanV1(plan),
             budgetEvidence: budget.snapshot(),
@@ -3063,7 +3086,7 @@ export async function runDurableMasterAgentPlanV1(
               resumePayload: {
                 version: 1,
                 kind: MASTER_AGENT_PLAN_CHECKPOINT_KIND_V1,
-                ...(plan.tasks.some(task => task.skillId === 'world-origin.power-authoring') ? { portable: false as const } : {}),
+                ...(plan.tasks.some(task => ['world-origin.power-authoring', 'world-origin.history-text'].includes(task.skillId)) ? { portable: false as const } : {}),
                 plan,
                 planHash: await hashMasterAgentPlanV1(plan),
                 budgetEvidence: budget.snapshot(),

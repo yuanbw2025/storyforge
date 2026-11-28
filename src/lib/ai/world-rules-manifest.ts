@@ -1,3 +1,4 @@
+import { compareHistoricalDatesV1 } from '../history/year'
 /**
  * Phase 32.3 — 世界规则清单生成器（World Rules Manifest）
  *
@@ -148,7 +149,7 @@ export function buildWorldRulesManifest(
       '【历史锚点 — 作者标记的现实参照，保持本作一致性】',
     ]
     // 按年份排序
-    const sorted = [...anchorEvents].sort((a, b) => a.year - b.year)
+    const sorted = [...anchorEvents].sort(compareHistoricalDatesV1)
     for (const e of sorted) {
       const desc = e.description ? `——${e.description}` : ''
       eventLines.push(`  ⚓ ${e.date}：${e.title}${desc}`)
@@ -163,7 +164,7 @@ export function buildWorldRulesManifest(
     const eventLines: string[] = [
       '【本作虚构历史条目 — 时序按条目理解，不自动当成未来计划】',
     ]
-    const sorted = [...fictionalEvents].sort((a, b) => a.year - b.year)
+    const sorted = [...fictionalEvents].sort(compareHistoricalDatesV1)
     for (const e of sorted) {
       const desc = e.description ? `——${e.description}` : ''
       eventLines.push(`  ✨ ${e.date}：${e.title}${desc}`)
@@ -281,7 +282,7 @@ export async function buildWorldRulesContext(
 
   // 2. 读历史时间线事件
   const timelineEvents = (await readOwnedRows<any>(resolved, 'historicalTimelineEvents', { owner: 'world' }))
-    .sort((a, b) => a.year - b.year)
+    .sort(compareHistoricalDatesV1)
     .filter(e => !shouldFilterWorld || (e.worldGroupId ?? null) === effectiveWorldGroupId)
 
   // 3. 读历史关键词

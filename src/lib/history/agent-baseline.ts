@@ -28,7 +28,7 @@ export interface HistoryAgentEventSnapshotV1 {
   id: number
   projectId: number
   era: string
-  year: number
+  year: number | null
   date: string
   title: string
   description: string
@@ -204,7 +204,7 @@ function eventMeta(item: HistoryAgentEventSnapshotV1, mode: HistoryAgentModeV1):
   return [
     `标题：${item.title}`,
     `历史时期：${era}`,
-    `数字化年份：${item.year} (${formatHistoricalYear(item.year)})`,
+    `数字化年份：${item.year === null ? '未指定' : item.year} (${formatHistoricalYear(item.year)})`,
     `时间描述：${item.date || '未填写'}`,
     `具体时间范围：${item.customTimeRange || '未填写'}`,
     `地理位置：${item.location || '未填写'}`,

@@ -8,11 +8,13 @@
 
 ## 一、Prompt 模板清单（PromptModuleKey 事实源）
 
-共 70 个唯一 moduleKey，215 条内置模板定义。
+共 72 个唯一 moduleKey，217 条内置模板定义。
 
 | moduleKey | 模板数 | 代表名称 | 说明 | 读取变量 |
 |---|---:|---|---|---|
 | `worldview.dimension` | 6 | 内置-世界观维度生成 | 为世界观的单个维度（地理/历史/社会/文化/经济/规则/摘要）生成内容。 | `projectName` `genres` `dimension` `worldContext` `worldRulesContext` `userHint` `isSummary` `field_worldOrigin` `field_powerHierarchy` `field_divineDesign` `field_worldStructure` `field_worldDimensions` `field_continentLayout` `field_mountainsRivers` `field_climateByRegion` `field_naturalResourceOverview` `field_naturalResources` `field_races` `field_factionLayout` `field_regionDimensions` `field_politicsOverview` `field_economyOverview` `field_cultureOverview` `field_internalConflicts` `field_itemDesign` |
+| `history.overview` | 1 | 内置-历史总述起草 | 为当前历史字段起草可编辑候选，作者确认后才写入正式设定。 | `dimension` `generationMode` `currentValue` `worldContext` `userHint` |
+| `history.calendar` | 1 | 内置-纪年体系起草 | 为当前历史字段起草可编辑候选，作者确认后才写入正式设定。 | `dimension` `generationMode` `currentValue` `worldContext` `userHint` |
 | `character.generate` | 6 | 内置-角色完整设计 | 基于世界观和已有角色，设计一个新角色的完整资料。 | `projectName` `genres` `worldContext` `existingCharacters` `userHint` |
 | `character.dimension` | 1 | 内置-角色维度补全 | 为指定角色的某个维度（背景/性格/能力等）补充约 200-400 字的细节。 | `characterName` `characterInfo` `worldContext` `dimension` |
 | `outline.volume` | 8 | 内置-卷级大纲生成 | 基于世界观与故事核心生成全书的卷级大纲。 | `projectName` `genres` `targetWordCount` `worldContext` `storyCore` `characterContext` `worldRulesContext` `existingVolumesContext` `userHint` |
@@ -427,8 +429,8 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 
 | category | 触发文件 |
 |---|---|
-| `agent.orchestrator` | `src/lib/agent/orchestrator.ts:900` |
-| `agent.orchestrator.replan` | `src/lib/agent/orchestrator.ts:1015` |
+| `agent.orchestrator` | `src/lib/agent/orchestrator.ts:908` |
+| `agent.orchestrator.replan` | `src/lib/agent/orchestrator.ts:1023` |
 | `agent.readonly` | `src/lib/agent/client-adapter.ts:118` |
 | `authoring.ttrpg-campaign` | `src/lib/ttrpg/campaign-proposal-harness.ts:438` |
 | `canon.narrative.extract` | `src/lib/agent/run/narrative-annotation-durable.ts:218` |
@@ -506,11 +508,12 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 
 ## 五、正式 AI 入口（FormalAIEntryBindingV1）
 
-共 78 个操作级绑定。运行时按 entryId 校验 category 和 Skill；采纳权限不由文字说明决定。显式 outputModality=audio/image 分别使用冻结音频执行器或临时图片预览执行器，文本入口不补默认字段。
+共 79 个操作级绑定。运行时按 entryId 校验 category 和 Skill；采纳权限不由文字说明决定。显式 outputModality=audio/image 分别使用冻结音频执行器或临时图片预览执行器，文本入口不补默认字段。
 
 | entryId | Skill | category | 边界 | 候选 | 采纳目标 | 调用方 |
 |---|---|---|---|---|---|---|
 | `world.power-authoring` | `world-origin.power-authoring` | `agent.world-foundation.power-authoring` | formal / durable-run | `power-authoring-candidate-v1` | `worldviews`<br/>`powerSystems`<br/>`cultivationSystems` | `src/lib/agent/power-authoring-copilot.ts` |
+| `world.history-text` | `world-origin.history-text` | `agent.world-foundation.history-text` | formal / durable-run | `history-text-candidate-v1` | `histories` | `src/lib/agent/history-text-copilot.ts` |
 | `world.worldview-field.v2` | `world-origin.worldview-field.v2` | `agent.world-origin.worldview-field.v2` | formal / durable-run | `worldview-field-candidate-v2` | `worldviews` | `src/lib/agent/run/worldview-field-v2-durable.ts` |
 | `world.codex.extract.v2` | `world-origin.codex-extract.v2` | `codex.extract` | formal / durable-run | `codex-extraction-candidate-v2` | `codexEntries` | `src/lib/agent/run/codex-extraction-v2-runtime.ts` |
 | `world.map.paint-preview` | `world-origin.map-config` | `geography.world-map-paint` | auxiliary / authoring-draft / image | `map-paint-image-preview` | 禁止 | `src/lib/world-map/atlas/paint-preview.ts` |
@@ -603,4 +606,4 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 
 ---
 
-生成时间基准:commit `1c510ba2e`
+生成时间基准:commit `3a9a7a9ad`

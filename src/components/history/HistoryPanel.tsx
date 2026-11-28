@@ -1,3 +1,4 @@
+import HistoryTextAuthoring from './HistoryTextAuthoring'
 import { useState, useEffect, useMemo, useRef } from 'react'
 import {
   Plus, Clock,
@@ -188,11 +189,11 @@ export default function HistoryPanel({ project, resizableInputs = false, confirm
       const newId = await addEvent({
         projectId: project.id!,
         era: 'custom',
-        year: 0,
-        date: '公元元年',
+        year: null,
+        date: '时间待定',
         title: '新历史事件',
         description: '描述该事件的发生过程...',
-        isHistorical: true,
+        isHistorical: false,
         ...(scopeGroupId != null ? { worldGroupId: scopeGroupId } : {}),
       }, { projectId: project.id!, worldId: project.activeWorldId! })
       setExpandedId(newId)
@@ -367,7 +368,7 @@ export default function HistoryPanel({ project, resizableInputs = false, confirm
         !canEdit ? <p className="text-sm text-text-muted">请切换到具体世界查看和编辑历史总述与纪年体系。</p>
         : historyLoadError ? <p role="alert" className="text-sm text-error">历史读取失败：{historyLoadError}</p>
         : loadingHistory || !historyReady ? <p role="status" className="text-sm text-text-muted">正在读取历史…</p>
-        : <HistoryOverviewTab
+        : <HistoryTextEntry project={project} worldGroupId={scopeGroupId} onAdopted={() => loadHistory({ origin: historyOrigin, selection: historySelection })} key={historyViewKey}><HistoryOverviewTab
           key={historyViewKey}
           resizableInputs={resizableInputs}
           overview={history?.overview ?? ''}
@@ -379,7 +380,7 @@ export default function HistoryPanel({ project, resizableInputs = false, confirm
           onSaveEraSystem={(eraSystem, confirmation) => confirmation
             ? saveHistory({ origin: historyOrigin, selection: { kind: 'partition', worldGroupId: scopeGroupId }, patch: { eraSystem }, confirmation })
             : saveHistory({ origin: historyOrigin, selection: { kind: 'partition', worldGroupId: scopeGroupId }, patch: { eraSystem } })}
-        />
+        /></HistoryTextEntry>
       )}
 
       {/* Tab 内容：历史时间轴 */}
@@ -403,6 +404,7 @@ export default function HistoryPanel({ project, resizableInputs = false, confirm
               )}
             </div>
 
+            {scopedEvents.some(event => event.year === null) && <p className="text-xs text-text-muted">未填数字年份的事件按添加顺序列在后面；具体时间文字保留，不自动推断先后关系。</p>}
             {loadingEvents ? (
               <div className="flex items-center justify-center py-12 text-text-muted">
                 <Loader2 className="w-5 h-5 animate-spin mr-2" />
@@ -584,4 +586,9 @@ export default function HistoryPanel({ project, resizableInputs = false, confirm
       )}
     </div>
   )
+}
+
+function HistoryTextEntry({ project, worldGroupId, onAdopted, children }: { project: Project; worldGroupId: number | null; onAdopted: () => Promise<unknown>; children: React.ReactNode }) {
+  return project.workspacePurpose !== 'world-engine' && project.activeWorkId != null
+    ? <HistoryTextAuthoring project={project} worldGroupId={worldGroupId} onAdopted={onAdopted}>{children}</HistoryTextAuthoring> : children
 }

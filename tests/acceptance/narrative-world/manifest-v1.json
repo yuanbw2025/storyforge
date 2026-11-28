@@ -21,13 +21,23 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261128-release409-domain815-v1.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261128-main815-domain-input-v1.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
       {
-        "path": "tests/acceptance/narrative-world/baseline-20261128-novel033-whitespace-v1.json",
-        "sha256": "02c95b5e95139dad2fc071a7680771539d01aab6abf0a30e181e618398e2c456",
-        "note": "Preserve actual prior receipt before reviewing the measured canon-provider input and strict domain receipt pointer. Corpus, observations and known gaps must remain unchanged; no model, human or release acceptance inferred."
+        "path": "tests/acceptance/narrative-world/domain-projection-20261128-release409-domain815-v1.json",
+        "sha256": "471ab3cf9385acc056fd125814e3270905a82b7eee902d948df3387cfdfb30f1",
+        "note": "Preserve actual measured frozen-feedback receipt or prior main receipt before distinct main-tree remeasurement. Same observations and known gaps; no model/human/release acceptance inferred."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261128-release409-domain815-v1.json",
+        "sha256": "de181acaad25a841c27b2920f980fe295658ed457edac143be8b1d0235df2865",
+        "note": "Preserve actual measured frozen-feedback receipt or prior main receipt before distinct main-tree remeasurement. Same observations and known gaps; no model/human/release acceptance inferred."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261128-history061-text-delivery-v1.json",
+        "sha256": "987a31fe054720c9519b2c4a74db5cd17ff1684c1f99d834d48998dba6cc90f4",
+        "note": "Preserve actual measured frozen-feedback receipt or prior main receipt before distinct main-tree remeasurement. Same observations and known gaps; no model/human/release acceptance inferred."
       },
       {
         "path": "tests/acceptance/narrative-world/baseline-20261128-power048-adoption-v1.json",
@@ -1613,6 +1623,16 @@
         "path": "tests/acceptance/narrative-world/baseline-20261128-power048-record-authority-v1.json",
         "sha256": "5cf0bcfa17ee12647695a384058e71975eb0c3b1b39c02b2f831b3c718dccd1a",
         "note": "Preserve the merged power048 record-authority receipt before the existing original-novel allocation whitespace repair. Final manifest frozen before measurement; no corpus, known-gap or acceptance changes."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261128-novel033-whitespace-v1.json",
+        "sha256": "02c95b5e95139dad2fc071a7680771539d01aab6abf0a30e181e618398e2c456",
+        "note": "Preserve the merged novel033 whitespace receipt before the history061 registered Skill and singleton text-CAS change. Deterministic findings and unsupported gaps must remain unchanged; no live-model or release acceptance inferred."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261128-history061-text-v1.json",
+        "sha256": "5484f13ec82fe887f75177c427895c7810cd1cb6771620952989d0237ccb32e8",
+        "note": "Preserve the initial history061 A1 candidate measurement before refreshing its required NW-1A registry/types input fingerprint and exact new-entry count assertions. No semantic expectations removed."
       }
     ],
     "comparison": "NW-2E checkpoint of the unchanged legacy v3 120-query comparator. Typed v4 query, exact product plans, current impact diagnostics and scale failures have separate receipts; no model or human quality acceptance is inferred."

@@ -583,6 +583,8 @@ export interface AdoptWorldHistoryTextInputV1 {
 export type AdoptPowerAuthoringInputV1 = import('../cultivation/power-authoring-adoption').AdoptPowerAuthoringInputV1
 
 export interface AdoptInput {
+  /** Host-frozen preimage for the registered longform history text singleton. */
+  historyTextBaseline?: { recordId: number | null; overview: string; eraSystem: string }
   /** NW-1C: author-selected durable candidate. Payload is loaded from verified
    * ledger state; caller-provided fields are never trusted on this route. */
   narrativeCandidate?: { runId: number; candidateHash: string }

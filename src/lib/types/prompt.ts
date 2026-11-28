@@ -25,6 +25,8 @@ export const PROMPT_MODULE_KEYS = [
   'reference.application',
   // 世界观
   'worldview.dimension',
+  'history.overview',
+  'history.calendar',
   // 角色
   'character.generate',
   'character.dimension',
