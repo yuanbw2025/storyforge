@@ -89,6 +89,10 @@ function manualChunkFor(moduleId: string): string | undefined {
   // store/adoption/runtime imports. Preserve synchronous codec calls and the
   // existing explicit WASM initialization instead of loading inside a DB write.
   if (/\/src\/lib\/(?:narrative-domain\/(?:json|sha256|codec)|context-gateway\/resource-uid|types\/(?:narrative-domain|narrative-ir))\.ts$/.test(id)) return 'narrative-json-codec'
+  // Immutable world input codebooks are leaves with type-only imports. Cache
+  // them separately from the store/adoption context closure, keeping every
+  // synchronous export and the same default script-chunk size budget.
+  if (/\/src\/lib\/types\/(?:codex|world-rules)\.ts$/.test(id)) return 'world-input-contracts'
   if (id.endsWith('/src/lib/ai/context-builder.ts')) return 'ai-context'
   if (id.endsWith('/src/lib/context-gateway/selector.ts')) return 'context-selector'
   // Passive codecs and policy data have no dependency back into the shared
