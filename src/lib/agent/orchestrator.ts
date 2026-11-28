@@ -1,3 +1,5 @@
+import { prepareHistoryKeywordSuggestionsCopilotV1, adoptRestoredHistoryKeywordSuggestionsCandidateV1 } from './history-keyword-suggestions-copilot'
+import { parseHistoryKeywordSuggestionRequestV1, parseHistoryKeywordSuggestionsV1, type HistoryKeywordSuggestionRequestV1, type HistoryKeywordSuggestionsSnapshotV1 } from '../history/keyword-suggestions'
 import { prepareHistoryEventsCopilotV1, adoptRestoredHistoryEventsCandidateV1 } from './history-events-copilot'
 import { parseHistoryEventCreationRequestV1, parseHistoryEventCandidatesV1, type HistoryEventCreationRequestV1 } from '../history/event-creation-contract'
 import type { HistoryEventCreationSnapshotV1 } from '../history/event-creation-adoption'
@@ -242,6 +244,7 @@ export interface MasterAgentTask {
   /** 中途重规划面板冻结的角色变更、保护区、锚点与方案选择。 */
   characterRevisionRequest?: CharacterRevisionTaskInputV1
   /** 已有角色补全面板冻结的目标角色、字段闭集与剧情证据开关。 */
+  historyKeywordSuggestionRequest?: HistoryKeywordSuggestionRequestV1
   historyEventRequest?: HistoryEventCreationRequestV1
   historyTextRequest?: HistoryTextRequestV1
   powerAuthoringRequest?: PowerAuthoringRequestV1
@@ -296,6 +299,7 @@ export interface MasterCandidatePayload {
   selectedFragmentIds?: string[]
   characterDrivenPlanId?: number
   characterRevisionRequest?: CharacterRevisionTaskInputV1
+  historyKeywordSuggestionRequest?: HistoryKeywordSuggestionRequestV1
   historyEventRequest?: HistoryEventCreationRequestV1
   historyTextRequest?: HistoryTextRequestV1
   powerAuthoringRequest?: PowerAuthoringRequestV1
@@ -417,6 +421,7 @@ export interface PinnedMasterAgentTaskV1 {
   inspirationFragmentIds?: string[]
   characterDrivenPlanId?: number
   characterRevisionRequest?: CharacterRevisionTaskInputV1
+  historyKeywordSuggestionRequest?: HistoryKeywordSuggestionRequestV1
   historyEventRequest?: HistoryEventCreationRequestV1
   historyTextRequest?: HistoryTextRequestV1
   powerAuthoringRequest?: PowerAuthoringRequestV1
@@ -444,6 +449,7 @@ function governedPromptModuleForTaskV1(
     const mode = /灵感反推模式=(single|multiworld)\b/.exec(task.instruction)?.[1]
     if (mode) return mode === 'multiworld' ? 'inspiration.reverse.multiworld' : 'inspiration.reverse'
   }
+  if (skill.executionMode === 'history-keyword-suggestions') return 'history.keyword-suggestions'
   if (skill.executionMode === 'history-events') return 'history.timeline'
   if (skill.executionMode === 'history-text') return task.historyTextRequest?.field === 'eraSystem' ? 'history.calendar' : 'history.overview'
   if (skill.executionMode === 'worldview-field') return 'worldview.dimension'
@@ -764,6 +770,8 @@ export async function createMasterAgentPlan(input: {
     ) throw new Error('只有故事线 Skill 可以固定既有故事线变换请求。')
     if ((pinned.powerAuthoringRequest !== undefined) !== (pinned.agentId === 'world-origin' && pinnedSkillId === 'world-origin.power-authoring')) throw new Error('力量 Skill 必须固定唯一力量目标，其他 Skill 不得携带力量请求。')
     if ((pinned.historyTextRequest !== undefined) !== (pinned.agentId === 'world-origin' && pinnedSkillId === 'world-origin.history-text')) throw new Error('历史文本 Skill 必须固定字段，其他 Skill 不得携带历史请求。')
+    if ((pinned.historyKeywordSuggestionRequest !== undefined) !== (pinned.agentId === 'world-origin' && pinnedSkillId === 'world-origin.history-keyword-suggestions')) throw new Error('关键词推荐 Skill 必须固定建议草稿身份。')
+    const historyKeywordSuggestionRequest = pinned.historyKeywordSuggestionRequest === undefined ? undefined : parseHistoryKeywordSuggestionRequestV1(pinned.historyKeywordSuggestionRequest)
     if ((pinned.historyEventRequest !== undefined) !== (pinned.agentId === 'world-origin' && pinnedSkillId === 'world-origin.history-events')) throw new Error('事件 Skill 必须固定本次草稿身份，其他 Skill 不得携带事件请求。')
     const historyEventRequest = pinned.historyEventRequest === undefined ? undefined : parseHistoryEventCreationRequestV1(pinned.historyEventRequest)
     const historyTextRequest = pinned.historyTextRequest === undefined ? undefined : parseHistoryTextRequestV1(pinned.historyTextRequest)
@@ -796,6 +804,7 @@ export async function createMasterAgentPlan(input: {
       ...(pinned.characterDrivenPlanId !== undefined
         ? { characterDrivenPlanId: pinned.characterDrivenPlanId }
         : {}),
+      ...(historyKeywordSuggestionRequest !== undefined ? { historyKeywordSuggestionRequest } : {}),
       ...(historyEventRequest !== undefined ? { historyEventRequest } : {}),
       ...(historyTextRequest !== undefined ? { historyTextRequest } : {}),
       ...(powerAuthoringRequest !== undefined ? { powerAuthoringRequest } : {}),
@@ -1343,6 +1352,24 @@ async function executeSequentialMasterAgentPlan(
           candidates.push({ payload: { version: 1, taskId: task.id, agentId: task.agentId, skillId: skill.id as AgentSkillId, executionBinding,
             label: prepared.label, contextSources: prepared.contextSources, contextEvidence: prepared.contextEvidence, baseSnapshot: prepared.snapshot,
             workspaceScope: scope, historyEventRequest: task.historyEventRequest, promptExecutionEvidence: prepared.promptExecutionEvidence, dependsOnTaskIds: task.dependsOn, generator: prepared.modelIdentity },
+            draft, runtimeNode: prepared.node, runtimeOutput: result.output, contextGatewayRuntime: { execution: prepared.contextGatewayExecution,
+              assembled: prepared.input.assembled, renderedRequest: prepared.prepared.messages, rawResponse: result.output } })
+          outputs.set(task.id, draft)
+        } else if (skill.executionMode === 'history-keyword-suggestions') {
+          if (!task.historyKeywordSuggestionRequest) throw new Error('历史任务缺少固定字段。')
+          const prepared = await prepareHistoryKeywordSuggestionsCopilotV1({ projectId: input.projectId, scope, worldGroupId: input.worldGroupId,
+            request: task.historyKeywordSuggestionRequest, authorRequest: task.instruction, promptExecution: task.promptExecution, contextProfile, configOverride: input.taskConfigOverrides?.[task.id], signal: input.signal })
+          await attachMasterTaskRequestContextV1(prepared, task)
+          await input.executionTrace?.contextGatewayPrepared?.(task, { execution: prepared.contextGatewayExecution, assembled: prepared.input.assembled, renderedRequest: prepared.prepared.messages })
+          const observed = observeMasterRawModelV1(task, prepared.runRaw, input.executionTrace)
+          assertModelEvidenceSaved = observed.assertSaved
+          const result = await runBudgetedGenerationNode({ node: { ...prepared.node,
+            run: async messages => parseHistoryKeywordSuggestionsV1((await observed.runRaw(messages)).output, prepared.snapshot.request, false) },
+            prepared: prepared.prepared, budget, callLabel: '历史关键词推荐 Skill', maxOutputTokens: requireFixedBudgetValueV1(skill.maxOutputTokens) })
+          const draft = JSON.stringify(result.output, null, 2)
+          candidates.push({ payload: { version: 1, taskId: task.id, agentId: task.agentId, skillId: skill.id as AgentSkillId, executionBinding,
+            label: prepared.label, contextSources: prepared.contextSources, contextEvidence: prepared.contextEvidence, baseSnapshot: prepared.snapshot,
+            workspaceScope: scope, historyKeywordSuggestionRequest: task.historyKeywordSuggestionRequest, promptExecutionEvidence: prepared.promptExecutionEvidence, dependsOnTaskIds: task.dependsOn, generator: prepared.modelIdentity },
             draft, runtimeNode: prepared.node, runtimeOutput: result.output, contextGatewayRuntime: { execution: prepared.contextGatewayExecution,
               assembled: prepared.input.assembled, renderedRequest: prepared.prepared.messages, rawResponse: result.output } })
           outputs.set(task.id, draft)
@@ -2384,6 +2411,8 @@ export async function adoptMasterCandidate(input: {
       producerCandidateHash: input.payload.candidateHash,
       mutation: input.payload.storyArcMutationRequest,
     })
+  } else if (input.payload.skillId === 'world-origin.history-keyword-suggestions') {
+    await adoptRestoredHistoryKeywordSuggestionsCandidateV1({ scope, worldGroupId: input.worldGroupId, snapshot: input.payload.baseSnapshot as HistoryKeywordSuggestionsSnapshotV1, draft: input.draft })
   } else if (input.payload.skillId === 'world-origin.history-events') {
     await adoptRestoredHistoryEventsCandidateV1({ scope, worldGroupId: input.worldGroupId, snapshot: input.payload.baseSnapshot as HistoryEventCreationSnapshotV1, draft: input.draft })
   } else if (input.payload.skillId === 'world-origin.history-text') {
@@ -2574,7 +2603,9 @@ export async function adoptMasterCandidate(input: {
     useCharacterDrivenPlanStore.getState().loadAll(scope),
   ])
   return input.payload.agentId === 'world-origin'
-    ? input.payload.skillId === 'world-origin.history-events'
+    ? input.payload.skillId === 'world-origin.history-keyword-suggestions'
+      ? '所选关键词建议已转入独立草稿，尚未成为正式设定。'
+      : input.payload.skillId === 'world-origin.history-events'
       ? '所选历史事件已加入时间轴。'
       : input.payload.skillId === 'world-origin.history-text'
       ? `历史设定“${input.payload.label}”已写入当前世界。`

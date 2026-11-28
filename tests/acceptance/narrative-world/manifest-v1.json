@@ -21,9 +21,24 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261128-history061-events-v1.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261128-history061-keyword-suggestions-v1.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
+      {
+        "path": "tests/acceptance/narrative-world/domain-projection-20261128-history061-events-v1.json",
+        "sha256": "005cda6791fc24f94904843c58072193d1d3806994cbdfe458a2490491864dd3",
+        "note": "Preserve measured receipt before history061 selected keyword suggestions are transferred only to Work-owned author drafts. Compare deterministic outcomes and known gaps unchanged; no model, release or human acceptance inferred."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/ir-contract-20261128-history061-events-v1.json",
+        "sha256": "92071468a92104d1bd8a3e7af68c936c9d7313297e6184c7c4e6ca23a9587b66",
+        "note": "Preserve measured receipt before history061 selected keyword suggestions are transferred only to Work-owned author drafts. Compare deterministic outcomes and known gaps unchanged; no model, release or human acceptance inferred."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261128-history061-events-v1.json",
+        "sha256": "7a8a7409d0e7a08ff1990b41ce2e6ef54386fb7bf8de40356b1e72c58aab27bb",
+        "note": "Preserve measured receipt before history061 selected keyword suggestions are transferred only to Work-owned author drafts. Compare deterministic outcomes and known gaps unchanged; no model, release or human acceptance inferred."
+      },
       {
         "path": "tests/acceptance/narrative-world/ir-contract-20261128-history061-text-v1.json",
         "sha256": "473b122e8b8b4aa504007bd43609a8db150bfb273411d7025e4bfa5ed7a0e288",

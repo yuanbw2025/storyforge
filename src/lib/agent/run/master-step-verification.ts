@@ -1,3 +1,4 @@
+import { parseHistoryKeywordSuggestionsV1, parseHistoryKeywordSuggestionsSnapshotV1 } from '../../history/keyword-suggestions'
 import { parseHistoryEventCreationSnapshotV1 } from '../../history/event-creation-adoption'
 import { parseHistoryEventCandidatesV1 } from '../../history/event-creation-contract'
 import { parseHistoryTextCandidateV1, parseHistoryTextSnapshotV1 } from '../history-text-copilot'
@@ -34,6 +35,7 @@ export const MASTER_CANDIDATE_STEP_VERIFIER_SET_VERSION_V1 = 'master-candidate-s
 
 function validateCandidateDraft(payload: MasterCandidatePayload, draft: string): void {
   if (payload.agentId === 'world-origin') {
+    if (payload.skillId === 'world-origin.history-keyword-suggestions') { parseHistoryKeywordSuggestionsV1(draft, parseHistoryKeywordSuggestionsSnapshotV1(payload.baseSnapshot).request); return }
     if (payload.skillId === 'world-origin.history-events') { parseHistoryEventCandidatesV1(draft, parseHistoryEventCreationSnapshotV1(payload.baseSnapshot).request); return }
     if (payload.skillId === 'world-origin.history-text') { parseHistoryTextSnapshotV1(payload.baseSnapshot); parseHistoryTextCandidateV1(draft); return }
     if (payload.skillId === 'world-origin.power-authoring') { parsePowerAuthoringCandidateV1(draft, parsePowerAuthoringSnapshotV1(payload.baseSnapshot)); return }

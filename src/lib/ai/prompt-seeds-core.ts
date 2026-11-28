@@ -191,7 +191,14 @@ const CORE_PROMPT_BASE_SEEDS: PromptSeed[] = [
     userPromptTemplate: '目标字段：{{dimension}}\n生成方式：{{generationMode}}\n原字段：{{currentValue}}\n当前正式上下文：\n{{worldContext}}\n作者要求：{{userHint}}',
     variables: ['dimension', 'generationMode', 'currentValue', 'worldContext', 'userHint'], isActive: true,
   },
-  // 1. 世界观-单维度生成
+
+  {
+    scope: 'system', moduleKey: 'history.keyword-suggestions', promptType: 'generate', name: '内置-历史关键词推荐',
+    description: '建议不同维度的历史关键词，作者选择后转入独立草稿，不直接写正式设定。',
+    systemPrompt: '依据已确认世界、历史、纪年和已有关键词推荐相关新词，解释用途，新增前提标为待确认设想，不替作者编造个人意见。',
+    userPromptTemplate: '作者方向：{{userHint}}\n已确认世界与历史：\n{{worldContext}}',
+    variables: ['userHint', 'worldContext'], isActive: true,
+  },  // 1. 世界观-单维度生成
   {
     scope: 'system',
     moduleKey: 'worldview.dimension',

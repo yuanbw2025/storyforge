@@ -5,7 +5,7 @@ import { historyAuthorRecordV1, copyHistoryAuthorOriginV1, copyHistoryAuthorSele
 import { createPortableResourceUidV1, isPortableResourceUidV1 } from '../context-gateway/resource-uid'
 import { REGISTRY_BY_NAME } from '../registry/project-tables'
 import { scopeTransactionTables, readOwnedRows } from '../workspace/scope'
-import { appendAgentEvent, getOrCreateAgentConversation, readAgentEvents } from '../agent/conversations'
+import { appendAgentEvent, getOrCreateAgentConversation, readAgentEvents } from '../agent/conversation-channel'
 import { assertLongformHistoryScopeV1 } from './authoring-scope'
 
 const PURPOSE = 'history-keyword-author-drafts-v1'
@@ -81,12 +81,12 @@ function lastState(events: AgentEvent[]): HistoryKeywordDraftReadV1 {
   if (last.kind !== 'message' || last.role !== 'user' || last.durableRunId != null || payload.type !== PURPOSE || payload.version !== 1) throw new Error('关键词草稿记录格式异常，未覆盖原输入。')
   return { revision: last.id!, value: copyHistoryKeywordDraftSetV1(JSON.parse(last.content)) }
 }
-const tables = () => scopeTransactionTables(db.worldGroups, db.agentConversations, db.agentEvents)
+export const historyKeywordDraftTransactionTablesV1 = () => scopeTransactionTables(db.worldGroups, db.agentConversations, db.agentEvents)
 /** Author-only messages in the existing registered container. No new table,
  * formal keyword, candidate adoption, model call or automatic Canon source. */
 export async function readHistoryKeywordDraftsV1(input: HistoryKeywordDraftScopeV1): Promise<HistoryKeywordDraftReadV1> {
   input = copyOrigin(input)
-  return db.transaction('r', tables(), async () => {
+  return db.transaction('r', historyKeywordDraftTransactionTablesV1(), async () => {
     const conversation = await channel(input)
     return lastState(conversation ? await readAgentEvents(conversation.id!, input.scope) : [])
   })
@@ -94,7 +94,7 @@ export async function readHistoryKeywordDraftsV1(input: HistoryKeywordDraftScope
 export async function saveHistoryKeywordDraftsV1(input: HistoryKeywordDraftScopeV1 & { expectedRevision: number | null; value: HistoryKeywordDraftSetV1 }): Promise<HistoryKeywordDraftReadV1> {
   const origin = copyOrigin(input), value = copyHistoryKeywordDraftSetV1(input.value), expected = input.expectedRevision
   if (expected !== null && (!Number.isSafeInteger(expected) || expected < 1)) throw new Error('关键词草稿保存版本无效。')
-  return db.transaction('rw', tables(), async () => {
+  return db.transaction('rw', historyKeywordDraftTransactionTablesV1(), async () => {
     let conversation = await channel(origin)
     const previous = lastState(conversation ? await readAgentEvents(conversation.id!, origin.scope) : [])
     if (previous.revision !== expected) throw new Error('关键词草稿已在其他窗口更新；当前输入保留，请重新对照。')
