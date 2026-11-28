@@ -1,3 +1,4 @@
+import HistoryKeywordDrafts from './HistoryKeywordDrafts'
 import HistoryTextAuthoring from './HistoryTextAuthoring'
 import HistoryEventAuthoringV1, { HistoryEventAIButtonV1 } from './HistoryEventAuthoring'
 import { useState, useEffect, useMemo, useRef } from 'react'
@@ -140,6 +141,7 @@ export default function HistoryPanel({ project, resizableInputs = false, confirm
 
   // ── UI 状态 ──
   const [expandedId, setExpandedId] = useState<number | null>(null)
+  const [keywordDraftsOpen, setKeywordDraftsOpen] = useState(false)
   const [expandedKeywordId, setExpandedKeywordId] = useState<number | null>(null)
   // ── 筛选状态 ──
   const [filterCategory, setFilterCategory] = useState<HistoricalKeywordCategory | 'all'>('all')
@@ -480,6 +482,8 @@ export default function HistoryPanel({ project, resizableInputs = false, confirm
         </HistoryEventEntry>
       )}
 
+      {keywordDraftsOpen && canEdit && project.workspacePurpose !== 'world-engine' && project.activeWorkId != null && <HistoryKeywordDrafts key={historyViewKey} project={project} worldGroupId={scopeGroupId} keywords={scopedKeywords} onCreated={() => loadKeywords({ projectId: project.id!, worldId: project.activeWorldId! })} onOpen={id => { setActiveTab('keywords'); setFilterCategory('all'); setFilterEra('all'); setExpandedKeywordId(id) }} onClose={() => setKeywordDraftsOpen(false)}/>}
+
       {/* Tab 内容：历史细节风暴 */}
       {activeTab === 'keywords' && (
         <div className={compact ? 'grid min-w-0 grid-cols-1 gap-4' : 'grid grid-cols-1 lg:grid-cols-3 gap-6'}>
@@ -514,6 +518,7 @@ export default function HistoryPanel({ project, resizableInputs = false, confirm
                 </select>
               </div>
 
+              <div className="flex items-center gap-3">{canEdit && project.workspacePurpose !== 'world-engine' && project.activeWorkId != null && <button className="text-xs text-accent" onClick={() => afterSaved(() => setKeywordDraftsOpen(true))}>整理关键词草稿</button>}
               {canEdit && !compact && (
                 <button
                   onClick={handleAddKeyword}
@@ -523,6 +528,7 @@ export default function HistoryPanel({ project, resizableInputs = false, confirm
                   添加关键词
                 </button>
               )}
+              </div>
             </div>
 
             {loadingKeywords ? (

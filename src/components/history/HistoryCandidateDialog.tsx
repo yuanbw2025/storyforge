@@ -11,6 +11,8 @@ export default function HistoryCandidateDialog({ label, onClose, children }: { l
   useEffect(() => () => { if (opener.current?.isConnected) opener.current.focus() }, [])
   useLayoutEffect(() => {
     const element = root.current
+    const activeDialog = document.activeElement?.closest('[role="dialog"][aria-modal="true"]')
+    if (activeDialog && activeDialog !== element && !element?.contains(activeDialog)) return
     if (element && !element.contains(document.activeElement)) (focusable(element)[0] ?? element).focus()
   })
   const handleKeyDown = (event: KeyboardEvent<HTMLElement>) => {
