@@ -69,7 +69,7 @@ it('commits only the selected author-edited event, rolls back a failed Run recei
   // Completed receipts are kept as history and staled on scope remapping, not reused as current verification.
   expect(importedRuns[0].status).toBe('running')
   const importedEvents = await db.agentRunEvents.where('runId').equals(importedRuns[0].id!).sortBy('sequence')
-  expect(importedEvents.at(-1)).toMatchObject({ type: 'verification.staled', payloadJson: expect.stringContaining('project-import-scope-rebound') })
+  expect(importedEvents[importedEvents.length - 1]).toMatchObject({ type: 'verification.staled', payloadJson: expect.stringContaining('project-import-scope-rebound') })
   expect(r.fetch).toHaveBeenCalledTimes(1)
 }, 15000)
 it('preserves existing events during supplement and blocks stale source without rewriting or regenerating', async () => {
