@@ -240,7 +240,7 @@ export async function preparePowerAuthoringCopilotV1(input: {
     adopt: output => adoptRestoredPowerAuthoringCandidateV1({ scope, worldGroupId: input.worldGroupId, snapshot, draft: JSON.stringify(output) }),
   }
   return { node, prepared: prepareGenerationNode(node, {}), input: { assembled }, snapshot, contextSources: contextEvidence.included, contextEvidence,
-    contextGatewayExecution, label: powerAuthoringLabelV1(request.target), modelIdentity: { provider: config.provider, model: config.model }, runRaw }
+    contextGatewayExecution, label: request.target.table === 'powerSystems' ? `${powerAuthoringLabelV1(request.target)}（规则记录 #${request.target.recordId}）` : powerAuthoringLabelV1(request.target), modelIdentity: { provider: config.provider, model: config.model }, runRaw }
 }
 
 export function samePowerAuthoringTargetV1(left: PowerAuthoringTargetV1, right: PowerAuthoringTargetV1) { return canonicalStringify(left) === canonicalStringify(right) }
