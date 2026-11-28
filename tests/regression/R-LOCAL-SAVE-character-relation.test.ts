@@ -71,11 +71,17 @@ it('rereads a delayed old snapshot and preserves other-field edits instead of re
 })
 it('explicitly recovers a known committed readback failure but still rejects a later external edit', async () => {
   const f = await fixture(), intent = await f.intent(), original = db.characterRelations.get.bind(db.characterRelations)
-  const fault = vi.spyOn(db.characterRelations, 'get').mockImplementation(key => !Dexie.currentTransaction && key === f.id ? Promise.reject(new Error('native relation readback failure')) : original(key))
+  const fault = vi.spyOn(db.characterRelations, 'get').mockImplementation(key => {
+    const lookup: unknown = key
+    return !Dexie.currentTransaction && typeof lookup === 'number' && lookup === f.id ? Dexie.Promise.reject(new Error('native relation readback failure')) : original(key)
+  })
   await expect(f.save(intent)).rejects.toThrow('readback failure'); fault.mockRestore()
   expect((await db.characterRelations.get(f.id))?.description).toBe(raw)
   expect(matchingLocalSaveAckV1(await f.save({ ...intent, generation: 2 }), { ...intent, generation: 2 }, raw)).toBe(true)
-  const next = await f.intent(), second = vi.spyOn(db.characterRelations, 'get').mockImplementation(key => !Dexie.currentTransaction && key === f.id ? Promise.reject(new Error('native readback again')) : original(key))
+  const next = await f.intent(), second = vi.spyOn(db.characterRelations, 'get').mockImplementation(key => {
+    const lookup: unknown = key
+    return !Dexie.currentTransaction && typeof lookup === 'number' && lookup === f.id ? Dexie.Promise.reject(new Error('native readback again')) : original(key)
+  })
   await expect(store.getState().updateRelation(f.id, { description: '已提交新稿' }, { scope: f.scope, confirmation: next, expected: f.before })).rejects.toThrow('readback again'); second.mockRestore()
   await db.characterRelations.update(f.id, { description: '外部冲突不能覆盖' })
   await expect(store.getState().updateRelation(f.id, { description: '已提交新稿' }, { scope: f.scope, confirmation: { ...next, generation: 2 }, expected: f.before })).rejects.toThrow('已被修改')

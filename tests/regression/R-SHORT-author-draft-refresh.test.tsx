@@ -10,7 +10,7 @@ import * as drafts from '../../src/lib/short-novel/author-drafts'
 import { flushPendingEditsV1 } from '../../src/lib/authoring/pending-edit-coordinator'
 
 vi.mock('../../src/components/short-novel/ShortNovelShowcase', () => ({ default: () => null }))
-globalThis.IS_REACT_ACT_ENVIRONMENT = true
+Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
 let host: HTMLDivElement, root: Root
 beforeEach(async () => { await db.delete(); await db.open(); host = document.createElement('div'); document.body.append(host); root = createRoot(host) })
 afterEach(async () => { await act(async () => { await flushPendingEditsV1(); root.unmount() }); host.remove(); db.close(); vi.restoreAllMocks() })
@@ -77,7 +77,7 @@ it('a late initial draft cannot replace newer input from its own author', async 
 
 it('owner changes cannot borrow a prior Work draft or retain its initialization', async () => {
  const a = await fixture(), b = await fixture(), resolve = deferredRead()
- await db.chapters.where('projectId').equals(b.scope.projectId).and(row => row.workId === b.scope.workId).modify({title:'作品B的正式章节'})
+ await db.chapters.where('projectId').equals(b.scope.projectId).and(row => Reflect.get(row,'workId') === b.scope.workId).modify({title:'作品B的正式章节'})
  await db.outlineNodes.where('projectId').equals(b.scope.projectId).and(row => row.workId === b.scope.workId).and(row => row.type === 'chapter').modify({title:'作品B的正式章节'})
  await act(async () => root.render(draw(a.project, a.scope)))
  await waitFor(() => expect(field('第1章 章节标题')?.value).toBe('第1章'))
@@ -96,7 +96,7 @@ it('a genuine production revision starts its own editor instead of inheriting an
  await act(async () => { await flushPendingEditsV1() })
  const production = (await db.shortNovelProductions.where('workId').equals(f.scope.workId).first())!
  await db.shortNovelProductions.update(production.id!, {revision:production.revision+1})
- await db.chapters.where('projectId').equals(f.scope.projectId).and(row => row.workId === f.scope.workId).modify({title:'新版本正式标题'})
+ await db.chapters.where('projectId').equals(f.scope.projectId).and(row => Reflect.get(row,'workId') === f.scope.workId).modify({title:'新版本正式标题'})
  await db.outlineNodes.where('projectId').equals(f.scope.projectId).and(row => row.workId === f.scope.workId).and(row => row.type === 'chapter').modify({title:'新版本正式标题'})
  await act(async () => root.render(draw(f.project, { ...f.scope })))
  await waitFor(() => expect(field('第1章 章节标题')?.value).toBe('新版本正式标题'))
@@ -116,6 +116,6 @@ it('stage changes and a full unmount restore the exact persisted draft without c
  await waitFor(() => expect(field('第1章 章节标题')?.value).toBe('保留阶段草稿标题'))
  await act(async () => { root.unmount(); root = createRoot(host); root.render(draw(f.project, f.scope)) })
  await waitFor(() => expect(field('第1章 章节标题')?.value).toBe('保留阶段草稿标题'))
- expect((await db.chapters.where('projectId').equals(f.scope.projectId).and(row => row.workId === f.scope.workId).first())?.title).toBe('第1章')
+ expect((await db.chapters.where('projectId').equals(f.scope.projectId).and(row => Reflect.get(row,'workId') === f.scope.workId).first())?.title).toBe('第1章')
  expect(await db.agentRuns.count()).toBe(0)
 })

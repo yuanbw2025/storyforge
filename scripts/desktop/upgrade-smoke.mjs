@@ -1,3 +1,4 @@
+/* global window */
 import { _electron as electron, expect } from '@playwright/test'
 import { mkdtemp, rm, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -49,9 +50,15 @@ async function launch(source, expectedVersion) {
     console.log(JSON.stringify({ check: 'upgraded-desktop-runtime', ...await runtimePolicy.verifyRunningRuntime(app, { projectDir: candidateDirectory }) }))
   }
   await page.evaluate(source => { (0, eval)(source) }, source)
-  assert.equal(await page.evaluate(() => window.__nativeUpgradeSource.version), expectedVersion)
+  const fixtureIdentity = await page.evaluate(() => {
+    /** @type {unknown} */
+    const value = Reflect.get(window, '__nativeUpgradeSource')
+    if (!value || typeof value !== 'object') throw new Error('Missing native upgrade fixture identity')
+    return { version: Reflect.get(value, 'version'), sourceCommit: Reflect.get(value, 'sourceCommit') }
+  })
+  assert.equal(fixtureIdentity.version, expectedVersion)
   const expectedSource = expectedVersion === currentVersion ? currentSource : previousSource
-  if (expectedSource) assert.equal(await page.evaluate(() => window.__nativeUpgradeSource.sourceCommit), expectedSource)
+  if (expectedSource) assert.equal(fixtureIdentity.sourceCommit, expectedSource)
   assert.equal(await app.evaluate(({ app }) => app.getPath('userData')), profile)
   return page
 }

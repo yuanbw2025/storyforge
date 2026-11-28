@@ -102,7 +102,7 @@ it('runs the existing durable request chain with exact Blob-backed chunks and ne
   vi.stubGlobal('fetch', transport)
   await runRefAnalysis(f.referenceId, run.id)
   const completed = await db.referenceAnalysisRuns.get(run.id!)
-  expect(completed?.status, completed?.error).toBe('ready')
+  expect(completed?.status, completed?.error ?? undefined).toBe('ready')
   expect(transport).toHaveBeenCalledTimes(f.texts.length)
   for (const [index, call] of transport.mock.calls.entries()) {
     const messages = JSON.parse(String(call[1]?.body)).messages as { content: string }[]

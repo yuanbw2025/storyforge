@@ -458,81 +458,6 @@
       }
     },
     {
-      "identity": "[\"eslint\",\"scripts/desktop/upgrade-smoke.mjs\",\"no-undef\",\"'window' is not defined.\",\"37781bcc3130c4042d6c9b2e45ae23e6523fc678c988bad14b609516d03a72d3\",48,6]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "eslint",
-        "file": "scripts/desktop/upgrade-smoke.mjs",
-        "code": "no-undef",
-        "message": "'window' is not defined.",
-        "anchor": "37781bcc3130c4042d6c9b2e45ae23e6523fc678c988bad14b609516d03a72d3",
-        "line": 69,
-        "column": 48,
-        "start": 3705,
-        "length": 6
-      }
-    },
-    {
-      "identity": "[\"eslint\",\"scripts/desktop/upgrade-smoke.mjs\",\"no-undef\",\"'window' is not defined.\",\"6c060ded28ec351db2ec2f9229b5e70c6c1e9cf8590643d7f7bde4d8097eb738\",47,6]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "eslint",
-        "file": "scripts/desktop/upgrade-smoke.mjs",
-        "code": "no-undef",
-        "message": "'window' is not defined.",
-        "anchor": "6c060ded28ec351db2ec2f9229b5e70c6c1e9cf8590643d7f7bde4d8097eb738",
-        "line": 75,
-        "column": 47,
-        "start": 4148,
-        "length": 6
-      }
-    },
-    {
-      "identity": "[\"eslint\",\"scripts/desktop/upgrade-smoke.mjs\",\"no-undef\",\"'window' is not defined.\",\"a8e6001b58ed1e552f802aab0e13e5286fd0dae06c01017a5ae3c5da475c69ef\",42,6]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "eslint",
-        "file": "scripts/desktop/upgrade-smoke.mjs",
-        "code": "no-undef",
-        "message": "'window' is not defined.",
-        "anchor": "a8e6001b58ed1e552f802aab0e13e5286fd0dae06c01017a5ae3c5da475c69ef",
-        "line": 47,
-        "column": 42,
-        "start": 2859,
-        "length": 6
-      }
-    },
-    {
-      "identity": "[\"eslint\",\"scripts/desktop/upgrade-smoke.mjs\",\"no-undef\",\"'window' is not defined.\",\"cc8ae0a37da72396528f57cc7709d28aeef9f3c64c0d1f2f4a6327d174b7ce15\",44,6]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "eslint",
-        "file": "scripts/desktop/upgrade-smoke.mjs",
-        "code": "no-undef",
-        "message": "'window' is not defined.",
-        "anchor": "cc8ae0a37da72396528f57cc7709d28aeef9f3c64c0d1f2f4a6327d174b7ce15",
-        "line": 60,
-        "column": 44,
-        "start": 3294,
-        "length": 6
-      }
-    },
-    {
-      "identity": "[\"eslint\",\"scripts/desktop/upgrade-smoke.mjs\",\"no-undef\",\"'window' is not defined.\",\"d152cdb4cbded683c60452fafc1171033722b3f378efc11146938498b411f7c3\",29,6]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "eslint",
-        "file": "scripts/desktop/upgrade-smoke.mjs",
-        "code": "no-undef",
-        "message": "'window' is not defined.",
-        "anchor": "d152cdb4cbded683c60452fafc1171033722b3f378efc11146938498b411f7c3",
-        "line": 65,
-        "column": 29,
-        "start": 3533,
-        "length": 6
-      }
-    },
-    {
       "identity": "[\"eslint\",\"scripts/distribution/release-apk-upgrade.test.mjs\",\"no-redeclare\",\"'process' is already defined as a built-in global variable.\",\"2a24476bdc60fe39c8e3ec271f5b207508dc9d3f6dcf46a1a399b910cfaec562\",11,7]",
       "count": 1,
       "diagnostic": {
@@ -4745,21 +4670,6 @@
         "column": 36,
         "start": 3540,
         "length": 15
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"scripts/desktop/upgrade-smoke.mjs\",\"TS2339\",\"Property '__nativeUpgradeSource' does not exist on type 'Window & typeof globalThis'.\",\"a8e6001b58ed1e552f802aab0e13e5286fd0dae06c01017a5ae3c5da475c69ef\",49,21]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/desktop/upgrade-smoke.mjs",
-        "code": "TS2339",
-        "message": "Property '__nativeUpgradeSource' does not exist on type 'Window & typeof globalThis'.",
-        "anchor": "a8e6001b58ed1e552f802aab0e13e5286fd0dae06c01017a5ae3c5da475c69ef",
-        "line": 47,
-        "column": 49,
-        "start": 2866,
-        "length": 21
       }
     },
     {

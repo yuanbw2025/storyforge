@@ -13,7 +13,7 @@ import { seedCurrentWorkspace } from '../helpers/current-workspace'
 
 // Graph geometry is unrelated to IME; the actual panel, inputs, stores and DB remain native.
 vi.mock('../../src/components/relations/RelationGraph', () => ({ default: () => null }))
-globalThis.IS_REACT_ACT_ENVIRONMENT = true
+Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
 let host: HTMLDivElement, root: ReturnType<typeof createRoot>
 beforeEach(async () => {
   await db.delete(); await db.open(); resetPendingEditCoordinatorForTestsV1()
