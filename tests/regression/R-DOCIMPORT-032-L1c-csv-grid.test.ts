@@ -16,7 +16,7 @@ const spyState = vi.hoisted(() => ({ registerChunkTexts: vi.fn() }))
 vi.mock('pdfjs-dist/build/pdf.worker.mjs?url', () => ({ default: 'data:application/javascript,' }))
 vi.mock('pdfjs-dist', () => ({
   GlobalWorkerOptions: { workerSrc: '' },
-  getDocument: vi.fn(() => ({ promise: Promise.resolve({ numPages: 1, getPage: async () => ({ getTextContent: async () => ({ items: [] }) }) }) })),
+  getDocument: vi.fn(() => ({ destroy: vi.fn(async () => {}), promise: Promise.resolve({ numPages: 1, getPage: async () => ({ cleanup: vi.fn(() => true), getTextContent: async () => ({ items: [] }) }) }) })),
 }))
 vi.mock('mammoth', () => ({ default: { extractRawText: vi.fn(async () => ({ value: '' })) } }))
 vi.mock('../../src/lib/import/chunker', async importOriginal => {
