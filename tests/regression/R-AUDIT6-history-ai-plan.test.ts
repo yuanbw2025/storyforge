@@ -5,7 +5,7 @@ import {
   decodeHistoryAIOperation,
   encodeHistoryAIOperation,
 } from '../../src/lib/history/ai-plan'
-import { formatHistoricalYear } from '../../src/lib/history/year'
+import { formatHistoricalYear, parseHistoricalYearInputV1, compareHistoricalDatesV1 } from '../../src/lib/history/year'
 import { SYSTEM_PROMPT_SEEDS } from '../../src/lib/ai/prompt-seeds'
 import type { HistoricalKeyword, HistoricalTimelineEvent, PromptTemplate } from '../../src/lib/types'
 
@@ -50,6 +50,11 @@ describe('AUDIT-6 · 历史双 agent 纯计划', () => {
     expect(formatHistoricalYear(0)).toBe('纪年原点')
     expect(formatHistoricalYear(-0)).toBe('纪年原点')
     expect(formatHistoricalYear(712)).toBe('公元 712 年')
+    expect(formatHistoricalYear(null)).toBe('年份未指定')
+    expect(parseHistoricalYearInputV1('')).toBeNull();expect(parseHistoricalYearInputV1('  ')).toBeNull()
+    expect(parseHistoricalYearInputV1('0')).toBe(0);expect(parseHistoricalYearInputV1('-221')).toBe(-221)
+    expect(() => parseHistoricalYearInputV1('-')).toThrow('整数');expect(() => parseHistoricalYearInputV1('1.5')).toThrow('整数')
+    expect([{ year: null, createdAt: 2, id: 4 }, { year: 0, createdAt: 4, id: 1 }, { year: -1, createdAt: 2, id: 2 }, { year: null, createdAt: 1, id: 3 }].sort(compareHistoricalDatesV1).map(row => row.id)).toEqual([2, 1, 3, 4])
   })
 
   it('operation 对事件和关键词可逆，非法值安全拒绝', () => {

@@ -48,7 +48,7 @@ function eventMeta(event: HistoricalTimelineEvent, mode: HistoryAIMode): string 
   return [
     `- 标题：${event.title}`,
     `- 历史时期：${eraLabel}`,
-    `- 数字化年份：${event.year} (${formatHistoricalYear(event.year)})`,
+    `- 数字化年份：${event.year === null ? '未指定' : event.year} (${formatHistoricalYear(event.year)})`,
     `- 时间描述：${event.date}`,
     event.customTimeRange ? `- 具体时间范围/区间：${event.customTimeRange}` : '',
     event.location ? `- 地理位置/范围：${event.location}` : '',
