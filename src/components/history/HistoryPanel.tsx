@@ -44,17 +44,15 @@ export default function HistoryPanel({ project, resizableInputs = false, confirm
   const [activeTab, setActiveTab] = useState<TabKey>('timeline')
 
   // ── 多世界：世界标签 ──
-  const { groups, activeGroupId } = useWorldGroupStore()
-  const isMW = !!project.enableMultiWorld && groups.length > 1
-  const [worldTab, setWorldTab] = useState<number | 'all'>('all')
-  const worldTabInited = useRef(false)
-  useEffect(() => {
-    // 多世界首次进入默认落在当前活跃世界（之后尊重用户选择，含「一览」）
-    if (isMW && !worldTabInited.current && activeGroupId != null) {
-      setWorldTab(activeGroupId)
-      worldTabInited.current = true
-    }
-  }, [isMW, activeGroupId])
+  const { groups: allGroups, activeGroupId } = useWorldGroupStore()
+  const groups = useMemo(() => allGroups.filter(group => group.projectId === project.id && group.worldId === project.activeWorldId), [allGroups, project.id, project.activeWorldId])
+  const isMW = !!project.enableMultiWorld
+  const partitionKey = JSON.stringify([project.id, project.activeWorldId, project.workspacePurpose === 'world-engine' ? null : project.activeWorkId])
+  const [partitionChoice, setPartitionChoice] = useState<{ key: string; tab: number | 'all' } | null>(null)
+  const defaultTab = groups.some(group => group.id === activeGroupId) ? activeGroupId! : 'all'
+  const worldTab = partitionChoice?.key === partitionKey && (partitionChoice.tab === 'all' || groups.some(group => group.id === partitionChoice.tab))
+    ? partitionChoice.tab : defaultTab
+  const setWorldTab = (tab: number | 'all') => setPartitionChoice({ key: partitionKey, tab })
   /** 当前编辑作用域的世界组 id（一览/单世界时为 null） */
   const scopeGroupId: number | null = isMW && typeof worldTab === 'number' ? worldTab : null
   /** 一览标签为只读（避免新建项归属不明） */
@@ -174,42 +172,48 @@ export default function HistoryPanel({ project, resizableInputs = false, confirm
 
   // 按当前世界标签过滤事件/关键词（一览或单世界 = 全部）
   const scopedEvents = useMemo(() => (
-    (!isMW || worldTab === 'all') ? events : events.filter(e => e.worldGroupId === worldTab)
-  ), [events, isMW, worldTab])
+    events.filter(row => row.projectId === project.id && Reflect.get(row, 'worldId') === project.activeWorldId
+      && (!isMW || worldTab === 'all' || row.worldGroupId === worldTab))
+  ), [events, project.id, project.activeWorldId, isMW, worldTab])
   const scopedKeywords = useMemo(() => (
-    (!isMW || worldTab === 'all') ? keywords : keywords.filter(k => k.worldGroupId === worldTab)
-  ), [keywords, isMW, worldTab])
+    keywords.filter(row => row.projectId === project.id && Reflect.get(row, 'worldId') === project.activeWorldId
+      && (!isMW || worldTab === 'all' || row.worldGroupId === worldTab))
+  ), [keywords, project.id, project.activeWorldId, isMW, worldTab])
 
   // ── 时间线操作 ──
   const handleAddEvent = async () => {
     if (!canEdit) return
-    await flushPendingEditsV1()
-    const newId = await addEvent({
-      projectId: project.id!,
-      era: 'custom',
-      year: 0,
-      date: '公元元年',
-      title: '新历史事件',
-      description: '描述该事件的发生过程...',
-      isHistorical: true,
-      ...(scopeGroupId != null ? { worldGroupId: scopeGroupId } : {}),
-    })
-    setExpandedId(newId)
+    try {
+      await flushPendingEditsV1()
+      const newId = await addEvent({
+        projectId: project.id!,
+        era: 'custom',
+        year: 0,
+        date: '公元元年',
+        title: '新历史事件',
+        description: '描述该事件的发生过程...',
+        isHistorical: true,
+        ...(scopeGroupId != null ? { worldGroupId: scopeGroupId } : {}),
+      }, { projectId: project.id!, worldId: project.activeWorldId! })
+      setExpandedId(newId)
+    } catch (cause) { toast.error(cause instanceof Error ? cause.message : '添加历史事件失败') }
   }
 
   // ── 关键词操作 ──
   const handleAddKeyword = async () => {
     if (!canEdit) return
-    await flushPendingEditsV1()
-    const newId = await addKeyword({
-      projectId: project.id!,
-      keyword: '新历史关键词',
-      category: 'technology',
-      era: 'custom',
-      description: '输入该关键词的基础概念或您想借鉴的方面...',
-      ...(scopeGroupId != null ? { worldGroupId: scopeGroupId } : {}),
-    })
-    setExpandedKeywordId(newId)
+    try {
+      await flushPendingEditsV1()
+      const newId = await addKeyword({
+        projectId: project.id!,
+        keyword: '新历史关键词',
+        category: 'technology',
+        era: 'custom',
+        description: '输入该关键词的基础概念或您想借鉴的方面...',
+        ...(scopeGroupId != null ? { worldGroupId: scopeGroupId } : {}),
+      }, { projectId: project.id!, worldId: project.activeWorldId! })
+      setExpandedKeywordId(newId)
+    } catch (cause) { toast.error(cause instanceof Error ? cause.message : '添加历史关键词失败') }
   }
 
   const handleAIConsult = (event: HistoricalTimelineEvent) => { void historyAI.run('consult', { kind: 'event', item: event }) }
@@ -409,7 +413,7 @@ export default function HistoryPanel({ project, resizableInputs = false, confirm
                 <Clock className="w-8 h-8 text-text-muted mx-auto mb-3 opacity-40" />
                 <h4 className="text-sm font-medium text-text-primary mb-1">暂无时间线事件</h4>
                 <p className="text-xs text-text-muted mb-4">添加真实历史事件或虚构事件，构建完整的小说时间轴。</p>
-                {!compact && <button
+                {canEdit && !compact && <button
                   onClick={handleAddEvent}
                   className="inline-flex items-center gap-1.5 px-4 py-2 bg-accent text-white text-xs rounded-lg hover:opacity-90"
                 >
