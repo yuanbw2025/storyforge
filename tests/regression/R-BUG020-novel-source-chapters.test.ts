@@ -48,6 +48,18 @@ it('uses line-local labels only in persisted chapters and preserves all source c
   expect(splitDocumentChapters(text).map(ch => ch.text).join('')).toBe(text)
 })
 
+it('keeps a long headingless manuscript in one original Work chapter instead of inventing AI-budget chapters', async () => {
+  const text = '\uFEFF  \r\n' + '无标题的连续原文，林岚守住灯塔。e\u0301🌙\r\n\r\n'.repeat(1200) + '  尾部原文。\r\n'
+  expect(text.length).toBeGreaterThan(20_000)
+  expect(splitDocumentChapters(text)).toEqual([{ index: 0, startChar: 0, endChar: text.length, charCount: text.length, label: '全文', text }])
+  const created = await create(text)
+  const chapters = await db.chapters.where('projectId').equals(created.scope.projectId).sortBy('order')
+  expect(chapters).toHaveLength(1)
+  expect(chapters[0]).toMatchObject({ title: '全文', content: plainTextToHtml(text), workId: created.scope.workId })
+  expect(chapters[0].worldId).toBeUndefined()
+  expect(await db.outlineNodes.get(chapters[0].outlineNodeId)).toMatchObject({ title: '全文', type: 'chapter', workId: created.scope.workId })
+})
+
 it('extracts a near-5MiB million-character source, stores all chapters, and freezes/read-checks the first middle and final evidence', async () => {
   const originals = Array.from({ length: 100 }, (_, i) => `第${i + 1}章 章节${i + 1}\n段首标记${i}。${'中文原作。'.repeat(3400)}段尾标记${i}。\n`)
   const text = originals.join('')

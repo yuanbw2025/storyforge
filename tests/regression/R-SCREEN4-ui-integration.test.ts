@@ -111,11 +111,12 @@ describe('SCREEN-4 UI integration safety',()=>{
   expect(await readScreenplayAuthorDraft(b.scope,'scene:1:r1')).toBeNull()
   expect(await listScreenplayScenes(a.scope)).toEqual([])
  })
- it('long imported source is chunked without truncation and remains a separate novel owner',async()=>{
+ it('long headingless source stays complete in one novel chapter and remains a separate adaptation source owner',async()=>{
   const text=('这是长原作中的一段不可丢失的正文。'.repeat(1600)+'\n').repeat(3)
   const source=await createWorkspace({name:'长原作导入',genres:[],description:'',status:'drafting',targetWordCount:100000},{purpose:'independent-work',kind:'novel',novelProfile:'long',importedNovelText:text})
   const chapters=await db.chapters.where('projectId').equals(source.scope.projectId).filter(c=>c.workId===source.scope.workId).sortBy('order')
-  expect(chapters.length).toBeGreaterThan(1)
+  expect(chapters).toHaveLength(1)
+  expect(chapters[0].title).toBe('全文')
   expect(chapters.map(c=>htmlToPlainText(c.content)).join('').replace(/\s/g,'')).toBe(text.replace(/\s/g,''))
   const target=await createAdaptation({sourceScope:source.scope,sourceWorkId:source.scope.workId,title:'独立改编',sourceSelection:{mode:'entire-work'},medium:'screenplay',targetSpec:spec})
   expect(target.scope.workId).not.toBe(source.scope.workId)

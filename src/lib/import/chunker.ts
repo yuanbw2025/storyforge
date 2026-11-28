@@ -67,12 +67,13 @@ export function chunkDocument(text: string, opts: ChunkOptions = {}): ChunkPlan[
 }
 
 /** Recognized novel chapters follow headings, never the model processing budget.
- * Every input character belongs to exactly one range; unstructured text retains the existing fallback.
+ * Every input character belongs to exactly one range. Without a recognized
+ * heading, preserve one complete manuscript; AI processing chunks are not chapters.
  */
 export function splitDocumentChapters(text: string): ChunkPlan[] {
   if (!text) return []
   const headings = findChapterBoundaries(text, NOVEL_CHAPTER_REGEX)
-  if (!headings.length) return chunkDocument(text, { targetChars: 20_000, overlapChars: 0 })
+  if (!headings.length) return [{ index: 0, startChar: 0, endChar: text.length, charCount: text.length, label: '全文', text }]
   const starts = headings.map(heading => ({ ...heading }))
   if (text.slice(0, starts[0].start).trim()) starts.unshift({ start: 0, title: '前言' })
   else starts[0].start = 0
