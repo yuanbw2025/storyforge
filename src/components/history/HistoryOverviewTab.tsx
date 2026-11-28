@@ -1,3 +1,4 @@
+import { HistoryTextAIButton } from './HistoryTextAuthoring'
 import { inputAreaLayoutV1 } from '../../lib/input-area-layout'
 import { InlineTextarea, type InlineSave } from '../shared/InlineEdit'
 import { useWorldSettingsLayout } from '../longform/WorldSettingsLayout'
@@ -24,7 +25,7 @@ export default function HistoryOverviewTab({
   return (
     <div className={compact ? 'lf-world-field space-y-4' : 'space-y-6 max-w-4xl'}>
       <div className="bg-bg-surface border border-border rounded-xl p-5 space-y-2">
-        <label className="block text-sm font-medium text-text-primary">历史总述</label>
+        <label className="block text-sm font-medium text-text-primary">历史总述<HistoryTextAIButton field="overview"/></label>
         <p className="text-xs text-text-muted">描述这个世界的整体历史脉络、重大转折、文明兴衰等...</p>
         <InlineTextarea markdownRead minRows={5}
           inputAreaLayout={inputAreaLayoutV1(resizableInputs, 'history.overview')}
@@ -37,7 +38,7 @@ export default function HistoryOverviewTab({
       </div>
 
       <div className="bg-bg-surface border border-border rounded-xl p-5 space-y-2">
-        <label className="block text-sm font-medium text-text-primary">纪年体系</label>
+        <label className="block text-sm font-medium text-text-primary">纪年体系<HistoryTextAIButton field="eraSystem"/></label>
         <p className="text-xs text-text-muted">描述这个世界的纪年方式，如：年号纪年、干支纪年等...</p>
         <InlineTextarea markdownRead minRows={3}
           inputAreaLayout={inputAreaLayoutV1(resizableInputs, 'history.eraSystem')}
