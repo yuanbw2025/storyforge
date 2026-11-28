@@ -71,6 +71,8 @@ jobs:
       GIT_CONFIG_COUNT: '1'
       GIT_CONFIG_KEY_0: core.longpaths
       GIT_CONFIG_VALUE_0: 'true'
+      # Explicit Windows diagnosis only; formal reusable release jobs stay uninstrumented.
+      STORYFORGE_NATIVE_DIAGNOSTIC_PROBE: ${{ github.event_name == 'workflow_dispatch' && !inputs.release && inputs.target == 'windows' && '1' || '' }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
