@@ -1,4 +1,6 @@
 import { db } from '../db/schema'
+import type { Table, Transaction } from 'dexie'
+import { canonicalStringify } from '../agent/run/hash'
 import { getFactPredicate, isConstitutionPredicate } from '../registry/fact-predicate-registry'
 import {
   CANON_ASSERTION_SOURCE_REGISTRY,
@@ -590,14 +592,20 @@ export async function refreshSettingAssertionSourceStatus(args: {
   table: CanonAssertionSourceTable
   recordId: number
   changedFields?: readonly string[]
-}): Promise<{ touched: number }> {
+}, transaction?: Transaction): Promise<{ touched: number }> {
+  const read = <T>(table: Table<T, number>): Table<T, number> => {
+    if (!transaction) return table
+    if (transaction.db !== db || !transaction.active || transaction.mode !== 'readwrite' || !transaction.storeNames.includes(table.name)) throw new Error('Canon 来源状态缺少原生写事务')
+    return transaction.table<T, number>(table.name)
+  }
   const fieldFilter = args.changedFields ? new Set(args.changedFields) : null
   const sourceSpec = CANON_ASSERTION_SOURCE_REGISTRY.find(item => item.table === args.table)
   if (!sourceSpec) return { touched: 0 }
-  const record = await db.table(args.table).get(args.recordId) as Record<string, unknown> | undefined
-  const facts = await db.temporalFacts.where('projectId').equals(args.projectId).toArray()
+  const record = await read(db.table(args.table)).get(args.recordId) as Record<string, unknown> | undefined
+  const factTable = read(db.temporalFacts), updateFact = db.temporalFacts.update.bind(factTable)
+  const facts = await factTable.where('projectId').equals(args.projectId).toArray()
   const workIds = record && args.table !== 'storyCores' && typeof record.worldId === 'number'
-    ? new Set((await db.works.where('worldId').equals(record.worldId).toArray()).map(work => work.id))
+    ? new Set((await read(db.works).where('worldId').equals(record.worldId).toArray()).map(work => work.id))
     : null
   let touched = 0
   for (const fact of facts) {
@@ -611,10 +619,12 @@ export async function refreshSettingAssertionSourceStatus(args: {
     const current = record && registered ? fingerprintSettingSource(record[fact.sourceField]) : null
     if (current === fact.sourceFingerprint) continue
     if (fact.status !== 'rejected' && fact.status !== 'superseded') {
-      await db.temporalFacts.update(fact.id, {
-        status: record && registered ? 'stale' : 'source-missing',
+      const patch = {
+        status: record && registered ? 'stale' as const : 'source-missing' as const,
         updatedAt: Date.now(),
-      })
+      }
+      const written = await updateFact(fact.id, patch)
+      if (transaction && (written !== 1 || canonicalStringify(await factTable.get(fact.id)) !== canonicalStringify({ ...fact, ...patch }))) throw new Error('Canon 来源状态后态不匹配，原采纳已回滚。')
       touched++
     }
   }

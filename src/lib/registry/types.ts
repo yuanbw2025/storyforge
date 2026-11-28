@@ -579,6 +579,9 @@ export interface AdoptWorldHistoryTextInputV1 {
   mode: 'replace'
 }
 
+/** Exact original power record/field + native preimage and explicit DAG impact. */
+export type AdoptPowerAuthoringInputV1 = import('../cultivation/power-authoring-adoption').AdoptPowerAuthoringInputV1
+
 export interface AdoptInput {
   /** NW-1C: author-selected durable candidate. Payload is loaded from verified
    * ledger state; caller-provided fields are never trusted on this route. */

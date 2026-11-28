@@ -28,6 +28,7 @@ import {
 } from '../fact-ledger/setting-assertions'
 import type { CanonAssertionSourceTable } from './canon-assertion-source-registry'
 import { assertRegisteredTreeParentV1, RegisteredTreeRelationError } from './tree-relations'
+import { adoptPowerAuthoringInTransactionV1, type AdoptPowerAuthoringInputV1 } from '../cultivation/power-authoring-adoption'
 
 const CANON_SOURCE_TABLES = new Set<CanonAssertionSourceTable>([
   'worldviews',
@@ -109,8 +110,10 @@ function runRegisteredAdoptionTransaction<T>(owner: CallerOwnedAdoptionV1 | unde
 }
 
 export function adopt(input: AdoptWorldHistoryTextInputV1, owner?: CallerOwnedAdoptionV1): Promise<AdoptResult>
+export function adopt(input: AdoptPowerAuthoringInputV1, owner?: CallerOwnedAdoptionV1): Promise<AdoptResult>
 export function adopt(input: AdoptInput, owner?: CallerOwnedAdoptionV1): Promise<AdoptResult>
-export async function adopt(input: AdoptInput | AdoptWorldHistoryTextInputV1, owner?: CallerOwnedAdoptionV1): Promise<AdoptResult> {
+export async function adopt(input: AdoptInput | AdoptWorldHistoryTextInputV1 | AdoptPowerAuthoringInputV1, owner?: CallerOwnedAdoptionV1): Promise<AdoptResult> {
+  if (isPowerAuthoringAdoptionV1(input)) return adoptPowerAuthoringInTransactionV1(input, owner)
   if (isWorldHistoryAdoptionV1(input)) return adoptWorldHistoryTextV1(input, owner)
   assertCallerAdoptionTransaction(owner, owner ? callerOwnedAdoptionEffectTablesV1(input.target) : [])
   if (owner && (!CALLER_OWNED_ADOPTION_TARGETS_V1.has(input.target) || input.narrativeCandidate || input.compareAndSet ||
@@ -185,6 +188,9 @@ export async function adopt(input: AdoptInput | AdoptWorldHistoryTextInputV1, ow
   return adoptSingleton(scopedInput, fieldSpecs, tableSpec, result, owner)
 }
 
+function isPowerAuthoringAdoptionV1(input: AdoptInput | AdoptWorldHistoryTextInputV1 | AdoptPowerAuthoringInputV1): input is AdoptPowerAuthoringInputV1 {
+  return Object.prototype.hasOwnProperty.call(input, 'powerAuthoring')
+}
 function isWorldHistoryAdoptionV1(input: AdoptInput | AdoptWorldHistoryTextInputV1): input is AdoptWorldHistoryTextInputV1 {
   // Either new-only key selects strict admission, including malformed hybrids.
   return Object.prototype.hasOwnProperty.call(input, 'ownerScope') || Object.prototype.hasOwnProperty.call(input, 'selection')

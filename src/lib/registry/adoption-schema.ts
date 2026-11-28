@@ -482,6 +482,13 @@ const ADOPTION_SCHEMAS_RAW: CollectionAdoptionSpec[] = [
 ]
 
 const ADOPTION_EXTENSION_REGISTRATIONS: readonly AdoptionExtensionSpec[] = [
+  ...(['worldviews', 'powerSystems', 'cultivationSystems'] as const).map((target): AdoptionExtensionSpec => ({
+    id: `power-authoring-${target}-v1`, target,
+    entrypoints: ['src/lib/cultivation/power-authoring-adoption.ts'],
+    policyRegistry: 'FIELD_REGISTRY + PROJECT_TABLES refs + PowerAuthoring native record/reference CAS + stable stage ID/DAG validator + explicit removal impact hash',
+    reason: 'adopt 的力量字段/原阶段定点确认分支；完整原生事务重读身份、旧值、引用与DAG，复用原引用/进度/Canon 生命周期；不按名称重建体系，不自动采用或迁移原数据。',
+    reviewAfter: '2027-02-20',
+  })),
   {
     id: 'inspiration-author-prompt-config', target: 'inspirationWorkspaces',
     entrypoints: ['src/stores/inspiration-workspace.ts'],
