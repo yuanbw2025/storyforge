@@ -10,6 +10,7 @@
 // Vite URL import — pdfjs 的 worker 必须走 URL 引入（仅 URL 字符串，不进主包）
 import { parseCsvGridV1, type CsvGridV1 } from './import/csv-grid'
 import { XLSX_MAX_FILE_BYTES_V1 } from './import/xlsx-text'
+import type { DocxStructureV1 } from './import/docx-structure'
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.mjs?url'
 
 // pdfjs / mammoth 体积大（~870KB）且仅在用户导入文件时才需要，改为动态导入按需加载，
@@ -57,6 +58,8 @@ export interface ExtractResult {
   diagnostics: ExtractDiagnosticsV1
   /** 032-L1-c：仅 csv 扩展名且 status===ok 时填入；纯只读对照侧车，不参与 AI/adopt/persistence。 */
   csvGrid?: CsvGridV1
+  /** Read-only Word structure evidence; never substitutes for the frozen text. */
+  docxStructure?: DocxStructureV1
   /** 新格式的保真边界，必须随抽取结果展示给作者。 */
   formatNotices?: string[]
   sheetCount?: number
@@ -133,7 +136,7 @@ export function textLayerReportLineV1(input: {
 }
 
 /** 统一入口：给一个 File，返回提取到的纯文本 */
-export async function extractTextFromFile(file: File, options: { signal?: AbortSignal } = {}): Promise<ExtractResult> {
+export async function extractTextFromFile(file: File, options: { signal?: AbortSignal; includeDocxStructure?: boolean } = {}): Promise<ExtractResult> {
   const extRaw = file.name.split('.').pop()?.toLowerCase() || ''
   options.signal?.throwIfAborted()
 
@@ -182,7 +185,7 @@ export async function extractTextFromFile(file: File, options: { signal?: AbortS
       return base
     }
     case 'pdf':  return extractPdf(file)
-    case 'docx': return extractDocx(file)
+    case 'docx': return extractDocx(file, options.signal, options.includeDocxStructure === true)
     case 'xlsx': {
       const { extractXlsxTextV1 } = await import('./import/xlsx-text')
       const result = await extractXlsxTextV1(file, options.signal)
@@ -211,10 +214,29 @@ async function extractPdf(file: File): Promise<ExtractResult> {
   return { text, rawChars: text.length, pageCount: pdf.numPages, ...assessExtractionQualityV1({ format: 'pdf', text, pages }) }
 }
 
-async function extractDocx(file: File): Promise<ExtractResult> {
+async function extractDocx(file: File, signal?: AbortSignal, includeStructure = false): Promise<ExtractResult> {
   const mammoth = (await import('mammoth')).default
   const buf = await file.arrayBuffer()
   // mammoth.extractRawText 返回纯文本（不带样式）
-  const { value } = await mammoth.extractRawText({ arrayBuffer: buf })
-  return { text: value, rawChars: value.length, ...assessExtractionQualityV1({ format: 'docx', text: value }) }
+  signal?.throwIfAborted()
+  const { value, messages = [] } = await mammoth.extractRawText({ arrayBuffer: buf })
+  signal?.throwIfAborted()
+  const base = { text: value, rawChars: value.length, ...assessExtractionQualityV1({ format: 'docx', text: value }) }
+  const notices = messages.map(message => `Word 转换提示：${message.message}`)
+  if (base.status === 'empty' || !includeStructure) return { ...base, formatNotices: notices }
+  const { projectDocxStructureV1, DOCX_STRUCTURE_NOTICE_V1 } = await import('./import/docx-structure')
+  try {
+    const converted = await mammoth.convertToHtml({ arrayBuffer: buf }, {
+      includeEmbeddedStyleMap: false, ignoreEmptyParagraphs: false, externalFileAccess: false,
+      // A structural preview must not decode or embed document media.
+      convertImage: mammoth.images.imgElement(async () => ({ src: '' })),
+    })
+    signal?.throwIfAborted()
+    const conversionNotices = [...new Set([...notices, ...converted.messages.map(message => `Word 转换提示：${message.message}`)])]
+    return { ...base, docxStructure: projectDocxStructureV1(converted.value, conversionNotices), formatNotices: [DOCX_STRUCTURE_NOTICE_V1, ...conversionNotices] }
+  } catch (cause) {
+    signal?.throwIfAborted()
+    const formatNotices = [DOCX_STRUCTURE_NOTICE_V1, ...notices, `Word 结构对照未能生成：${cause instanceof Error ? cause.message : String(cause)}。原纯文本未改动，请对照原件。`]
+    return { ...base, docxStructure: { blocks: [], notices: formatNotices }, formatNotices }
+  }
 }

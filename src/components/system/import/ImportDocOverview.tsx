@@ -2,6 +2,7 @@ import { useSyncExternalStore } from 'react'
 import { Info } from 'lucide-react'
 import { FILE_LIMIT_HINTS } from '../../../lib/doc-parser'
 import type { CsvGridV1 } from '../../../lib/import/csv-grid'
+import type { DocxStructureV1 } from '../../../lib/import/docx-structure'
 import type { ImportSession } from '../../../lib/types/import-session'
 
 /** 032-L1-a：恢复钩子与介绍区都在授权写集内，用一个只读外部快照把
@@ -36,13 +37,14 @@ export function useCsvGridViewV1() {
   return snap
 }
 
-export function ImportDocIntro({ chunkSize, automaticChunking = false }: { chunkSize: number; automaticChunking?: boolean }) {
+export function ImportDocIntro({ chunkSize, automaticChunking = false, docxStructure }: { chunkSize: number; automaticChunking?: boolean; docxStructure?: DocxStructureV1 | null }) {
   const textLayerNotice = useTextLayerNoticeV1()
   const csvGrid = useCsvGridViewV1()
   return (
     <div>
       {textLayerNotice && <div role="status" className="mb-2 rounded-lg border border-warning/40 bg-warning/10 p-3 text-xs text-warning">{textLayerNotice}</div>}
       {csvGrid && <CsvPreviewCardV1 grid={csvGrid} />}
+      {docxStructure && <DocxPreviewCardV1 structure={docxStructure} />}
       <h2 className="text-xl font-bold text-text-primary mb-1">📥 AI 分块文档解析</h2>
       <p className="text-sm text-text-muted">
         上传文档（设定集、成品小说、大纲草稿等），AI 分块串行解析
@@ -75,6 +77,23 @@ export function ImportDocIntro({ chunkSize, automaticChunking = false }: { chunk
       </div>
     </div>
   )
+}
+
+function DocxPreviewCardV1({ structure }: { structure: DocxStructureV1 }) {
+  const tables = structure.blocks.filter(block => block.kind === 'table')
+  return <details className="mb-3 rounded-lg border border-border bg-bg-surface p-3 text-xs" aria-label="Word 文档结构对照">
+    <summary className="cursor-pointer font-medium">Word 文档结构对照 · {structure.blocks.length} 段结构 · {tables.length} 张表格</summary>
+    {structure.notices.map((notice, index) => <p className="my-2 text-text-muted" key={index}>{notice}</p>)}
+    <p className="my-2 text-text-muted">预览前 20 段结构，每张表显示前 8 行、每行前 12 格；只限制此处展示，原件和解析原文保持完整。</p>
+    <div className="max-h-96 space-y-2 overflow-auto">
+      {structure.blocks.slice(0, 20).map(block => <div key={block.index} className="rounded border border-border p-2">
+        <p className="mb-1 text-text-muted">第 {block.index + 1} 段 · {block.kind === 'table' ? `表格（${block.rows.length} 行）` : block.kind === 'heading' ? `标题 ${block.level}` : '段落'}</p>
+        {block.kind === 'table' ? <table className="border-collapse" aria-label={`Word 第 ${block.index + 1} 段表格`}><tbody>{block.rows.slice(0, 8).map((row, ri) => <tr key={ri}>{row.slice(0, 12).map((cell, ci) => <td
+          key={ci} colSpan={cell.colSpan} rowSpan={cell.rowSpan} className="max-w-xs whitespace-pre-wrap border border-border p-2 align-top">{cell.text}</td>)}</tr>)}</tbody></table>
+          : <p className="whitespace-pre-wrap">{block.text || '（空段落）'}</p>}
+      </div>)}
+    </div>
+  </details>
 }
 
 export function ImportReusableSessionBanner({
