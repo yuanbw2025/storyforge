@@ -1,3 +1,4 @@
+import { PowerAuthoringButtonV1 } from './PowerAuthoringControls'
 import { inputAreaLayoutV1 } from '../../lib/input-area-layout'
 import { useEffect, useMemo, useState, useRef, useContext } from 'react'
 import { GitBranch, Plus, Trash2 } from 'lucide-react'
@@ -225,7 +226,7 @@ function CultivationSystemEditor({
     <div className="border border-border rounded-xl bg-bg-surface p-4 min-w-0">
       <div className="grid gap-3 md:grid-cols-[minmax(9rem,0.4fr)_minmax(0,1fr)_auto] items-start">
         <div className="min-w-0">
-          <label className="block text-[11px] text-text-muted mb-1">路径名称</label>
+          <label className="block text-[11px] text-text-muted mb-1">路径名称<PowerAuthoringButtonV1 target={{ table: 'cultivationSystems', recordId: system.id!, field: 'name' }}/></label>
           <InlineInput
             value={system.name}
             localSave={localSave('name')} onChange={(name, confirmation) => onUpdate({ name }, { confirmation })}
@@ -233,7 +234,7 @@ function CultivationSystemEditor({
           />
         </div>
         <div className="min-w-0">
-          <label className="block text-[11px] text-text-muted mb-1">路径原理</label>
+          <label className="block text-[11px] text-text-muted mb-1">路径原理<PowerAuthoringButtonV1 target={{ table: 'cultivationSystems', recordId: system.id!, field: 'description' }}/></label>
           <InlineTextarea markdownRead
             inputAreaLayout={inputAreaLayoutV1(resizableInputs, 'cultivation.description')}
             value={system.description}
@@ -247,7 +248,7 @@ function CultivationSystemEditor({
       </div>
 
       <div className="flex items-center justify-between mt-4 mb-2">
-        <h3 className="text-sm font-medium text-text-secondary">境界与成长路径</h3>
+        <h3 className="text-sm font-medium text-text-secondary">境界与成长路径<PowerAuthoringButtonV1 target={{ table: 'cultivationSystems', recordId: system.id!, field: 'stages' }}/></h3>
         <button onClick={() => { void guarded(addStage) }} disabled={!!graph.error} className="text-xs text-accent inline-flex items-center gap-1">
           <Plus className="w-3.5 h-3.5" /> 添加后续境界
         </button>
@@ -274,7 +275,7 @@ function CultivationSystemEditor({
         <div className="min-w-0 border border-border rounded-lg p-3 space-y-3" data-power-stage-fields>
           <div className="flex items-center gap-3">
             <div className="flex-1 min-w-0">
-              <label className="block text-[11px] text-text-muted mb-1">境界名称</label>
+              <label className="block text-[11px] text-text-muted mb-1">境界名称<PowerAuthoringButtonV1 target={{ table: 'cultivationSystems', recordId: system.id!, field: 'stages', stageId: selectedStage.id, stageField: 'name' }}/></label>
               <InlineInput
                 value={selectedStage.name}
                 localSave={localSave('stages.name', selectedStage.id)} onChange={(name, confirmation) => patchStage(selectedStage.id, { name }, confirmation)}
@@ -286,13 +287,13 @@ function CultivationSystemEditor({
             </button>
           </div>
           <div>
-            <label className="block text-[11px] text-text-muted mb-1">分支标签</label>
+            <label className="block text-[11px] text-text-muted mb-1">分支标签<PowerAuthoringButtonV1 target={{ table: 'cultivationSystems', recordId: system.id!, field: 'stages', stageId: selectedStage.id, stageField: 'branchLabel' }}/></label>
             <InlineInput value={selectedStage.branchLabel || ''}
               localSave={localSave('stages.branchLabel', selectedStage.id)} onChange={(branchLabel, confirmation) => patchStage(selectedStage.id, { branchLabel }, confirmation)}
               placeholder="如：剑修 / 体修（可空）" className="text-sm text-text-primary" />
           </div>
           <div>
-            <label className="block text-[11px] text-text-muted mb-1">前置境界（可多选形成合流）</label>
+            <label className="block text-[11px] text-text-muted mb-1">前置境界（可多选形成合流）<PowerAuthoringButtonV1 target={{ table: 'cultivationSystems', recordId: system.id!, field: 'stages', stageId: selectedStage.id, stageField: 'parentStageIds' }}/></label>
             <div className="flex flex-wrap gap-1.5">
               {stages.filter(stage => stage.id !== selectedStage.id).map(stage => (
                 <label key={stage.id} className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded border border-border">
@@ -308,14 +309,14 @@ function CultivationSystemEditor({
           </div>
           <div className="grid gap-3 xl:grid-cols-2" data-power-stage-pair>
             <div className="min-w-0">
-              <label className="block text-[11px] text-text-muted mb-1">境界特征 / 战力边界</label>
+              <label className="block text-[11px] text-text-muted mb-1">境界特征 / 战力边界<PowerAuthoringButtonV1 target={{ table: 'cultivationSystems', recordId: system.id!, field: 'stages', stageId: selectedStage.id, stageField: 'features' }}/></label>
               <InlineTextarea markdownRead inputAreaLayout={inputAreaLayoutV1(resizableInputs, 'power.stageFeatures')}
                 value={selectedStage.features || ''}
                 localSave={localSave('stages.features', selectedStage.id)} onChange={(features, confirmation) => patchStage(selectedStage.id, { features }, confirmation)}
                 placeholder="能做到什么、不能做到什么…" />
             </div>
             <div className="min-w-0">
-              <label className="block text-[11px] text-text-muted mb-1">突破到此阶的条件</label>
+              <label className="block text-[11px] text-text-muted mb-1">突破到此阶的条件<PowerAuthoringButtonV1 target={{ table: 'cultivationSystems', recordId: system.id!, field: 'stages', stageId: selectedStage.id, stageField: 'breakthrough' }}/></label>
               <InlineTextarea markdownRead inputAreaLayout={inputAreaLayoutV1(resizableInputs, 'power.breakthrough')}
                 value={selectedStage.breakthrough || ''}
                 localSave={localSave('stages.breakthrough', selectedStage.id)} onChange={(breakthrough, confirmation) => patchStage(selectedStage.id, { breakthrough }, confirmation)}

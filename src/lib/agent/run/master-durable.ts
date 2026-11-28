@@ -1,3 +1,4 @@
+import { parsePowerAuthoringRequestV1, parsePowerAuthoringSnapshotV1 } from '../power-authoring-copilot'
 import { usePromptStore } from '../../../stores/prompt'
 import { freezePromptExecutionOptionsV1 } from '../prompt-execution'
 import { INSPIRATION_PREPARATION_MODULES, inspirationPreparationModeFromRequest } from '../../inspiration/preparation'
@@ -150,6 +151,8 @@ export const MAX_MASTER_AGENT_REPLANS_V1 = 1
 const MAX_TASK_ID_CHARS = 80
 
 export interface MasterAgentPlanCheckpointV1 {
+  /** Power targets contain local record/scope IDs. Imported backups keep history, never resume it against remapped rows. */
+  portable?: false
   version: typeof MASTER_AGENT_PLAN_CHECKPOINT_VERSION_V1
   kind: typeof MASTER_AGENT_PLAN_CHECKPOINT_KIND_V1
   plan: MasterAgentPlan
@@ -375,6 +378,27 @@ function readOptionalCharacterRevisionRequest(
   }
 }
 
+function readOptionalPowerAuthoringRequest(
+  value: Record<string, unknown>,
+  agentId: DomainAgentId,
+  skillId: AgentSkillId | undefined,
+  label: string,
+) {
+  const present = Object.prototype.hasOwnProperty.call(value, 'powerAuthoringRequest')
+  if (!present) {
+    if (skillId === 'world-origin.power-authoring') fail(label + '.powerAuthoringRequest 缺失')
+    return undefined
+  }
+  if (agentId !== 'world-origin' || skillId !== 'world-origin.power-authoring') {
+    fail(label + '.powerAuthoringRequest 无效')
+  }
+  try {
+    return parsePowerAuthoringRequestV1(value.powerAuthoringRequest)
+  } catch (error) {
+    fail(`${label}.powerAuthoringRequest 无效：${error instanceof Error ? error.message : String(error)}`)
+  }
+}
+
 function readOptionalCharacterSupplementRequest(
   value: Record<string, unknown>,
   agentId: DomainAgentId,
@@ -462,7 +486,7 @@ function readRequiredSkillId(
   if (typeof value.skillId !== 'string') fail(label + '.skillId 无效')
   const skill = getAgentSkillV1(value.skillId, agentId)
   const allowedModes: Record<DomainAgentId, ReadonlySet<string>> = {
-    'world-origin': new Set(['worldview-field', 'story-core', 'creative-rules']),
+    'world-origin': new Set(['worldview-field', 'story-core', 'creative-rules', 'power-authoring']),
     character: new Set(['create', 'supplement', 'lifecycle']),
     inspiration: new Set(['reverse']),
     outline: new Set(['auto', 'details', 'story-arcs', 'storyline-progress', 'character-driven', 'character-revision', 'volumes', 'chapters']),
@@ -531,7 +555,7 @@ export function parseMasterAgentPlanV1(value: unknown): MasterAgentPlan {
     assertKeysWithOptional(
       item,
       ['id', 'agentId', 'skillId', 'instruction', 'dependsOn'],
-      ['perspectiveCharacterId', 'inspirationFragmentIds', 'characterDrivenPlanId', 'characterRevisionRequest', 'characterSupplementRequest', 'characterLifecycleRequest', 'storylineProgressChapterId', 'storyArcMutationRequest', 'promptExecution', 'requestContext'],
+      ['perspectiveCharacterId', 'inspirationFragmentIds', 'characterDrivenPlanId', 'characterRevisionRequest', 'characterSupplementRequest', 'powerAuthoringRequest', 'characterLifecycleRequest', 'storylineProgressChapterId', 'storyArcMutationRequest', 'promptExecution', 'requestContext'],
       '主 Agent 计划任务 ' + (index + 1),
     )
     const id = readString(item.id, `主 Agent 计划任务 ${index + 1}.id`, MAX_TASK_ID_CHARS)
@@ -575,6 +599,7 @@ export function parseMasterAgentPlanV1(value: unknown): MasterAgentPlan {
       skillId,
       '主 Agent 计划任务 ' + id,
     )
+    const powerAuthoringRequest = readOptionalPowerAuthoringRequest(item, agentId, skillId, '主 Agent 计划任务 ' + id)
     const characterSupplementRequest = readOptionalCharacterSupplementRequest(
       item,
       agentId,
@@ -616,6 +641,7 @@ export function parseMasterAgentPlanV1(value: unknown): MasterAgentPlan {
       ...(inspirationFragmentIds !== undefined ? { inspirationFragmentIds } : {}),
       ...(characterDrivenPlanId !== undefined ? { characterDrivenPlanId } : {}),
       ...(characterRevisionRequest !== undefined ? { characterRevisionRequest } : {}),
+      ...(powerAuthoringRequest !== undefined ? { powerAuthoringRequest } : {}),
       ...(characterSupplementRequest !== undefined ? { characterSupplementRequest } : {}),
       ...(characterLifecycleRequest !== undefined ? { characterLifecycleRequest } : {}),
       ...(storylineProgressChapterId !== undefined ? { storylineProgressChapterId } : {}),
@@ -662,7 +688,9 @@ function writeTargetsForPlan(plan: MasterAgentPlan): Array<{
   const byTable = new Map<string, { fields: Set<string>; adoptionExtension?: string }>()
   plan.tasks.forEach(task => {
     const skill = resolveAgentSkillV1(task.agentId, task.skillId)
-    const writeTargets = skill.executionMode === 'worldview-field'
+    const writeTargets = skill.executionMode === 'power-authoring'
+      ? [{ table: task.powerAuthoringRequest!.target.table, fields: [task.powerAuthoringRequest!.target.field] }]
+      : skill.executionMode === 'worldview-field'
       ? skill.writeTargets.map(target => target.table === 'worldviews'
           ? { ...target, fields: [resolveWorldviewAgentFieldV1(task.instruction)] }
           : target)
@@ -706,7 +734,9 @@ function semanticReviewTaskIdsForPlan(plan: MasterAgentPlan): string[] {
 
 function requiredContextGatewayWriteTargetForTaskV1(task: MasterAgentTask): string | undefined {
   const skill = resolveAgentSkillV1(task.agentId, task.skillId)
-  const specializedWriteTarget = skill.executionMode === 'worldview-field'
+  const specializedWriteTarget = skill.executionMode === 'power-authoring'
+    ? `${task.powerAuthoringRequest!.target.table}.${task.powerAuthoringRequest!.target.field}`
+    : skill.executionMode === 'worldview-field'
     ? `worldviews.${resolveWorldviewAgentFieldV1(task.instruction)}`
     : skill.executionMode === 'story-core'
       ? `storyCores.${resolveStoryCoreFieldV1(task.instruction)}`
@@ -894,14 +924,15 @@ function budgetEvidence(value: unknown, label: string): AgentTeamBudgetEvidence 
 
 function parsePlanCheckpoint(value: unknown): MasterAgentPlanCheckpointV1 {
   if (!isRecord(value)) fail('主 Agent 计划检查点必须是对象')
-  assertExactKeys(value, ['version', 'kind', 'plan', 'planHash', 'budgetEvidence'], '主 Agent 计划检查点')
+  assertKeysWithOptional(value, ['version', 'kind', 'plan', 'planHash', 'budgetEvidence'], ['portable'], '主 Agent 计划检查点')
+  if (value.portable !== undefined && value.portable !== false) fail('主 Agent 计划检查点 portable 无效')
   if (value.version !== MASTER_AGENT_PLAN_CHECKPOINT_VERSION_V1 || value.kind !== MASTER_AGENT_PLAN_CHECKPOINT_KIND_V1) {
     fail('主 Agent 计划检查点版本或类型不匹配')
   }
   const plan = parseMasterAgentPlanV1(value.plan)
   const planHash = readHash(value.planHash, '主 Agent 计划检查点 planHash')
   const parsedBudget = budgetEvidence(value.budgetEvidence, '主 Agent 计划检查点 budgetEvidence')
-  return { version: 1, kind: MASTER_AGENT_PLAN_CHECKPOINT_KIND_V1, plan, planHash, budgetEvidence: parsedBudget }
+  return { version: 1, kind: MASTER_AGENT_PLAN_CHECKPOINT_KIND_V1, plan, planHash, budgetEvidence: parsedBudget, ...(value.portable === false ? { portable: false } : {}) }
 }
 
 function taskStepId(taskId: string): string {
@@ -919,6 +950,7 @@ function sameTaskIdentity(left: MasterAgentTask, right: MasterAgentTask): boolea
     && (left.characterDrivenPlanId ?? null) === (right.characterDrivenPlanId ?? null)
     && JSON.stringify(left.characterRevisionRequest ?? null)
       === JSON.stringify(right.characterRevisionRequest ?? null)
+    && JSON.stringify(left.powerAuthoringRequest ?? null) === JSON.stringify(right.powerAuthoringRequest ?? null)
     && JSON.stringify(left.characterSupplementRequest ?? null)
       === JSON.stringify(right.characterSupplementRequest ?? null)
     && JSON.stringify(left.characterLifecycleRequest ?? null)
@@ -1188,6 +1220,7 @@ export async function replanDurableMasterAgentRunV1(
         resumePayload: {
           version: 1,
           kind: MASTER_AGENT_PLAN_CHECKPOINT_KIND_V1,
+          ...(nextPlan.tasks.some(task => task.skillId === 'world-origin.power-authoring') ? { portable: false as const } : {}),
           plan: nextPlan,
           planHash: nextPlanHash,
           budgetEvidence: parsedBudget,
@@ -1397,6 +1430,11 @@ function parseCandidatePayload(value: unknown, label: string): MasterCandidatePa
       fail(`${label} characterRevisionRequest 无效：${error instanceof Error ? error.message : String(error)}`)
     }
   }
+  if (payload.powerAuthoringRequest !== undefined) {
+    payload.powerAuthoringRequest = parsePowerAuthoringRequestV1(payload.powerAuthoringRequest)
+    const power = parsePowerAuthoringSnapshotV1(payload.baseSnapshot)
+    if (JSON.stringify(power.request) !== JSON.stringify(payload.powerAuthoringRequest)) fail(`${label}力量快照与固定请求不匹配`)
+  }
   if (payload.characterSupplementRequest !== undefined) {
     try {
       payload.characterSupplementRequest = parseCharacterSupplementTaskInputV1(payload.characterSupplementRequest)
@@ -1494,6 +1532,7 @@ function assertCandidateMatchesTaskSkill(
     taskSkill.executionMode !== 'character-revision'
     && payload.characterRevisionRequest !== undefined
   ) fail(`${label} 不得携带角色变更请求`)
+  if (taskSkill.executionMode === 'power-authoring' ? JSON.stringify(payload.powerAuthoringRequest ?? null) !== JSON.stringify(task.powerAuthoringRequest ?? null) : payload.powerAuthoringRequest !== undefined) fail(`${label}力量请求与 Skill 不匹配`)
   if (
     taskSkill.executionMode === 'supplement'
     && JSON.stringify(payload.characterSupplementRequest ?? null)
@@ -1933,6 +1972,7 @@ export async function runDurableMasterAgentPlanV1(
     const checkpointPayload: MasterAgentPlanCheckpointV1 = {
       version: 1,
       kind: MASTER_AGENT_PLAN_CHECKPOINT_KIND_V1,
+      ...(plan.tasks.some(task => task.skillId === 'world-origin.power-authoring') ? { portable: false as const } : {}),
       plan,
       planHash: await hashMasterAgentPlanV1(plan),
       budgetEvidence: evidence,
@@ -2977,6 +3017,7 @@ export async function runDurableMasterAgentPlanV1(
           resumePayload: {
             version: 1,
             kind: MASTER_AGENT_PLAN_CHECKPOINT_KIND_V1,
+            ...(plan.tasks.some(task => task.skillId === 'world-origin.power-authoring') ? { portable: false as const } : {}),
             plan,
             planHash: await hashMasterAgentPlanV1(plan),
             budgetEvidence: budget.snapshot(),
@@ -3022,6 +3063,7 @@ export async function runDurableMasterAgentPlanV1(
               resumePayload: {
                 version: 1,
                 kind: MASTER_AGENT_PLAN_CHECKPOINT_KIND_V1,
+                ...(plan.tasks.some(task => task.skillId === 'world-origin.power-authoring') ? { portable: false as const } : {}),
                 plan,
                 planHash: await hashMasterAgentPlanV1(plan),
                 budgetEvidence: budget.snapshot(),

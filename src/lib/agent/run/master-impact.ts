@@ -35,6 +35,7 @@ const TARGET_TABLE_BY_AGENT: Record<string, string> = {
 }
 
 function targetTableFor(candidate: MasterAgentDurableCandidateV1): string {
+  if (candidate.payload.skillId === 'world-origin.power-authoring') return candidate.payload.powerAuthoringRequest!.target.table
   if (candidate.payload.skillId === 'world-origin.story-core') return 'storyCores'
   if (candidate.payload.skillId === 'world-origin.creative-rules') return 'creativeRules'
   if (candidate.payload.skillId === 'outline.details') return 'detailedOutlines'
@@ -89,6 +90,7 @@ async function buildReport(
     requiresAuthorReview: agentId !== 'prose',
   }
 
+  if (payload.skillId === 'world-origin.power-authoring') report.changed.id = payload.powerAuthoringRequest?.target.recordId ?? null
   if (payload.skillId === 'world-origin.story-core') {
     const row = (await readOwnedRows<any>(scope, 'storyCores', { owner: 'work' }))[0]
     report.changed.id = typeof row?.id === 'number' ? row.id : null

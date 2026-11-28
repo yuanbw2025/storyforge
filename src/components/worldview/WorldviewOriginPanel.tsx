@@ -1,3 +1,5 @@
+import { PowerAuthoringWorkspaceV1 } from './PowerAuthoringControls'
+import { useCultivationStore } from '../../stores/cultivation'
 import { inputAreaLayoutV1, worldviewInputAreaFieldV1 } from '../../lib/input-area-layout'
 import { useScopedWorldviewReadback } from '../../hooks/useScopedWorldviewReadback'
 import WorldviewReadBoundary from './WorldviewReadBoundary'
@@ -207,8 +209,10 @@ export default function WorldviewOriginPanel({ project, initialWorldviewId, init
                 await reloadCurrent()
               }}
             />
+            <PowerAuthoringWorkspaceV1 key={`${authorScope.worldId}:${authorScope.workId}:${targetWorldGroupId}`} project={project} copilot={copilot} onDone={async () => { await reloadCurrent(); await useCultivationStore.getState().loadAll(authorScope) }}>
             <PowerSystemDetails resizableInputs={resizableInputs} project={project} initialRecordId={initialPowerTarget?.table === 'powerSystems' ? initialPowerTarget.recordId : null}/>
             <CultivationSystemsPanel resizableInputs={resizableInputs} project={project} initialSystemId={initialPowerTarget?.table === 'cultivationSystems' ? initialPowerTarget.recordId : null}/>
+            </PowerAuthoringWorkspaceV1>
             <div className="mt-6">
               <h3 className="text-sm font-semibold text-text-primary mb-1">📚 力量层级 · 具体词条</h3>
               <p className="text-xs text-text-muted mb-3">在上面写完力量体系「全貌」后，这里把各等级/层级逐条登记，可自定义字段、打重要度星级，并进入 AI 生成上下文。</p>

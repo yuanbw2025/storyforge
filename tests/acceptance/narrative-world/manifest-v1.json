@@ -21,7 +21,7 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261128-release409-main784-manifest-v1.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261128-power048-copilot-main794-v2.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
       {
@@ -1588,6 +1588,16 @@
         "path": "tests/acceptance/narrative-world/domain-projection-20261128-power048-adoption-v1.json",
         "sha256": "335203061f2d70c03a7c18bc22b4aee4521ea8a9770035c70b6cc4fc7bde1b6a",
         "note": "Remeasured exact power adoption/registry type inputs; all prior deterministic observations/gaps unchanged. No new model, product, device, release or human acceptance inferred."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261128-power048-copilot-v1.json",
+        "sha256": "b8735fd2ade4ef5f23abcd55225f9af417ab55de66e6a797144ef304a4f1f14b",
+        "note": "Preserve both actual parent measurements before combining current main794 manifest history with the exact power Skill/entry changes. Final manifest is frozen before remeasurement; no corpus, known-gap or model-acceptance relabeling."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261128-release409-main784-manifest-v1.json",
+        "sha256": "f211d04734dbe64019352e5874a119a76abe91ce3f318fca1ccd7cd28432eb65",
+        "note": "Preserve both actual parent measurements before combining current main794 manifest history with the exact power Skill/entry changes. Final manifest is frozen before remeasurement; no corpus, known-gap or model-acceptance relabeling."
       }
     ],
     "comparison": "NW-2E checkpoint of the unchanged legacy v3 120-query comparator. Typed v4 query, exact product plans, current impact diagnostics and scale failures have separate receipts; no model or human quality acceptance is inferred."

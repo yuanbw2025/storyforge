@@ -1,3 +1,5 @@
+import { adoptRestoredPowerAuthoringCandidateV1, assertPowerAuthoringCandidateReadyV1, powerAuthoringCandidateMatchesBusinessV1, type PowerAuthoringCopilotSnapshotV1 } from '../power-authoring-copilot'
+import { powerAuthoringTransactionTablesV1 } from '../../cultivation/power-authoring-adoption'
 import Dexie from 'dexie'
 import { detailedOutlineAuthoringPostStateMatchesV1, type DetailedOutlineAuthoringSnapshotV1 } from '../detailed-outline-authoring'
 import { db } from '../../db/schema'
@@ -207,6 +209,7 @@ export async function beginMasterAgentCandidateAdoptionV1(
   input: MasterAgentCandidateAdoptionRefV1,
 ): Promise<ResolvedMasterCandidateV1> {
   const resolved = await resolveCandidate(input)
+  if (resolved.candidate.payload.skillId === 'world-origin.power-authoring') await assertPowerAuthoringCandidateReadyV1({ scope: input.scope, worldGroupId: resolved.snapshot.run.worldGroupId ?? null, snapshot: resolved.candidate.payload.baseSnapshot as PowerAuthoringCopilotSnapshotV1, draft: resolved.candidate.draft })
   if (resolved.candidate.payload.contentRevision) {
     try {
       await assertWorkspaceContentRevisionFreshV1(
@@ -305,6 +308,15 @@ export async function beginMasterAgentCandidateAdoptionV1(
   return resolveCandidate(input)
 }
 
+async function stalePowerCandidateAfterSourceChangeV1(input: MasterAgentCandidateAdoptionRefV1, resolved: ResolvedMasterCandidateV1): Promise<void> {
+  if (resolved.candidate.payload.skillId !== 'world-origin.power-authoring') return
+  const current = await readAgentRunV1(input.scope, input.runId), step = current.projection.steps[resolved.stepId]
+  if (!step?.candidateHash || !['awaiting_confirmation', 'running'].includes(step.status) || step.candidateHash !== resolved.candidate.payload.candidateHash) return
+  await appendAgentRunEventV1({ scope: input.scope, runId: input.runId, type: 'candidate.staled',
+    payload: { stepId: resolved.stepId, candidateHash: step.candidateHash, reason: '力量采纳前原作用域、原记录、引用或上下文已变化。原候选保留，请核对后拒绝并重新生成。' },
+    expectedLastSequence: current.projection.lastSequence })
+}
+
 export async function commitMasterAgentCandidateAdoptionV1(
   input: MasterAgentCandidateAdoptionRefV1,
   dependencies: MasterAgentAdoptionDependenciesV1 = {},
@@ -330,7 +342,13 @@ export async function commitMasterAgentCandidateAdoptionV1(
 
   // Confirmation and the business write are separate crash-recovery boundaries;
   // re-check freshness immediately before the only Canon mutation.
-  await assertRequiredContextGatewayFresh(input, resolved)
+  try {
+    if (resolved.candidate.payload.skillId === 'world-origin.power-authoring') await assertPowerAuthoringCandidateReadyV1({ scope: input.scope, worldGroupId: resolved.snapshot.run.worldGroupId ?? null, snapshot: resolved.candidate.payload.baseSnapshot as PowerAuthoringCopilotSnapshotV1, draft: resolved.candidate.draft })
+    await assertRequiredContextGatewayFresh(input, resolved)
+  } catch (error) {
+    await stalePowerCandidateAfterSourceChangeV1(input, resolved)
+    throw error
+  }
 
   if (!startedFor(resolved.snapshot, resolved.stepId, resolved.candidate.payload.candidateHash!)) {
     await appendAgentRunEventV1({
@@ -353,9 +371,50 @@ export async function commitMasterAgentCandidateAdoptionV1(
   }
 
   await assertRequiredSemanticReviewFresh(resolved)
+  let message: string
+  let adoptionHash: string
+  let snapshot: AgentRunSnapshotV1
+  if (resolved.candidate.payload.skillId === 'world-origin.power-authoring') {
+    const power = resolved.candidate.payload.baseSnapshot as PowerAuthoringCopilotSnapshotV1
+    message = `力量设定“${resolved.candidate.payload.label}”已按本次目标写入。`
+    adoptionHash = await hashCanonicalValue({ version: 1, candidateHash: resolved.candidate.payload.candidateHash,
+      evidence: { agentId: 'world-origin', candidateEventId: input.candidateEventId, message } })
+    snapshot = await readAgentRunV1(input.scope, input.runId)
+    const original = snapshot
+    await db.transaction('rw', [...powerAuthoringTransactionTablesV1(power.request.target.table), db.agentRuns, db.agentRunEvents, db.agentEvents], () => {
+      const transaction = Dexie.currentTransaction!
+      // The domain adopter deliberately awaits native crypto. Anchor each
+      // continuation in this original Dexie zone, so Run events cannot escape
+      // into independent auto-committed transactions after the formal write.
+      return Dexie.Promise.all([
+        transaction.table(db.agentRuns.name).get(input.runId), transaction.table(db.agentEvents.name).get(input.candidateEventId),
+      ]).then(([current, event]) => {
+        if (current?.lastSequence !== original.projection.lastSequence || current.projectionHash !== original.run.projectionHash
+          || event?.content !== resolved.candidate.draft || event.payload !== resolved.candidate.event.payload) throw new Error('原采纳请求或候选已变化。')
+        maybeInjectHarnessFaultV1('adoption.before-write')
+        return Dexie.Promise.resolve(adoptRestoredPowerAuthoringCandidateV1({ scope: input.scope, worldGroupId: resolved.snapshot.run.worldGroupId ?? null,
+          snapshot: power, draft: resolved.candidate.draft, owner: { transaction } }))
+      }).then(() => dependencies.afterBusinessAdoption ? Dexie.waitFor(dependencies.afterBusinessAdoption()) : undefined).then(() => {
+        maybeInjectHarnessFaultV1('adoption.after-write')
+        const envelope = { version: 1, runId: input.runId, generation: original.run.generation, projectId: input.scope.projectId,
+          worldGroupId: original.run.worldGroupId, contractHash: original.run.contractHash, createdAt: Date.now() }
+        return Dexie.Promise.resolve(appendPrivilegedAgentRunEventInTransactionV1(original, parseAgentRunEventV1({ ...envelope,
+          sequence: original.projection.lastSequence + 1, type: 'adoption.committed', payload: { stepId: resolved.stepId,
+            candidateHash: resolved.candidate.payload.candidateHash!, adoptionHash } }))).then(committed => {
+          snapshot = committed
+          return Dexie.Promise.resolve(appendPrivilegedAgentRunEventInTransactionV1(snapshot, parseAgentRunEventV1({ ...envelope,
+            sequence: snapshot.projection.lastSequence + 1, type: 'step.succeeded', payload: { stepId: resolved.stepId,
+              attempt: original.projection.steps[resolved.stepId].attempt, outputHash: resolved.candidate.payload.candidateHash! } })))
+        }).then(succeeded => { snapshot = succeeded })
+      })
+    }).catch(async error => {
+      if (error instanceof Error && error.message.includes('[PowerAuthoring] 原记录或引用已变化')) await stalePowerCandidateAfterSourceChangeV1(input, resolved)
+      throw error
+    })
+  } else {
   const adopt = dependencies.adopt ?? adoptMasterCandidate
   maybeInjectHarnessFaultV1('adoption.before-write')
-  const message = await adopt({
+  message = await adopt({
     projectId: input.scope.projectId,
     scope: input.scope,
     worldGroupId: resolved.snapshot.run.worldGroupId ?? null,
@@ -366,7 +425,7 @@ export async function commitMasterAgentCandidateAdoptionV1(
   })
   await dependencies.afterBusinessAdoption?.()
   maybeInjectHarnessFaultV1('adoption.after-write')
-  const adoptionHash = await hashCanonicalValue({
+  adoptionHash = await hashCanonicalValue({
     version: 1,
     candidateHash: resolved.candidate.payload.candidateHash,
     evidence: {
@@ -375,7 +434,7 @@ export async function commitMasterAgentCandidateAdoptionV1(
       message,
     },
   })
-  let snapshot = await readAgentRunV1(input.scope, input.runId)
+  snapshot = await readAgentRunV1(input.scope, input.runId)
   step = snapshot.projection.steps[resolved.stepId]
   await db.transaction(
     'rw',
@@ -405,6 +464,8 @@ export async function commitMasterAgentCandidateAdoptionV1(
       })
     },
   )
+  }
+
   try {
     await appendMasterAgentImpactReportV1({
       scope: input.scope,
@@ -512,6 +573,7 @@ async function businessAlreadyMatches(
 ): Promise<boolean> {
   const agentId = candidate.payload.agentId
   if (agentId === 'world-origin') {
+    if (candidate.payload.skillId === 'world-origin.power-authoring') return powerAuthoringCandidateMatchesBusinessV1({ scope: input.scope, worldGroupId: input.worldGroupId ?? null, snapshot: candidate.payload.baseSnapshot as PowerAuthoringCopilotSnapshotV1, draft: candidate.draft })
     if (candidate.payload.skillId === 'world-origin.worldview-field') {
       const parsed = parseWorldviewFieldCandidateDraft(candidate.draft)
       const rows = await readOwnedRows<any>(input.scope, 'worldviews', { owner: 'world' })
