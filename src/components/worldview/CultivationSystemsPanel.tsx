@@ -136,14 +136,15 @@ function ScopedCultivationSystemsPanel({ project, initialSystemId, resizableInpu
           当前世界还没有修炼体系。可创建武夫、术士、剑修等多套独立路径。
         </div>
       ) : (
-        <div className="grid grid-cols-[11rem_minmax(0,1fr)] gap-4 min-h-[26rem]">
-          <div className="space-y-1">
+        <div className="space-y-3 min-w-0">
+          <nav aria-label="修炼路径" className="flex gap-2 overflow-x-auto pb-1">
             {scoped.map(system => (
               <button
                 key={system.id}
+                aria-pressed={selected?.id === system.id}
                 {...initialRecordTargetAttributes(system.id === initialSystemId, system.id)}
                 onClick={() => { void guarded(() => setSelectedId(system.id!)) }}
-                className={`w-full px-3 py-2 rounded-lg text-left text-sm border ${
+                className={`shrink-0 max-w-56 px-3 py-2 rounded-lg text-left text-sm border ${
                   selected?.id === system.id
                     ? 'border-accent/40 bg-accent/10 text-accent'
                     : 'border-transparent hover:bg-bg-hover text-text-secondary'
@@ -155,7 +156,7 @@ function ScopedCultivationSystemsPanel({ project, initialSystemId, resizableInpu
                 </span>
               </button>
             ))}
-          </div>
+          </nav>
           {selected && (
             <CultivationSystemEditor
               resizableInputs={resizableInputs}
@@ -222,13 +223,17 @@ function CultivationSystemEditor({
 
   return (
     <div className="border border-border rounded-xl bg-bg-surface p-4 min-w-0">
-      <div className="flex items-start gap-3">
-        <div className="flex-1 min-w-0">
+      <div className="grid gap-3 md:grid-cols-[minmax(9rem,0.4fr)_minmax(0,1fr)_auto] items-start">
+        <div className="min-w-0">
+          <label className="block text-[11px] text-text-muted mb-1">路径名称</label>
           <InlineInput
             value={system.name}
             localSave={localSave('name')} onChange={(name, confirmation) => onUpdate({ name }, { confirmation })}
             className="text-lg font-semibold text-text-primary"
           />
+        </div>
+        <div className="min-w-0">
+          <label className="block text-[11px] text-text-muted mb-1">路径原理</label>
           <InlineTextarea markdownRead
             inputAreaLayout={inputAreaLayoutV1(resizableInputs, 'cultivation.description')}
             value={system.description}
@@ -241,8 +246,8 @@ function CultivationSystemEditor({
         </button>
       </div>
 
-      <div className="flex items-center justify-between mt-5 mb-2">
-        <h3 className="text-sm font-medium text-text-secondary">境界 DAG</h3>
+      <div className="flex items-center justify-between mt-4 mb-2">
+        <h3 className="text-sm font-medium text-text-secondary">境界与成长路径</h3>
         <button onClick={() => { void guarded(addStage) }} disabled={!!graph.error} className="text-xs text-accent inline-flex items-center gap-1">
           <Plus className="w-3.5 h-3.5" /> 添加后续境界
         </button>
@@ -251,12 +256,79 @@ function CultivationSystemEditor({
         阶段数据无法安全编辑，原始内容已保留。{graph.error}
         <details><summary>查看原始阶段数据</summary><pre className="whitespace-pre-wrap break-all">{system.stages}</pre></details>
       </div>}
-      <div className="overflow-x-auto border border-border rounded-lg bg-bg-base/50 p-3">
-        {stages.length === 0 ? (
-          <button onClick={() => { void guarded(addStage) }} disabled={!!graph.error} className="w-full py-10 text-xs text-text-muted hover:text-accent">
-            添加第一个起始境界
-          </button>
-        ) : (
+      <div className="grid gap-3 lg:grid-cols-[10rem_minmax(0,1fr)] items-start" data-power-stage-workspace>
+        <nav aria-label="境界列表" className="max-h-[32rem] overflow-y-auto space-y-1 rounded-lg border border-border bg-bg-base/50 p-2">
+          {stages.length === 0 ? <button onClick={() => { void guarded(addStage) }} disabled={!!graph.error} className="w-full py-8 text-xs text-text-muted hover:text-accent">添加第一个起始境界</button>
+            : stages.map(stage => <button key={stage.id}
+              aria-label={stage.name}
+              aria-pressed={selectedStageId === stage.id}
+              onClick={() => { void guarded(() => setSelectedStageId(stage.id)) }}
+              className={`w-full rounded-md border px-2 py-2 text-left ${selectedStageId === stage.id ? 'border-accent bg-accent/10' : 'border-transparent hover:bg-bg-hover'}`}>
+              <span className="block truncate text-sm font-medium text-text-primary">{stage.name}</span>
+              <span className="block text-[10px] text-text-muted">层级 {tiers.get(stage.id) ?? 0}{stage.branchLabel ? ` · ${stage.branchLabel}` : ''}</span>
+              {stage.parentStageIds.length > 0 && <span className="block truncate text-[10px] text-text-muted">← {stage.parentStageIds.map(id => stages.find(row => row.id === id)?.name ?? id).join(' + ')}</span>}
+            </button>)}
+        </nav>
+
+      {selectedStage ? (
+        <div className="min-w-0 border border-border rounded-lg p-3 space-y-3" data-power-stage-fields>
+          <div className="flex items-center gap-3">
+            <div className="flex-1 min-w-0">
+              <label className="block text-[11px] text-text-muted mb-1">境界名称</label>
+              <InlineInput
+                value={selectedStage.name}
+                localSave={localSave('stages.name', selectedStage.id)} onChange={(name, confirmation) => patchStage(selectedStage.id, { name }, confirmation)}
+                className="text-sm font-medium text-text-primary"
+              />
+            </div>
+            <button onClick={() => { void guarded(() => removeStage(selectedStage.id)) }} aria-label="删除境界" className="p-1.5 text-text-muted hover:text-error">
+              <Trash2 className="w-4 h-4" />
+            </button>
+          </div>
+          <div>
+            <label className="block text-[11px] text-text-muted mb-1">分支标签</label>
+            <InlineInput value={selectedStage.branchLabel || ''}
+              localSave={localSave('stages.branchLabel', selectedStage.id)} onChange={(branchLabel, confirmation) => patchStage(selectedStage.id, { branchLabel }, confirmation)}
+              placeholder="如：剑修 / 体修（可空）" className="text-sm text-text-primary" />
+          </div>
+          <div>
+            <label className="block text-[11px] text-text-muted mb-1">前置境界（可多选形成合流）</label>
+            <div className="flex flex-wrap gap-1.5">
+              {stages.filter(stage => stage.id !== selectedStage.id).map(stage => (
+                <label key={stage.id} className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded border border-border">
+                  <input type="checkbox" checked={selectedStage.parentStageIds.includes(stage.id)} onChange={() => {
+                    const current = selectedStage.parentStageIds
+                    void guarded(() => patchStage(selectedStage.id, { parentStageIds: current.includes(stage.id) ? current.filter(id => id !== stage.id) : [...current, stage.id] }))
+                  }} />
+                  {stage.name}
+                </label>
+              ))}
+              {stages.length === 1 && <span className="text-xs text-text-muted">起始境界无需前置</span>}
+            </div>
+          </div>
+          <div className="grid gap-3 xl:grid-cols-2" data-power-stage-pair>
+            <div className="min-w-0">
+              <label className="block text-[11px] text-text-muted mb-1">境界特征 / 战力边界</label>
+              <InlineTextarea markdownRead inputAreaLayout={inputAreaLayoutV1(resizableInputs, 'power.stageFeatures')}
+                value={selectedStage.features || ''}
+                localSave={localSave('stages.features', selectedStage.id)} onChange={(features, confirmation) => patchStage(selectedStage.id, { features }, confirmation)}
+                placeholder="能做到什么、不能做到什么…" />
+            </div>
+            <div className="min-w-0">
+              <label className="block text-[11px] text-text-muted mb-1">突破到此阶的条件</label>
+              <InlineTextarea markdownRead inputAreaLayout={inputAreaLayoutV1(resizableInputs, 'power.breakthrough')}
+                value={selectedStage.breakthrough || ''}
+                localSave={localSave('stages.breakthrough', selectedStage.id)} onChange={(breakthrough, confirmation) => patchStage(selectedStage.id, { breakthrough }, confirmation)}
+                placeholder="资源、领悟、仪式、代价…" />
+            </div>
+          </div>
+        </div>
+      ) : <p className="rounded-lg border border-dashed border-border px-4 py-8 text-center text-xs text-text-muted">选择一个境界，编辑能力、前置与突破条件。</p>}
+      </div>
+
+      {stages.length > 0 && <details className="mt-3">
+      <summary className="cursor-pointer text-xs text-text-muted">查看境界分叉与合流图</summary>
+      <div className="mt-2 overflow-x-auto border border-border rounded-lg bg-bg-base/50 p-3">
           <div className="flex items-stretch gap-5 min-w-max">
             {Array.from({ length: maxTier + 1 }, (_, tier) => (
               <div key={tier} className="w-40 space-y-2">
@@ -285,80 +357,10 @@ function CultivationSystemEditor({
               </div>
             ))}
           </div>
-        )}
       </div>
 
-      {selectedStage && (
-        <div className="mt-4 border border-border rounded-lg p-3 space-y-3">
-          <div className="flex items-center gap-3">
-            <div className="flex-1">
-              <label className="block text-[11px] text-text-muted mb-1">境界名称</label>
-              <InlineInput
-                value={selectedStage.name}
-                localSave={localSave('stages.name', selectedStage.id)} onChange={(name, confirmation) => patchStage(selectedStage.id, { name }, confirmation)}
-                className="text-sm font-medium text-text-primary"
-              />
-            </div>
-            <button
-              onClick={() => { void guarded(() => removeStage(selectedStage.id)) }}
-              aria-label="删除境界"
-              className="p-1.5 text-text-muted hover:text-error"
-            >
-              <Trash2 className="w-4 h-4" />
-            </button>
-          </div>
-          <div>
-            <label className="block text-[11px] text-text-muted mb-1">分支标签</label>
-            <InlineInput
-              value={selectedStage.branchLabel || ''}
-              localSave={localSave('stages.branchLabel', selectedStage.id)} onChange={(branchLabel, confirmation) => patchStage(selectedStage.id, { branchLabel }, confirmation)}
-              placeholder="如：剑修 / 体修（可空）"
-              className="text-sm text-text-primary"
-            />
-          </div>
-          <div>
-            <label className="block text-[11px] text-text-muted mb-1">境界特征 / 战力边界</label>
-            <InlineTextarea markdownRead
-              inputAreaLayout={inputAreaLayoutV1(resizableInputs, 'power.stageFeatures')}
-              value={selectedStage.features || ''}
-              localSave={localSave('stages.features', selectedStage.id)} onChange={(features, confirmation) => patchStage(selectedStage.id, { features }, confirmation)}
-              placeholder="能做到什么、不能做到什么…"
-            />
-          </div>
-          <div>
-            <label className="block text-[11px] text-text-muted mb-1">突破到此阶的条件</label>
-            <InlineTextarea markdownRead
-              inputAreaLayout={inputAreaLayoutV1(resizableInputs, 'power.breakthrough')}
-              value={selectedStage.breakthrough || ''}
-              localSave={localSave('stages.breakthrough', selectedStage.id)} onChange={(breakthrough, confirmation) => patchStage(selectedStage.id, { breakthrough }, confirmation)}
-              placeholder="资源、领悟、仪式、代价…"
-            />
-          </div>
-          <div>
-            <label className="block text-[11px] text-text-muted mb-1">前置境界（可多选形成合流）</label>
-            <div className="flex flex-wrap gap-1.5">
-              {stages.filter(stage => stage.id !== selectedStage.id).map(stage => (
-                <label key={stage.id} className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded border border-border">
-                  <input
-                    type="checkbox"
-                    checked={selectedStage.parentStageIds.includes(stage.id)}
-                    onChange={() => {
-                      const current = selectedStage.parentStageIds
-                      void guarded(() => patchStage(selectedStage.id, {
-                        parentStageIds: current.includes(stage.id)
-                          ? current.filter(id => id !== stage.id)
-                          : [...current, stage.id],
-                      }))
-                    }}
-                  />
-                  {stage.name}
-                </label>
-              ))}
-              {stages.length === 1 && <span className="text-xs text-text-muted">起始境界无需前置</span>}
-            </div>
-          </div>
-        </div>
-      )}
+      </details>}
+
     </div>
   )
 }

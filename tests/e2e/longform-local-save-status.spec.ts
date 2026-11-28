@@ -906,7 +906,7 @@ test('050 Power native original fields retain failed source and confirm reopened
   })).toEqual(before)
 })
 
-test('050 Cultivation native stage source preserves original DAG and failed text through retry and reopened tab', async ({ page, context }) => {
+test('050 Cultivation native stage source preserves original DAG and failed text through retry and reopened tab', async ({ page, context }, testInfo) => {
   const scope = await seed(page)
   const id = await page.evaluate(async scope => {
     const { useCultivationStore } = await (new Function('return import("/storyforge/src/stores/cultivation.ts")'))()
@@ -925,6 +925,31 @@ test('050 Cultivation native stage source preserves original DAG and failed text
   const principle = panel.getByPlaceholder('点击说明这套体系的核心原理、适用者和代价…')
   await principle.fill('# 修炼原理新稿\n\n保留尾空白。  '); const principleRaw = await principle.inputValue(); await flush(page)
   await panel.getByRole('button', { name: '初境050', exact: true }).click()
+  const viewport = page.viewportSize()!
+  const geometry = () => panel.evaluate(element => {
+    const bounds = (selector: string) => {
+      const node = element.querySelector<HTMLElement>(selector)!, rect = node.getBoundingClientRect()
+      return { x: rect.x, y: rect.y, right: rect.right, bottom: rect.bottom }
+    }
+    return { list: bounds('[aria-label="境界列表"]'), fields: bounds('[data-power-stage-fields]'),
+      features: bounds('[data-power-stage-pair] > :first-child'), breakthrough: bounds('[data-power-stage-pair] > :last-child') }
+  })
+  await page.setViewportSize({ width: 1680, height: 1000 })
+  const desktop = await geometry()
+  expect(desktop.list.right).toBeLessThan(desktop.fields.x)
+  expect(desktop.features.y).toBe(desktop.breakthrough.y)
+  expect(desktop.features.right).toBeLessThan(desktop.breakthrough.x)
+  const diagram = panel.locator('details').filter({ hasText: '查看境界分叉与合流图' })
+  await expect(diagram).not.toHaveAttribute('open', '')
+  await diagram.locator('summary').click()
+  await expect(diagram.getByRole('button', { name: /合流050/ })).toBeVisible()
+  await diagram.locator('summary').click()
+  await panel.screenshot({ path: testInfo.outputPath('power-paths-compact.png') })
+  await page.setViewportSize({ width: 390, height: 844 })
+  const mobile = await geometry()
+  expect(mobile.list.bottom).toBeLessThan(mobile.fields.y)
+  expect(mobile.features.bottom).toBeLessThan(mobile.breakthrough.y)
+  await page.setViewportSize(viewport)
   await readView('原能力050').getByRole('button', { name: '编辑源码', exact: true }).click()
   const features = panel.getByPlaceholder('能做到什么、不能做到什么…')
   await features.dispatchEvent('compositionstart'); await features.fill('# 境界能力新稿\n\n中文尾 é 😀。  ')
