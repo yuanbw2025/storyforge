@@ -1,6 +1,7 @@
 import { CTextarea } from '../shared/CompositionInput'
-import { InlineTextarea } from '../shared/InlineEdit'
+import { InlineTextarea, LocalSaveStatus } from '../shared/InlineEdit'
 import CandidateMarkdownField from '../agent/CandidateMarkdownField'
+import CandidateSaveFeedback from '../agent/CandidateSaveFeedback'
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { Check, Loader2, Microscope, Plus, RotateCcw, Sparkles, Trash2, X } from 'lucide-react'
 import { useCreativeRulesStore } from '../../stores/project-singletons'
@@ -24,7 +25,9 @@ import {
 import HarnessEvidencePanel from '../agent/HarnessEvidencePanel'
 import { useActiveWork } from '../../hooks/useActiveWork'
 import { readCreativeRuleSaveWitnessesV1 } from '../../lib/authoring/creative-rules-local-save-evidence'
-import type { LocalSaveContractV1, LocalSaveCreativeRuleFieldV1, LocalSaveIntentV1, LocalSaveWitnessV1 } from '../../lib/authoring/local-save-evidence'
+import { matchingLocalSaveAckV1, type LocalSaveContractV1, type LocalSaveCreativeRuleFieldV1, type LocalSaveIntentV1, type LocalSaveWitnessV1 } from '../../lib/authoring/local-save-evidence'
+import { registerPendingDraftFlusherV1 } from '../../lib/authoring/pending-edit-coordinator'
+import { useBeforeUnload } from '../../hooks/useBeforeUnload'
 
 const POV_OPTIONS: { value: NarrativePOV; label: string; desc: string }[] = [
   { value: 'first-person', label: '第一人称', desc: '以"我"的视角叙述' },
@@ -71,8 +74,19 @@ function ScopedCreativeRulesPanel({ project, initialRulesId, confirmedLocalSaves
   const [ready, setReady] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [savingElements, setSavingElements] = useState(false)
+  const [elementsError, setElementsError] = useState('')
+  const [elementsComposing, setElementsComposing] = useState(false)
+  const elementsComposingRef = useRef(false), elementsErrorRef = useRef('')
+  const elementsPending = useRef<Promise<void> | null>(null)
+  const elementsBase = useRef<LocalSaveWitnessV1 | null>(null)
   const [localWitnesses, setLocalWitnesses] = useState<Partial<Record<LocalSaveCreativeRuleFieldV1, LocalSaveWitnessV1>>>({})
   const [witnessReadComplete, setWitnessReadComplete] = useState(false)
+  useBeforeUnload(elementsDirty || savingElements || elementsComposing || Boolean(elementsError))
+  useEffect(() => registerPendingDraftFlusherV1(async () => {
+    if (elementsPending.current) await elementsPending.current
+    if (elementsDirtyRef.current || elementsComposingRef.current || elementsErrorRef.current)
+      throw new Error(elementsErrorRef.current || '系统文元素尚未保存，请完成输入后点击保存元素。')
+  }), [])
   useInitialRecordTarget(initialRulesId, creativeRules?.id === initialRulesId)
 
   useEffect(() => {
@@ -131,22 +145,36 @@ function ScopedCreativeRulesPanel({ project, initialRulesId, confirmedLocalSaves
   const saveField = useCallback((data: Record<string, unknown>) => { void commitField(data).catch(() => undefined) }, [commitField])
 
   const changeElements = (next: SystemFictionElementsV1) => {
+    if (!elementsDirtyRef.current) elementsBase.current = localWitnesses.systemFictionElements ?? null
     elementsDirtyRef.current = true
     setElementsDirty(true)
     setElements(next)
   }
-  const saveElements = async () => {
-    if (!scope || !ready) return
+  const saveElements = () => {
+    if (elementsPending.current) return elementsPending.current
+    if (!scope || !ready || elementsComposingRef.current) return Promise.resolve()
+    const selectedScope = { ...scope }, snapshot = structuredClone(elements), expected = elementsBase.current
     setSavingElements(true)
-    try {
-      const validated = parseSystemFictionElementsV1(elements)
-      await save({ projectId: scope.projectId, systemFictionElements: validated }, scope)
+    setElementsError(''); elementsErrorRef.current = ''
+    const operation = (async () => {
+      const validated = parseSystemFictionElementsV1(snapshot)
+      if (confirmedLocalSaves) {
+        if (!expected) throw new Error('尚未确认原系统文元素记录，当前输入已保留。')
+        const intent: LocalSaveIntentV1 = { kind: 'natural-field-local-save-v1', expected, session: crypto.randomUUID(), generation: 1 }
+        const ack = await save({ projectId: selectedScope.projectId, systemFictionElements: validated }, selectedScope, intent)
+        if (!matchingLocalSaveAckV1(ack, intent, JSON.stringify(validated))) throw new Error('未收到相同系统文元素的实际提交凭据，输入已保留。')
+        elementsBase.current = ack.witness
+        setLocalWitnesses(current => ({ ...current, systemFictionElements: ack.witness }))
+      } else await save({ projectId: selectedScope.projectId, systemFictionElements: validated }, selectedScope)
       elementsDirtyRef.current = false
       setElementsDirty(false)
       setSaveError(null)
-    } catch (error) {
-      setSaveError(error instanceof Error ? error.message : '保存失败，当前输入已保留')
-    } finally { setSavingElements(false) }
+    })().catch(error => {
+      elementsErrorRef.current = error instanceof Error ? error.message : '保存失败，当前输入已保留'
+      setElementsError(elementsErrorRef.current); setSaveError(elementsErrorRef.current)
+    }).finally(() => { elementsPending.current = null; setSavingElements(false) })
+    elementsPending.current = operation
+    return operation
   }
 
   const pendingRulesCandidates = copilot.pendingCandidates.filter(candidate => (
@@ -308,10 +336,15 @@ function ScopedCreativeRulesPanel({ project, initialRulesId, confirmedLocalSaves
           </button>
         </div>
         <p className="text-xs text-text-secondary">题材与呈现风格：{activeWork?.genres.join('、') || '在作品概况设置题材'}。文风和氛围使用下方现有字段；不会切换已激活的提示词模板。</p>
-        <SystemFictionElementsEditor value={elements} onChange={changeElements} disabled={!ready || savingElements} />
+        <div onCompositionStartCapture={() => { elementsComposingRef.current = true; setElementsComposing(true) }}
+          onCompositionEndCapture={() => { elementsComposingRef.current = false; setElementsComposing(false) }}>
+          <SystemFictionElementsEditor value={elements} onChange={changeElements} disabled={!ready || savingElements || confirmedLocalSaves && !localWitnesses.systemFictionElements} />
+        </div>
         <div className="flex items-center justify-end gap-3">
-          <span role="status" className="text-xs text-text-muted">{elementsDirty ? '元素尚未保存' : creativeRules?.systemFictionElements ? '元素已保存' : '尚未设置，可按需填写'}</span>
-          <button type="button" onClick={() => { void saveElements() }} disabled={!ready || !elementsDirty || savingElements} className="rounded bg-accent px-3 py-1.5 text-xs text-white disabled:opacity-50">{savingElements ? '保存中…' : '保存元素'}</button>
+          <LocalSaveStatus status={elementsError ? 'failed' : savingElements ? 'saving' : elementsDirty || elementsComposing ? 'dirty'
+            : confirmedLocalSaves && localWitnesses.systemFictionElements?.present && localWitnesses.systemFictionElements.value === JSON.stringify(elements) ? 'saved' : 'unconfirmed'}
+            error={elementsError} retryLabel="重试保存系统文元素" retry={() => { void saveElements() }} />
+          <button type="button" onClick={() => { void saveElements() }} disabled={!ready || !elementsDirty || savingElements || elementsComposing} className="rounded bg-accent px-3 py-1.5 text-xs text-white disabled:opacity-50">{savingElements ? '保存中…' : '保存元素'}</button>
         </div>
         <CreativeRulesCandidate candidate={candidateFor('systemFictionElements')} copilot={copilot} onAdopt={adoptCandidate} />
       </section>
@@ -528,6 +561,9 @@ function CreativeRulesCandidate({
             : `${candidate.payload.contextSources.length} 个输入来源`}
         </span>
       </div>
+      <CandidateSaveFeedback event={candidate.event} scope={copilot.candidateLocalSaveScope}
+        draftState={copilot.readCandidateLocalDraftState?.(candidate.event.id!)} busy={copilot.busy}
+        onRetry={() => copilot.flushCandidateDraft(candidate.event.id!)}>
       {parsed?.field === 'systemFictionElements' ? (
         <SystemFictionElementsEditor value={parsed.value} onChange={updateValue} disabled={copilot.busy} label="系统文元素候选" />
       ) : parsed ? (
@@ -551,6 +587,7 @@ function CreativeRulesCandidate({
           />
         </>
       )}
+      </CandidateSaveFeedback>
       <HarnessEvidencePanel
         contextEvidence={candidate.payload.contextEvidence}
         lifecycle={candidate.lifecycle}

@@ -20,17 +20,18 @@ Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
 let controller: MasterCopilotController, host: HTMLDivElement, root: ReturnType<typeof createRoot>, project: Project
 const raw = '# 原候选\r\n\r\n军税17枚，不可夜航。　 '
 const status = () => host.querySelector('[data-candidate-local-save-status]')?.getAttribute('data-candidate-local-save-status')
-function Harness() {
+function Harness({ rawControl = false }: { rawControl?: boolean }) {
   controller = useMasterCopilot({ project, worldGroupId: null })
   const candidate = controller.pendingCandidates[0]
   return candidate ? <CandidateSaveFeedback event={candidate.event} scope={controller.candidateLocalSaveScope}
     draftState={controller.readCandidateLocalDraftState(candidate.event.id!)} busy={controller.busy}
     onRetry={() => controller.flushCandidateDraft(candidate.event.id!)}>
-    <CandidateMarkdownField value={JSON.parse(candidate.event.content).value} disabled={controller.busy}
+    {rawControl ? <CTextarea value={JSON.parse(candidate.event.content).value}
+      onChange={event => { void controller.updateCandidate(candidate.event.id!, currentWorldOriginDraftV1(event.target.value)) }} /> : <CandidateMarkdownField value={JSON.parse(candidate.event.content).value} disabled={controller.busy}
       onCommit={() => controller.flushCandidateDraft(candidate.event.id!)}>
       <CTextarea value={JSON.parse(candidate.event.content).value}
         onChange={event => { void controller.updateCandidate(candidate.event.id!, currentWorldOriginDraftV1(event.target.value)) }} />
-    </CandidateMarkdownField>
+    </CandidateMarkdownField>}
   </CandidateSaveFeedback> : null
 }
 beforeEach(async () => {
@@ -168,5 +169,29 @@ it('keeps the actual author input when the real parent rerenders between native 
   await act(async () => flushPendingEditsV1())
   await waitFor(() => expect(status()).toBe('saved'))
   expect(JSON.parse((await db.agentEvents.get(f.candidate.event.id!))!.content).value).toBe(edited)
+  expect(await db.worldviews.count()).toBe(0)
+})
+
+it('guards a direct typed-candidate textarea during composition and confirms only its original durable event after retry', async () => {
+  const f = await fixture()
+  await act(async () => root.render(<Harness rawControl />))
+  await waitFor(() => expect(status()).toBe('saved'))
+  const area = host.querySelector('textarea')!
+  await act(async () => area.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true })))
+  await input('# 直接候选输入法尾字 é 🌋。  ')
+  expect(status()).toBe('dirty')
+  await act(async () => { await expect(flushPendingEditsV1()).rejects.toThrow('候选输入法') })
+  await act(async () => { expect(await controller.adoptCandidate(controller.pendingCandidates[0])).toBe(false) })
+  expect(await db.worldviews.count()).toBe(0)
+  const fault = () => { throw new DOMException('typed candidate quota', 'QuotaExceededError') }
+  db.agentEvents.hook('updating', fault)
+  await act(async () => area.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true })))
+  await act(async () => { await expect(flushPendingEditsV1()).rejects.toThrow('typed candidate quota') })
+  expect(status()).toBe('failed'); expect(area.value).toBe('# 直接候选输入法尾字 é 🌋。  ')
+  db.agentEvents.hook('updating').unsubscribe(fault)
+  await click('重试保存候选'); await waitFor(() => expect(status()).toBe('saved'))
+  const actual = (await db.agentEvents.get(f.candidate.event.id!))!
+  expect(JSON.parse(actual.content).value).toBe('# 直接候选输入法尾字 é 🌋。  ')
+  expect(actual.durableRunId).toBe(f.candidate.event.durableRunId)
   expect(await db.worldviews.count()).toBe(0)
 })

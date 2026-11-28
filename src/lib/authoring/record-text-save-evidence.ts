@@ -15,7 +15,7 @@ export interface RecordTextRowV1 {
   id?: number; projectId: number; worldId?: number; workId?: number; worldGroupId?: number | null
   ragDocumentId?: string; createdAt?: number; updatedAt: number
 }
-const prefix = { characters: 'character', outlineNodes: 'outline-node', detailedOutlines: 'detailed-outline', storyArcs: 'story-arc', references: 'reference', foreshadows: 'foreshadow', powerSystems: 'power-system', cultivationSystems: 'cultivation-system', chapters: 'chapter', notes: null } as const
+const prefix = { characters: 'character', characterRelations: 'character-relation', outlineNodes: 'outline-node', detailedOutlines: 'detailed-outline', storyArcs: 'story-arc', references: 'reference', foreshadows: 'foreshadow', powerSystems: 'power-system', cultivationSystems: 'cultivation-system', chapters: 'chapter', notes: null } as const
 const sceneTexts = ['title', 'summary', 'location', 'conflict', 'notes', ...DETAILED_SCENE_TASK_FIELDS.map(({ key }) => key)]
 const stageTexts = ['title', 'description', 'turningPoint']
 const cultivationTexts = ['name', 'features', 'breakthrough', 'branchLabel']
@@ -63,7 +63,7 @@ export function recordTextSaveRequestV1(table: RecordTextTableV1, id: number, pa
 async function buildWitness(row: RecordTextRowV1 | undefined, identity: LocalSaveRecordIdentityV1,
   source: LocalSaveWitnessV1['source'], selected?: object): Promise<LocalSaveWitnessV1> {
   if (!row || row.id !== identity.recordId || row.projectId !== identity.projectId
-    || (['characters', 'powerSystems', 'cultivationSystems'].includes(identity.table) ? row.worldId !== identity.worldId : row.workId !== identity.workId)
+    || (['characters', 'characterRelations', 'powerSystems', 'cultivationSystems'].includes(identity.table) ? row.worldId !== identity.worldId : row.workId !== identity.workId)
     || (identity.table !== 'characters' && (row.worldGroupId ?? null) !== identity.worldGroupId)
     || !validAddress(identity) || (identity.table === 'notes' ? row.createdAt !== identity.recordCreatedAt
       : !isPortableResourceUidV1(row.ragDocumentId, prefix[identity.table]!)))

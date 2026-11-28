@@ -22,7 +22,7 @@ import { assertRecordInScope, getTableSpec, readOwnedRows, readOwnedRowsInTransa
 import { resolveHistoryWorkAuthorScopeV1, resolveWorldAuthoringOwnershipV1 } from '../lib/workspace/ownership'
 import { coordinatePendingEditV1 } from '../lib/authoring/pending-edit-coordinator'
 import type { LocalSaveAckV1, LocalSaveIntentV1 } from '../lib/authoring/local-save-evidence'
-import { assertCreativeRuleSaveExpectedV1, creativeRuleSaveRequestV1, creativeRuleTextWitnessV1 } from '../lib/authoring/creative-rules-local-save-evidence'
+import { assertCreativeRuleSaveExpectedV1, creativeRuleSaveRequestV1, creativeRuleTextWitnessV1, creativeRuleProofValueV1 } from '../lib/authoring/creative-rules-local-save-evidence'
 
 import { assertGeographyFormExpectedV1, assertGeographyFormWrittenV1, geographyFormRequestV1, readGeographyFormV1, type GeographyFormRecordV1, type GeographyFormSaveV1 } from '../lib/authoring/geography-local-save-evidence'
 
@@ -370,7 +370,7 @@ export function createProjectSingletonStore<K extends string, T extends ProjectS
       },
 
       save: (async (input: Partial<T>, targetScope?: WorkspaceScopeLike, confirmation?: LocalSaveIntentV1 | GeographyFormSaveV1) => {
-        const data = { ...input }
+        const data = confirmation ? structuredClone(input) : { ...input }
         const geographyProof = confirmation?.kind === 'geography-form-save-v1' ? structuredClone(confirmation) : undefined
         const proof = confirmation?.kind === 'natural-field-local-save-v1' ? structuredClone(confirmation) : undefined
         const confirmed = Boolean(proof || geographyProof)
@@ -486,7 +486,7 @@ export function createProjectSingletonStore<K extends string, T extends ProjectS
                 assertGeographyFormWrittenV1(record as unknown as GeographyFormRecordV1 | undefined, scope, groupId, geographyProof.expected, data as Record<string, unknown>, geographyFields!)
                 return record
               }
-              if (!record || (record as unknown as Record<string, unknown>)[proofRequest!.field] !== proofRequest!.raw) throw new Error('事务内精确保存校验失败。')
+              if (!record || creativeRuleProofValueV1(proofRequest!.field, (record as unknown as Record<string, unknown>)[proofRequest!.field]) !== proofRequest!.raw) throw new Error('事务内精确保存校验失败。')
               return creativeRuleTextWitnessV1(record as unknown as CreativeRules, scope, proofRequest!.field, 'committed-write').then(() => record)
             }))) : await write()
             if (!written) return
@@ -500,7 +500,7 @@ export function createProjectSingletonStore<K extends string, T extends ProjectS
               await resolveScopeLike(scope)
               const rows = await readOwnedRows<CreativeRules>(scope, 'creativeRules', { owner: 'work' }), row = rows[0]
               if (rows.length !== 1 || row.id !== written.id || row.ragDocumentId !== (written as unknown as CreativeRules).ragDocumentId
-                || row[proofRequest!.field] !== proofRequest!.raw) throw new Error('提交后字段已变化，未确认保存；已保留草稿。')
+                || creativeRuleProofValueV1(proofRequest!.field, row[proofRequest!.field]) !== proofRequest!.raw) throw new Error('提交后字段已变化，未确认保存；已保留草稿。')
               completedAck = { kind: 'natural-field-local-save-ack-v1', session: proof.session, generation: proof.generation,
                 witness: await creativeRuleTextWitnessV1(row, scope, proofRequest!.field, 'committed-write') }
               publish(row as unknown as T)

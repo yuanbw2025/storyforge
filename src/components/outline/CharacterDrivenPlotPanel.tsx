@@ -4,7 +4,7 @@
  * 用户为选中的角色设定初始/目标状态 → AI 生成中间情节大纲 → 可批量导入到大纲
  */
 
-import { useState, useEffect, useMemo, useRef } from 'react'
+import { useState, useEffect, useMemo, useRef, useContext } from 'react'
 import {
   Sparkles, Trash2, Check, ChevronDown, ChevronRight,
   Users, BookOpen, Loader2, ArrowRight, Copy, Plus, Pencil, Power,
@@ -14,9 +14,8 @@ import { useOutlineStore } from '../../stores/outline'
 import { useCharacterDrivenPlanStore } from '../../stores/character-driven-plan'
 import AutoResizeTextarea from '../shared/AutoResizeTextarea'
 import { useDialog } from '../shared/Dialog'
-import type { Project, WorkspaceScope } from '../../lib/types'
+import type { Project, WorkspaceScope, CharacterDrivenPlan, Character } from '../../lib/types'
 import {
-  parseCharacterDrivenPlanArcs,
   parseCharacterDrivenPlotVolumes,
   type CharacterDrivenPlanArc,
   type CharacterDrivenPlotVolume,
@@ -26,6 +25,12 @@ import { adoptCharacterDrivenVolumes } from '../../lib/story-planning/character-
 import CharacterRevisionPanel from './CharacterRevisionPanel'
 import { useMasterCopilot } from '../agent/useMasterCopilot'
 import HarnessEvidencePanel from '../agent/HarnessEvidencePanel'
+import CandidateSaveFeedback from '../agent/CandidateSaveFeedback'
+import { AuthorRecordSaveScopeV1 } from '../shared/AuthorRecordSaveScope'
+import ScopedWorldAuthoringBoundary from '../world-group/ScopedWorldAuthoringBoundary'
+import { LocalSaveStatus } from '../shared/InlineEdit'
+import { flushPendingEditsV1 } from '../../lib/authoring/pending-edit-coordinator'
+import { useCharacterDrivenInputDraft } from './useCharacterDrivenInputDraft'
 
 type CharacterArcInput = CharacterDrivenPlanArc
 type PlotVolume = CharacterDrivenPlotVolume
@@ -47,23 +52,40 @@ export function applyCharacterArcAutoFill(
 }
 
 export default function CharacterDrivenPlotPanel({ project, worldGroupId }: Props) {
-  const { characters, loadAll: loadChars } = useCharacterStore()
+  const admitted = useContext(AuthorRecordSaveScopeV1) !== null
+  return <ScopedWorldAuthoringBoundary project={project} activeGroupId={worldGroupId}>
+    {view => <AuthorRecordSaveScopeV1.Provider value={admitted ? { projectId: view.project.id!, worldId: view.project.activeWorldId!, workId: view.project.activeWorkId! } : null}>
+      <ScopedCharacterDrivenPlotPanel project={view.project} worldGroupId={view.activeGroupId} />
+    </AuthorRecordSaveScopeV1.Provider>}
+  </ScopedWorldAuthoringBoundary>
+}
+function ScopedCharacterDrivenPlotPanel({ project, worldGroupId }: Props) {
+  const confirmed = useContext(AuthorRecordSaveScopeV1) !== null
+  const { characters: liveCharacters, loadedScope: characterScope, loadAll: loadChars } = useCharacterStore()
+  const retainedCharacters = useRef<Character[]>([])
+  const ownCharacters = !confirmed || characterScope?.projectId === project.id && characterScope?.worldId === project.activeWorldId
+  if (ownCharacters) retainedCharacters.current = liveCharacters
+  const characters = ownCharacters ? liveCharacters : retainedCharacters.current
   const { loadAll: loadOutline } = useOutlineStore()
   const {
-    plans,
-    currentPlanId,
-    activePlanId,
+    plans: livePlans,
+    currentPlanId: liveCurrentPlanId,
+    activePlanId: liveActivePlanId,
+    loadedScope,
     loading: plansLoading,
     loadAll: loadPlans,
     selectPlan,
     createPlan,
     copyAsNewVersion,
     renamePlan,
-    saveInputs,
     markAdopted,
     setActivePlan,
     deletePlan,
   } = useCharacterDrivenPlanStore()
+  const retainedPlans = useRef<{ plans: CharacterDrivenPlan[]; currentPlanId: number | null; activePlanId: number | null }>({ plans: [], currentPlanId: null, activePlanId: null })
+  const ownPlans = !confirmed || loadedScope?.projectId === project.id && loadedScope?.worldId === project.activeWorldId && loadedScope?.workId === project.activeWorkId
+  if (ownPlans) retainedPlans.current = { plans: livePlans, currentPlanId: liveCurrentPlanId, activePlanId: liveActivePlanId }
+  const { plans, currentPlanId, activePlanId } = retainedPlans.current
   const workspaceScope = useMemo<WorkspaceScope | undefined>(() => (
     project.id != null && project.activeWorldId != null && project.activeWorkId != null
       ? { projectId: project.id, worldId: project.activeWorldId, workId: project.activeWorkId }
@@ -74,8 +96,6 @@ export default function CharacterDrivenPlotPanel({ project, worldGroupId }: Prop
   const dialog = useDialog()
 
   const [mode, setMode] = useState<'planning' | 'revision'>('planning')
-  const [arcs, setArcs] = useState<CharacterArcInput[]>([])
-  const [userHint, setUserHint] = useState('')
   const [parsedVolumes, setParsedVolumes] = useState<PlotVolume[] | null>(null)
   const [selectedVolumes, setSelectedVolumes] = useState<Set<number>>(new Set())
   const [expandedVolumes, setExpandedVolumes] = useState<Set<number>>(new Set())
@@ -90,34 +110,15 @@ export default function CharacterDrivenPlotPanel({ project, worldGroupId }: Prop
     () => plans.find(plan => plan.id === currentPlanId) ?? null,
     [plans, currentPlanId],
   )
+  const inputDraft = useCharacterDrivenInputDraft(currentPlan, workspaceScope, confirmed)
+  const { arcs, userHint, setArcs, setUserHint } = inputDraft
+  const [operationError, setOperationError] = useState('')
+  const runAfterInputs = (action: () => void | Promise<unknown>) => {
+    void flushPendingEditsV1().then(action).then(() => setOperationError('')).catch(cause => setOperationError(cause instanceof Error ? cause.message : '方案操作未完成，输入已保留。'))
+  }
   const selectedPlanId = currentPlan?.id ?? null
-  const selectedPlanCreatedAt = currentPlan?.createdAt ?? null
   const selectedPlanGeneratedVolumes = currentPlan?.generatedVolumes ?? null
   const selectedPlanStatus = currentPlan?.status ?? null
-  const selectedPlanInputsRef = useRef<{ arcs: string | null; userHint: string }>({
-    arcs: null,
-    userHint: '',
-  })
-  selectedPlanInputsRef.current = {
-    arcs: currentPlan?.arcs ?? null,
-    userHint: currentPlan?.userHint ?? '',
-  }
-
-  // Hydrate author inputs only when selecting/loading a different immutable plan
-  // identity. Same-plan async saves update the store object and must not replay an
-  // stale blur snapshot over newer local typing.
-  useEffect(() => {
-    const selectedPlanInputs = selectedPlanInputsRef.current
-    if (selectedPlanId == null || selectedPlanInputs.arcs == null) {
-      setArcs([])
-      setUserHint('')
-      return
-    }
-    const nextArcs = parseCharacterDrivenPlanArcs(selectedPlanInputs.arcs)
-    setArcs(nextArcs)
-    setUserHint(selectedPlanInputs.userHint)
-  }, [selectedPlanId, selectedPlanCreatedAt])
-
   useEffect(() => {
     if (selectedPlanGeneratedVolumes == null) {
       setParsedVolumes(null)
@@ -130,22 +131,7 @@ export default function CharacterDrivenPlotPanel({ project, worldGroupId }: Prop
     setImportDone(selectedPlanStatus === 'adopted')
   }, [selectedPlanGeneratedVolumes, selectedPlanId, selectedPlanStatus])
 
-  const persistInputs = async (nextArcs: CharacterArcInput[], nextHint = userHint) => {
-    if (currentPlan?.id == null) return
-    const characterIds = new Set(characters.flatMap(character =>
-      character.id == null ? [] : [character.id],
-    ))
-    const normalized = nextArcs.map(arc => ({
-      ...arc,
-      characterId: arc.characterId != null && characterIds.has(arc.characterId)
-        ? arc.characterId
-        : null,
-    }))
-    if (normalized.some((arc, index) => arc.characterId !== nextArcs[index]?.characterId)) {
-      setArcs(normalized)
-    }
-    await saveInputs(currentPlan.id, { arcs: normalized, userHint: nextHint })
-  }
+  const persistInputs = () => { void inputDraft.flush().catch(() => undefined) }
 
   // 可选角色列表（排除已添加的）
   const availableChars = useMemo(() => {
@@ -168,7 +154,7 @@ export default function CharacterDrivenPlotPanel({ project, worldGroupId }: Prop
       targetState: '',
     }]
     setArcs(next)
-    persistInputs(next)
+    persistInputs()
   }
 
   // 从角色已有信息预填
@@ -179,14 +165,14 @@ export default function CharacterDrivenPlotPanel({ project, worldGroupId }: Prop
     const updates = applyCharacterArcAutoFill(arc, ch)
     const next = arcs.map((a, i) => i === index ? updates : a)
     setArcs(next)
-    persistInputs(next)
+    persistInputs()
   }
 
   // 删除弧光
   const handleRemoveArc = (index: number) => {
     const next = arcs.filter((_, i) => i !== index)
     setArcs(next)
-    persistInputs(next)
+    persistInputs()
   }
 
   // 更新弧光字段
@@ -198,7 +184,7 @@ export default function CharacterDrivenPlotPanel({ project, worldGroupId }: Prop
   // 开始生成
   const handleGenerate = async () => {
     if (!currentPlan?.id || arcs.length === 0 || arcs.some(a => !a.initialState.trim() || !a.targetState.trim())) return
-    await saveInputs(currentPlan.id, { arcs, userHint })
+    await inputDraft.flush(false, true)
     await copilot.submitTargetedRequest(
       '依据当前角色驱动方案的起始状态、目标状态和作者要求，编排与既有主线一致的卷章方案。',
       {
@@ -247,7 +233,7 @@ export default function CharacterDrivenPlotPanel({ project, worldGroupId }: Prop
     })
   }
 
-  const canGenerate = currentPlan != null
+  const canGenerate = inputDraft.sourceReady && currentPlan != null
     && arcs.length > 0
     && arcs.every(a => a.initialState.trim() && a.targetState.trim())
     && !copilot.loading
@@ -322,7 +308,7 @@ export default function CharacterDrivenPlotPanel({ project, worldGroupId }: Prop
           <span className="text-xs text-text-muted ml-2">持久化角色弧光设计工作区</span>
           <div className="ml-auto flex rounded-lg border border-border bg-bg-base p-0.5">
             <button className="px-3 py-1.5 text-xs bg-accent text-white rounded">开书规划</button>
-            <button onClick={() => setMode('revision')} className="px-3 py-1.5 text-xs text-text-muted rounded">
+            <button onClick={() => runAfterInputs(() => setMode('revision'))} className="px-3 py-1.5 text-xs text-text-muted rounded">
               中途重规划
             </button>
           </div>
@@ -335,7 +321,7 @@ export default function CharacterDrivenPlotPanel({ project, worldGroupId }: Prop
               角色弧光、作者要求和生成结果都会保存，可复制为新版本并显式设为后续 AI 参考。
             </p>
             <button
-              onClick={handleCreatePlan}
+              onClick={() => runAfterInputs(handleCreatePlan)}
               disabled={plansLoading}
               className="inline-flex items-center gap-1.5 px-4 py-2 bg-accent text-white rounded-lg text-sm disabled:opacity-40"
             >
@@ -349,7 +335,7 @@ export default function CharacterDrivenPlotPanel({ project, worldGroupId }: Prop
   }
 
   return (
-    <div className="h-full flex flex-col overflow-hidden">
+    <div className="h-full flex flex-col overflow-hidden" onCompositionStartCapture={inputDraft.compositionStart} onCompositionEndCapture={inputDraft.compositionEnd}>
       {/* 顶部标题 */}
       <div className="flex items-center gap-2 px-4 py-3 border-b border-border bg-bg-surface">
         <Users className="w-5 h-5 text-accent" />
@@ -357,7 +343,7 @@ export default function CharacterDrivenPlotPanel({ project, worldGroupId }: Prop
         <span className="text-xs text-text-muted ml-2">持久化角色弧光设计工作区</span>
         <div className="ml-auto flex rounded-lg border border-border bg-bg-base p-0.5">
           <button className="px-3 py-1.5 text-xs bg-accent text-white rounded">开书规划</button>
-          <button onClick={() => setMode('revision')} className="px-3 py-1.5 text-xs text-text-muted rounded">
+          <button onClick={() => runAfterInputs(() => setMode('revision'))} className="px-3 py-1.5 text-xs text-text-muted rounded">
             中途重规划
           </button>
         </div>
@@ -367,7 +353,7 @@ export default function CharacterDrivenPlotPanel({ project, worldGroupId }: Prop
         <select
           value={currentPlan.id}
           disabled={planSelectionDisabled}
-          onChange={event => selectPlan(Number(event.target.value))}
+          onChange={event => { const id = Number(event.target.value); runAfterInputs(() => selectPlan(id)) }}
           className="min-w-48 text-xs bg-bg-surface border border-border rounded px-2 py-1.5 text-text-primary"
           aria-label="当前角色驱动方案"
         >
@@ -377,20 +363,20 @@ export default function CharacterDrivenPlotPanel({ project, worldGroupId }: Prop
             </option>
           ))}
         </select>
-        <button onClick={handleCreatePlan} disabled={planMutationDisabled} className="inline-flex items-center gap-1 text-xs text-accent disabled:opacity-40">
+        <button onClick={() => runAfterInputs(handleCreatePlan)} disabled={planMutationDisabled} className="inline-flex items-center gap-1 text-xs text-accent disabled:opacity-40">
           <Plus className="w-3.5 h-3.5" />新建
         </button>
-        <button onClick={handleCopyPlan} disabled={planMutationDisabled} className="inline-flex items-center gap-1 text-xs text-accent disabled:opacity-40">
+        <button onClick={() => runAfterInputs(handleCopyPlan)} disabled={planMutationDisabled} className="inline-flex items-center gap-1 text-xs text-accent disabled:opacity-40">
           <Copy className="w-3.5 h-3.5" />复制为新版本
         </button>
-        <button onClick={handleRenamePlan} disabled={planMutationDisabled} className="inline-flex items-center gap-1 text-xs text-text-muted disabled:opacity-40">
+        <button onClick={() => runAfterInputs(handleRenamePlan)} disabled={planMutationDisabled} className="inline-flex items-center gap-1 text-xs text-text-muted disabled:opacity-40">
           <Pencil className="w-3.5 h-3.5" />重命名
         </button>
-        <button onClick={handleDeletePlan} disabled={planMutationDisabled} className="inline-flex items-center gap-1 text-xs text-red-500 disabled:opacity-40">
+        <button onClick={() => runAfterInputs(handleDeletePlan)} disabled={planMutationDisabled} className="inline-flex items-center gap-1 text-xs text-red-500 disabled:opacity-40">
           <Trash2 className="w-3.5 h-3.5" />删除
         </button>
         <button
-          onClick={() => setActivePlan(project.id!, activePlanId === currentPlan.id ? null : currentPlan.id!)}
+          onClick={() => runAfterInputs(() => setActivePlan(project.id!, activePlanId === currentPlan.id ? null : currentPlan.id!))}
           className={`ml-auto inline-flex items-center gap-1 px-2 py-1 rounded text-xs ${
             activePlanId === currentPlan.id
               ? 'bg-green-500/15 text-green-600'
@@ -404,6 +390,9 @@ export default function CharacterDrivenPlotPanel({ project, worldGroupId }: Prop
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-6">
+        {(operationError || inputDraft.readError) && <p role="alert" className="text-xs text-error">{operationError || inputDraft.readError}</p>}
+        {inputDraft.readError && <textarea aria-label="原方案输入只读内容" readOnly value={currentPlan.arcs} className="w-full min-h-24 font-mono text-xs" />}
+        <fieldset disabled={!inputDraft.sourceReady} className="min-w-0 border-0 p-0 space-y-6" aria-label="角色驱动方案输入">
         {/* ── 角色弧光设定区 ─────────────────────────── */}
         <section>
           <div className="flex items-center justify-between mb-3">
@@ -484,11 +473,12 @@ export default function CharacterDrivenPlotPanel({ project, worldGroupId }: Prop
                       <AutoResizeTextarea
                         value={arc.initialState}
                         onChange={e => handleUpdateArc(i, 'initialState', e.target.value)}
-                        onBlur={() => persistInputs(arcs)}
+                        onBlur={persistInputs}
                         placeholder="角色在故事开始时的状态、处境、性格特点..."
                         className="w-full text-sm bg-bg-base border border-border rounded px-3 py-2 text-text-primary placeholder:text-text-muted resize-none"
                         minRows={2}
                       />
+                      {confirmed && <LocalSaveStatus status={inputDraft.status} error={inputDraft.error} retryLabel="重试保存方案输入" retry={() => { void inputDraft.flush(true).catch(() => undefined) }} />}
                     </div>
                     <div>
                       <label className="block text-xs text-text-muted mb-1">
@@ -497,11 +487,12 @@ export default function CharacterDrivenPlotPanel({ project, worldGroupId }: Prop
                       <AutoResizeTextarea
                         value={arc.targetState}
                         onChange={e => handleUpdateArc(i, 'targetState', e.target.value)}
-                        onBlur={() => persistInputs(arcs)}
+                        onBlur={persistInputs}
                         placeholder="角色在故事结束时应达到的状态、成长结果..."
                         className="w-full text-sm bg-bg-base border border-border rounded px-3 py-2 text-text-primary placeholder:text-text-muted resize-none"
                         minRows={2}
                       />
+                      {confirmed && <LocalSaveStatus status={inputDraft.status} error={inputDraft.error} retryLabel="重试保存方案输入" retry={() => { void inputDraft.flush(true).catch(() => undefined) }} />}
                     </div>
                   </div>
 
@@ -529,19 +520,21 @@ export default function CharacterDrivenPlotPanel({ project, worldGroupId }: Prop
                 const next = e.target.value
                 setUserHint(next)
               }}
-              onBlur={() => persistInputs(arcs, userHint)}
+              onBlur={persistInputs}
               placeholder="例如：控制在3卷以内、侧重战斗场景、需要感情线贯穿始终..."
               className="w-full text-sm bg-bg-base border border-border rounded px-3 py-2 text-text-primary placeholder:text-text-muted resize-none"
               minRows={2}
             />
+            {confirmed && <LocalSaveStatus status={inputDraft.status} error={inputDraft.error} retryLabel="重试保存方案输入" retry={() => { void inputDraft.flush(true).catch(() => undefined) }} />}
           </section>
         )}
 
+        </fieldset>
         {/* ── 生成按钮 ──────────────────────────────── */}
         {arcs.length > 0 && (
           <div className="flex flex-wrap items-center gap-3">
             <button
-              onClick={handleGenerate}
+              onClick={() => runAfterInputs(handleGenerate)}
               disabled={!canGenerate}
               className="flex items-center gap-1.5 px-4 py-2 bg-accent text-white rounded-lg text-sm font-medium hover:bg-accent-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
@@ -596,6 +589,9 @@ export default function CharacterDrivenPlotPanel({ project, worldGroupId }: Prop
                   : `${candidate.payload.contextSources.length} 个输入来源`}
               </span>
             </div>
+            <CandidateSaveFeedback event={candidate.event} scope={copilot.candidateLocalSaveScope}
+              draftState={copilot.readCandidateLocalDraftState?.(candidate.event.id!)} busy={copilot.busy}
+              onRetry={() => copilot.flushCandidateDraft(candidate.event.id!)}>
             <AutoResizeTextarea
               aria-label="角色驱动卷章候选内容"
               value={candidate.event.content}
@@ -606,6 +602,7 @@ export default function CharacterDrivenPlotPanel({ project, worldGroupId }: Prop
               className="min-h-72 w-full resize-y bg-bg-base border border-border px-3 py-2 font-mono text-xs leading-5 text-text-primary rounded"
               minRows={14}
             />
+            </CandidateSaveFeedback>
             <HarnessEvidencePanel
               contextEvidence={candidate.payload.contextEvidence}
               lifecycle={candidate.lifecycle}
@@ -728,7 +725,7 @@ export default function CharacterDrivenPlotPanel({ project, worldGroupId }: Prop
                 </div>
               ) : (
                 <button
-                  onClick={handleAcceptToOutline}
+                  onClick={() => runAfterInputs(handleAcceptToOutline)}
                   disabled={selectedVolumes.size === 0 || importing}
                   className="flex items-center gap-1.5 px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                 >

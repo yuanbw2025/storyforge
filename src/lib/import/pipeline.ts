@@ -213,21 +213,22 @@ async function analyzeConfirmedReference(
   await verify()
   if (depth === 'deep') {
     if (!captured) throw new ImportSessionAuthorityError('深层分析需要完整原文件。')
+    const plan = session.chunks.map(({ index, startChar, endChar, charCount, label }) => ({ index, startChar, endChar, charCount, label }))
     const sourceChunks = []
-    for (const { index, startChar, endChar, charCount, label } of session.chunks) {
+    for (const { index, startChar, endChar, charCount, label } of captured.lazy ? [] : plan) {
       const text = await captured.read(index)
       if (!text) throw new ImportSessionAuthorityError('深层分析需要完整原文件。')
       sourceChunks.push({ index, startChar, endChar, charCount, label, text })
     }
     const run = await createReferenceAnalysisRun({
       referenceId: refId, depth, sourceFilename: session.filename, fileHash: session.fileHash,
-      totalChars: session.totalChars, expectedChunks: sourceChunks.length,
+      totalChars: session.totalChars, expectedChunks: plan.length,
       sourceKind: 'unknown', usageScope: 'analysis-only',
       rightsNote: '由项目导入流程建立；尚未在版本面板补充来源声明', rightsConfirmed: false,
-      sourceText: sourceChunks.map(chunk => chunk.text).join('\n\n'), sourceChunks,
+      ...(captured.lazy ? { sourceReader: { chunks: plan, read: captured.read } } : { sourceChunks }),
     }, firstStart)
-    registerRefChunks(run.id!, sourceChunks)
-    statusStore?.pushActivity('info', `开始深层分析（${sourceChunks.length} 块）`)
+    if (!captured.lazy) registerRefChunks(run.id!, sourceChunks)
+    statusStore?.pushActivity('info', `开始深层分析（${plan.length} 块）`)
     await verify()
     await runRefAnalysis(refId, run.id)
   } else {

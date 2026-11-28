@@ -1,4 +1,6 @@
 import { isInspirationPreparationMode } from '../../lib/inspiration/preparation'
+import type { ReactNode } from 'react'
+import { CTextarea } from '../shared/CompositionInput'
 import { Check, GitCompareArrows, History, Trash2, X } from 'lucide-react'
 import type { InspirationResultDiff } from '../../lib/inspiration/workspace'
 import type {
@@ -24,6 +26,7 @@ interface Props {
   candidateDraft?: string | null
   candidateInputSummary?: string
   onCandidateChange?: (draft: string) => void
+  wrapCandidateEditor?: (editor: ReactNode) => ReactNode
   onToggle: (fragmentId: string) => void
   onRemove: (fragmentId: string) => void
   onConfirm: () => void
@@ -40,6 +43,7 @@ export default function InspirationFusionReview({
   candidateDraft = null,
   candidateInputSummary,
   onCandidateChange,
+  wrapCandidateEditor,
   onToggle,
   onRemove,
   onConfirm,
@@ -47,6 +51,10 @@ export default function InspirationFusionReview({
 }: Props) {
   const modeVersions = versions.filter(version => version.mode === mode)
 
+  const candidateEditor = candidateDraft == null ? null : <CTextarea
+    aria-label={isInspirationPreparationMode(mode) ? '准备候选内容' : '灵感反推候选内容'}
+    value={candidateDraft} onChange={event => onCandidateChange?.(event.target.value)} disabled={confirming}
+    className="min-h-64 w-full resize-y rounded border border-border bg-bg-base px-2.5 py-2 font-mono text-[11px] leading-5 text-text-primary" />
   return (
     <section className="space-y-3 rounded-lg border border-border bg-bg-surface p-3">
       <div className="flex items-center justify-between">
@@ -127,15 +135,7 @@ export default function InspirationFusionReview({
           {candidateInputSummary && (
             <p className="text-[11px] text-text-muted">{candidateInputSummary}</p>
           )}
-          {candidateDraft != null && (
-            <textarea
-              aria-label={isInspirationPreparationMode(mode) ? '准备候选内容' : '灵感反推候选内容'}
-              value={candidateDraft}
-              onChange={event => onCandidateChange?.(event.target.value)}
-              disabled={confirming}
-              className="min-h-64 w-full resize-y rounded border border-border bg-bg-base px-2.5 py-2 font-mono text-[11px] leading-5 text-text-primary"
-            />
-          )}
+          {candidateEditor && (wrapCandidateEditor ? wrapCandidateEditor(candidateEditor) : candidateEditor)}
           {pendingDiff === null ? (
             <p className="text-xs text-red-400">候选当前不是有效结构，修正 JSON 后才能确认。</p>
           ) : pendingDiff.length === 0 ? (

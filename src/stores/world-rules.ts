@@ -24,6 +24,25 @@ function ruleContent(profile: Pick<WorldRulesProfile, 'entries' | 'customNodes' 
   return JSON.stringify({ entries: profile.entries, customNodes: profile.customNodes, globalNote: profile.globalNote })
 }
 
+export interface WorldRulesLocalSaveEvidenceV1 {
+  scope: WorkspaceScope; recordId: number; resourceUid: string; worldGroupId: number | null
+  content: string; updatedAt: number
+}
+async function nativeRuleEvidence(profile: WorldRulesProfile, scope: WorkspaceScope): Promise<WorldRulesLocalSaveEvidenceV1> {
+  const identity = getTableSpec('worldRulesProfiles').resourceIdentity!, uid = Reflect.get(profile, identity.field)
+  if (profile.id == null || !isPortableResourceUidV1(uid, identity.resourceKind)
+    || !await assertRecordInScope(scope, 'worldRulesProfiles', profile, { owner: 'world' })) throw new Error('规则记录身份或归属变化，尚未确认本机保存。')
+  return { scope: { ...scope }, recordId: profile.id, resourceUid: uid, worldGroupId: profile.worldGroupId ?? null,
+    content: ruleContent(profile), updatedAt: profile.updatedAt }
+}
+export function matchesWorldRulesLocalSaveV1(profile: WorldRulesProfile, scope: WorkspaceScope, evidence: WorldRulesLocalSaveEvidenceV1 | null) {
+  const identity = getTableSpec('worldRulesProfiles').resourceIdentity!
+  return evidence != null && sameScope(evidence.scope, scope) && profile.id === evidence.recordId
+    && profile.projectId === scope.projectId && Reflect.get(profile, 'worldId') === scope.worldId
+    && Reflect.get(profile, identity.field) === evidence.resourceUid && (profile.worldGroupId ?? null) === evidence.worldGroupId
+    && ruleContent(profile) === evidence.content
+}
+
 const sameScope = (a: WorkspaceScope | null, b: WorkspaceScope) => a?.projectId === b.projectId && a.worldId === b.worldId && a.workId === b.workId
 
 async function verifyWorldGroup(scope: WorkspaceScope, groupId?: number | null) {
@@ -43,6 +62,7 @@ interface WorldRulesState {
   dirty: boolean
   saveError: string
   failureToken: PendingEditFailureTokenV1 | null
+  localSaveEvidence: WorldRulesLocalSaveEvidenceV1 | null
 
   /** 加载项目的世界规则 */
   loadProfile: (scope: WorkspaceScopeLike, worldGroupId?: number | null) => Promise<void>
@@ -85,6 +105,7 @@ export const useWorldRulesStore = create<WorldRulesState>((set, get) => ({
   dirty: false,
   saveError: '',
   failureToken: null,
+  localSaveEvidence: null,
 
   loadProfile: async (scopeInput: WorkspaceScopeLike, worldGroupId: number | null = null) => {
     if (get().dirty || get().pendingSaves) throw new Error('当前规则草稿尚未保存，请先重试或导出并放弃未保存输入。')
@@ -115,9 +136,16 @@ export const useWorldRulesStore = create<WorldRulesState>((set, get) => ({
       })
 
       if (request !== profileReadRequest) return
+      const actual = profile?.id != null ? await db.worldRulesProfiles.get(profile.id) : undefined
+      if (!profile || !actual || (actual.worldGroupId ?? null) !== targetWorldGroupId || ruleContent(actual) !== ruleContent(profile)
+        || Reflect.get(actual, getTableSpec('worldRulesProfiles').resourceIdentity!.field) !== Reflect.get(profile, getTableSpec('worldRulesProfiles').resourceIdentity!.field)) throw new Error('规则提交回读已变化，请重新读取。')
+      if (!await assertRecordInScope(scope, 'worldRulesProfiles', actual, { owner: 'world' })) throw new Error('规则记录归属已变化，请重新读取。')
+      const identity = getTableSpec('worldRulesProfiles').resourceIdentity!
+      const evidence = isPortableResourceUidV1(Reflect.get(actual, identity.field), identity.resourceKind) ? await nativeRuleEvidence(actual, scope) : null
+      if (request !== profileReadRequest) return
       if (get().dirty || get().pendingSaves) throw new Error('规则加载期间又有作者输入，已保留原编辑目标和草稿。')
       lastSavedContent = profile ? ruleContent(profile) : undefined
-      set({ profile: profile || null, loadedScope: scope, activeWorldGroupId: targetWorldGroupId, dirty: false, saveError: '', failureToken: null })
+      set({ profile: actual, loadedScope: scope, activeWorldGroupId: targetWorldGroupId, dirty: false, saveError: '', failureToken: null, localSaveEvidence: evidence })
     } finally {
       if (request === profileReadRequest) set({ loading: false })
     }
@@ -163,6 +191,11 @@ export const useWorldRulesStore = create<WorldRulesState>((set, get) => ({
             return ruleContent(saved)
           })
           lastSavedContent = savedContent
+          const actual = await db.worldRulesProfiles.get(id)
+          if (!actual || ruleContent(actual) !== savedContent || Reflect.get(actual, identity.field) !== uid
+            || (actual.worldGroupId ?? null) !== (snapshot.worldGroupId ?? null)) throw new Error('规则提交后原文尚未确认，输入已保留，请重试。')
+          const evidence = await nativeRuleEvidence(actual, scope)
+          if (revision === profileEditRevision && get().profile?.id === id && sameScope(get().loadedScope, scope)) set({ localSaveEvidence: evidence })
         },
       })
       if (revision === profileEditRevision && get().profile?.id === id && sameScope(get().loadedScope, scope)) {
@@ -182,7 +215,7 @@ export const useWorldRulesStore = create<WorldRulesState>((set, get) => ({
     if (token) acknowledgePendingEditFailureV1({ token, decision: 'abandon-command' })
     profileReadRequest++; profileEditRevision++
     lastSavedContent = undefined
-    set({ profile: null, loadedScope: null, dirty: false, saveError: '', failureToken: null, loading: false })
+    set({ profile: null, loadedScope: null, dirty: false, saveError: '', failureToken: null, loading: false, localSaveEvidence: null })
   },
 
   getEntry: (nodeId: string) => {

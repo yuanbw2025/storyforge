@@ -8,10 +8,12 @@ import {
   isEntryEmpty,
 } from '../../lib/types/world-rules'
 import type { ConflictPriority, WorldRuleEntry } from '../../lib/types/world-rules'
+import { CTextarea } from '../shared/CompositionInput'
 
 interface Props {
   resizableInputs?: boolean
   toolbarActions?: ReactNode
+  saveFeedback?: ReactNode
   selectedNode: string | null
   currentLabel: string
   currentHints: string[]
@@ -33,6 +35,7 @@ export default function WorldRuleEntryEditor({
   onDeleteNode,
   onClearEntry,
   toolbarActions,
+  saveFeedback,
 }: Props) {
   const compact = useWorldSettingsLayout()
   const entryActions = selectedNode && <div className="flex items-center gap-2">
@@ -44,11 +47,11 @@ export default function WorldRuleEntryEditor({
     </button>}
   </div>
   const renderHistoricalAnchors = (control?: AreaControlV1) => (
-    <textarea
+    <CTextarea
       ref={control?.ref}
       style={control?.style}
-      onCompositionStart={control?.compositionStart}
-      onCompositionEnd={control?.compositionEnd}
+      onCompositionStartCapture={control?.compositionStart}
+      onCompositionEndCapture={control?.compositionEnd}
       value={currentEntry.historicalAnchors ?? ''}
       onChange={event => onFieldChange('historicalAnchors', event.target.value)}
       placeholder="这个维度中有哪些内容是取自真实历史或现实的？例如：使用唐朝开元年间真实官制三省六部"
@@ -58,11 +61,11 @@ export default function WorldRuleEntryEditor({
   )
   const historicalAnchorsLayout = inputAreaLayoutV1(resizableInputs, 'rules.historical')
   const renderFictionalAdaptations = (control?: AreaControlV1) => (
-    <textarea
+    <CTextarea
       ref={control?.ref}
       style={control?.style}
-      onCompositionStart={control?.compositionStart}
-      onCompositionEnd={control?.compositionEnd}
+      onCompositionStartCapture={control?.compositionStart}
+      onCompositionEndCapture={control?.compositionEnd}
       value={currentEntry.fictionalAdaptations ?? ''}
       onChange={event => onFieldChange('fictionalAdaptations', event.target.value)}
       placeholder="这个维度中有哪些内容是虚构或改编的？例如：在真实官制基础上增设灵修院，专管修士事务"
@@ -99,6 +102,7 @@ export default function WorldRuleEntryEditor({
               📜 现实参照（作者选定，可注明来源与待考点）
             </label>
             {historicalAnchorsLayout ? <ResizableInputArea options={historicalAnchorsLayout}>{renderHistoricalAnchors}</ResizableInputArea> : renderHistoricalAnchors()}
+            {saveFeedback}
           </div>
 
           <div>
@@ -106,6 +110,7 @@ export default function WorldRuleEntryEditor({
               ✨ 架空改造（虚构 / 改编 / 原创设定）
             </label>
             {fictionalAdaptationsLayout ? <ResizableInputArea options={fictionalAdaptationsLayout}>{renderFictionalAdaptations}</ResizableInputArea> : renderFictionalAdaptations()}
+            {saveFeedback}
           </div>
 
           <div>

@@ -21,18 +21,33 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261128-nw1b-reference-note-release409-v1.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261128-nw1b-reference-note-main770-v2.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
       {
-        "path": "tests/acceptance/narrative-world/domain-projection-20261127-release409-finite-service-main685-v1.json",
-        "sha256": "752f99750b82c416dca2943a3fa51e6cb54ea6f034173495fe33b5f8b8a7a0a1",
-        "note": "Preserve the prior NW-1B domain receipt before measuring the already-merged references.note declaration. All12 deterministic family observations stay equal; no new capability is inferred."
+        "path": "tests/acceptance/narrative-world/domain-projection-20261128-reference-note-release409-v1.json",
+        "sha256": "e437a3bfe85d7498f6e4df6fb2fe0b436fff8541880621c34570ccf38950dc69",
+        "note": "Preserve the actually measured intermediate domain receipt before the merged main770 PROJECT_TABLES input change."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261128-nw1b-reference-note-release409-v1.json",
+        "sha256": "aeabc1a4a9470b920779006fae3a31e7ce19e7cc15a2180ac50835b4d44afa50",
+        "note": "Preserve the measured intermediate bcf7 candidate before normal main770 registry/source integration; not a formally delivered source."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261128-reference031-bounded-source-v1.json",
+        "sha256": "b45f1904cfa0b663d9d1fa18e49b9d2249ee0f72eb2d9d978e33cbe3ecdcd549",
+        "note": "Preserve the actual main770 bounded reference-source measurement before combining the reviewed NW-1B receipt input correction; outcomes must stay identical."
       },
       {
         "path": "tests/acceptance/narrative-world/baseline-20261128-reference050-note-v1.json",
         "sha256": "feed7330042031f0fb0cdd000870c78ede1396519020d4f61fc4fa0daba0f2e4",
-        "note": "Preserve the actual reference050-note observation before the reviewed NW-1B receipt reference changes. New measurement must retain all outcomes, gaps and unsupported cases; no model or human acceptance inferred."
+        "note": "Preserve prior deterministic receipt before original private reference source gains bounded Blob chunks. New measurement must retain every corpus observation and known gap; no model, release or human acceptance inferred."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/ir-contract-20261128-reference050-note-v1.json",
+        "sha256": "c4132d41e8911529c79dff67320941a5f1f7207f2934235ccf834fe44b341ec4",
+        "note": "Preserve prior deterministic receipt before original private reference source gains bounded Blob chunks. New measurement must retain every corpus observation and known gap; no model, release or human acceptance inferred."
       },
       {
         "path": "tests/acceptance/narrative-world/ir-contract-20261127-cover035-runtime-v1.json",
@@ -1543,6 +1558,11 @@
         "path": "tests/acceptance/narrative-world/domain-projection-20261127-feedback541-cover-v1.json",
         "workPackage": "NW-1B-pre-main693-input",
         "note": "Preserved original receipt before actual current-main input remeasurement; unchanged corpus/gold and observed outcomes must be checked, not relabeled as new-source acceptance."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/domain-projection-20261127-release409-finite-service-main685-v1.json",
+        "sha256": "752f99750b82c416dca2943a3fa51e6cb54ea6f034173495fe33b5f8b8a7a0a1",
+        "note": "Preserve the prior NW-1B domain receipt before measuring the already-merged references.note declaration. All12 deterministic family observations stay equal; no new capability is inferred."
       }
     ],
     "comparison": "NW-2E checkpoint of the unchanged legacy v3 120-query comparator. Typed v4 query, exact product plans, current impact diagnostics and scale failures have separate receipts; no model or human quality acceptance is inferred."
@@ -1890,7 +1910,8 @@
     "src/lib/import/blob-text-source.ts",
     "src/lib/import/chunk-text-registry.ts",
     "src/lib/import/document-import-plan.ts",
-    "src/lib/import/frozen-source-recovery.ts"
+    "src/lib/import/frozen-source-recovery.ts",
+    "src/lib/reference-analysis/source-storage.ts"
   ],
   "splitPolicy": {
     "unit": "complete scenario family",
