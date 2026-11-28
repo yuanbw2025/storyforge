@@ -18,6 +18,7 @@ const ALL_MODULE_KEYS: { value: PromptModuleKey; label: string }[] = [
   { value: 'inspiration.reverse', label: '灵感 · 单世界完整反推' },
   { value: 'inspiration.reverse.multiworld', label: '灵感 · 多世界完整反推' },
   ...INSPIRATION_PREPARATION_MODES.map(mode => ({ value: INSPIRATION_PREPARATION_MODULES[mode], label: `灵感准备 · ${INSPIRATION_PREPARATION_LABELS[mode]}` })),
+  { value: 'history.timeline', label: '历史 · 时间轴事件' },
   { value: 'history.overview', label: '历史 · 总述起草' },
   { value: 'history.calendar', label: '历史 · 纪年体系' },
   { value: 'worldview.dimension',         label: '世界观 · 维度生成' },

@@ -1,3 +1,4 @@
+import { adoptHistoryEventCreationInTransactionV1, type AdoptHistoryEventCreationInputV1 } from '../history/event-creation-adoption'
 /** 当前架构唯一的结构化采纳入口。只接受 FIELD_REGISTRY 的规范字段与规范类型。 */
 import Dexie from 'dexie'
 import type { Table, Transaction } from 'dexie'
@@ -109,10 +110,12 @@ function runRegisteredAdoptionTransaction<T>(owner: CallerOwnedAdoptionV1 | unde
   return body()
 }
 
+export function adopt(input: AdoptHistoryEventCreationInputV1, owner?: CallerOwnedAdoptionV1): Promise<AdoptResult>
 export function adopt(input: AdoptWorldHistoryTextInputV1, owner?: CallerOwnedAdoptionV1): Promise<AdoptResult>
 export function adopt(input: AdoptPowerAuthoringInputV1, owner?: CallerOwnedAdoptionV1): Promise<AdoptResult>
 export function adopt(input: AdoptInput, owner?: CallerOwnedAdoptionV1): Promise<AdoptResult>
-export async function adopt(input: AdoptInput | AdoptWorldHistoryTextInputV1 | AdoptPowerAuthoringInputV1, owner?: CallerOwnedAdoptionV1): Promise<AdoptResult> {
+export async function adopt(input: AdoptInput | AdoptWorldHistoryTextInputV1 | AdoptPowerAuthoringInputV1 | AdoptHistoryEventCreationInputV1, owner?: CallerOwnedAdoptionV1): Promise<AdoptResult> {
+  if (isHistoryEventCreationAdoptionV1(input)) return adoptHistoryEventCreationInTransactionV1(input, owner)
   if (Object.prototype.hasOwnProperty.call(input, 'historyTextBaseline')) return adoptWorkHistoryTextV1(input as AdoptInput, owner)
   if (isPowerAuthoringAdoptionV1(input)) return adoptPowerAuthoringInTransactionV1(input, owner)
   if (isWorldHistoryAdoptionV1(input)) return adoptWorldHistoryTextV1(input, owner)
@@ -189,6 +192,9 @@ export async function adopt(input: AdoptInput | AdoptWorldHistoryTextInputV1 | A
   return adoptSingleton(scopedInput, fieldSpecs, tableSpec, result, owner)
 }
 
+function isHistoryEventCreationAdoptionV1(input: AdoptInput | AdoptWorldHistoryTextInputV1 | AdoptPowerAuthoringInputV1 | AdoptHistoryEventCreationInputV1): input is AdoptHistoryEventCreationInputV1 {
+  return Object.prototype.hasOwnProperty.call(input, 'historyEventCreation')
+}
 function isPowerAuthoringAdoptionV1(input: AdoptInput | AdoptWorldHistoryTextInputV1 | AdoptPowerAuthoringInputV1): input is AdoptPowerAuthoringInputV1 {
   return Object.prototype.hasOwnProperty.call(input, 'powerAuthoring')
 }

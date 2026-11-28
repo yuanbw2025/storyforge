@@ -1,16 +1,15 @@
+import { prepareHistoryAuthoringContextV1 } from './history-authoring-context'
+import { assertLongformHistoryScopeV1 } from '../history/authoring-scope'
 import { renderFrozenPromptExecutionV1, type PromptExecutionOptionsV1, type PromptExecutionEvidenceV1 } from './prompt-execution'
 import Dexie, { type Transaction } from 'dexie'
 import { db } from '../db/schema'
-import { historyAuthorRecordV1, copyHistoryAuthorOriginV1, copyHistoryAuthorSelectionV1, type History, type HistoricalTimelineEvent } from '../types/history'
+import { historyAuthorRecordV1, copyHistoryAuthorOriginV1, copyHistoryAuthorSelectionV1, type History } from '../types/history'
 import type { AIConfig, ChatMessage, WorkspaceScope } from '../types'
 import { readOwnedRows, resolveReadScopeLike, assertRecordInScope } from '../workspace/scope'
 import { adopt } from '../registry/adopt'
 import { hashCanonicalValue } from './run/hash'
-import { canonRowResourceKeysV1 } from '../context-gateway/canon-provider'
-import { executeContextGatewayV1 } from '../context-gateway/execution'
 import { resolveAgentSkillV1, buildAgentSkillInputGuidanceV1 } from './skill-registry'
-import { assembleContextGatewayPacketV1, projectContextGatewayInputStateV1, contextGatewayInputStateSourceKeysV1 } from './context-gateway-input'
-import { attachAgentContextInputStateV1, evidenceFromContextResult, resolveAgentContextPolicy, type AgentContextProfile } from './context-policy'
+import { type AgentContextProfile } from './context-policy'
 import { useAIConfigStore } from '../../stores/ai-config'
 import { resolveRequestConfig, type ChatResult } from '../ai/client'
 import { executeRegisteredAIEntryV1 } from './formal-ai-entry'
@@ -48,15 +47,6 @@ export function parseHistoryTextCandidateV1(raw: string): { version: 1; value: s
   if (row.version !== 1 || typeof row.value !== 'string') throw new Error('历史候选只能包含本次字段的文字。')
   return { version: 1, value: row.value }
 }
-export function assertHistoryTextAdmissionV1(scope: WorkspaceScope, worldGroupId: number | null, transaction?: Transaction) {
-  const projects = transaction ? transaction.table(db.projects.name) : db.projects
-  const works = transaction ? transaction.table(db.works.name) : db.works
-  return Dexie.Promise.all([projects.get(scope.projectId), works.get(scope.workId)]).then(([project, work]) => {
-    if (project?.enableMultiWorld && worldGroupId === null) throw new Error('请选择具体历史分区后生成。')
-    if (!project || project.workspacePurpose === 'world-engine' || project.activeWorldId !== scope.worldId || project.activeWorkId !== scope.workId
-      || work?.kind !== 'novel' || work.novelProfile !== 'long' || work.projectId !== scope.projectId || work.worldId !== scope.worldId) throw new Error('请回到原长篇作品核对历史生成目标。')
-  })
-}
 async function readBaseline(scope: WorkspaceScope, worldGroupId: number | null) {
   if (worldGroupId !== null && !await assertRecordInScope(scope, 'worldGroups', await db.worldGroups.get(worldGroupId), { owner: 'world' })) throw new Error('历史分区不属于当前世界。')
   const rows = (await readOwnedRows<History>(scope, 'histories', { owner: 'world' })).filter(row => (row.worldGroupId ?? null) === worldGroupId)
@@ -74,15 +64,15 @@ async function verified(input: { scope: WorkspaceScope; worldGroupId: number | n
 export async function assertHistoryTextCandidateReadyV1(input: { scope: WorkspaceScope; worldGroupId: number | null; snapshot: HistoryTextSnapshotV1; draft: string }) {
   input = { ...input, scope: { ...input.scope }, snapshot: parseHistoryTextSnapshotV1(input.snapshot) }
   const { snapshot } = await verified(input)
-  await assertHistoryTextAdmissionV1(input.scope, input.worldGroupId)
+  await assertLongformHistoryScopeV1(input.scope, input.worldGroupId)
   const { baseline } = await readBaseline(input.scope, input.worldGroupId)
   if (await hashCanonicalValue(baseline) !== snapshot.baselineHash) throw new Error('[HistoryText] 原历史内容已变化，候选保留，请重新对照。')
 }
 export async function adoptRestoredHistoryTextCandidateV1(input: { scope: WorkspaceScope; worldGroupId: number | null; snapshot: HistoryTextSnapshotV1; draft: string; owner?: { transaction: Transaction } }) {
   input = { ...input, scope: { ...input.scope }, snapshot: parseHistoryTextSnapshotV1(input.snapshot) }
   const result = input.owner ? await Dexie.waitFor(verified(input)) : await verified(input)
-  if (input.owner) await Dexie.waitFor(assertHistoryTextAdmissionV1(input.scope, input.worldGroupId, input.owner.transaction))
-  else await assertHistoryTextAdmissionV1(input.scope, input.worldGroupId)
+  if (input.owner) await Dexie.waitFor(assertLongformHistoryScopeV1(input.scope, input.worldGroupId, input.owner.transaction))
+  else await assertLongformHistoryScopeV1(input.scope, input.worldGroupId)
   return adopt({ target: 'histories', mode: 'replace', projectId: input.scope.projectId, scope: input.scope,
     worldGroupId: input.worldGroupId, historyTextBaseline: result.snapshot.baseline,
     data: result.snapshot.request.field === 'overview' ? { overview: result.candidate.value } : { eraSystem: result.candidate.value } }, input.owner)
@@ -100,28 +90,15 @@ export async function prepareHistoryTextCopilotV1(input: { projectId: number; sc
   const request = input.request
   const scope = { ...await (input.scope ?? resolveReadScopeLike(input.projectId)) }
   if (scope.projectId !== input.projectId) throw new Error('历史生成项目不匹配。')
-  await assertHistoryTextAdmissionV1(scope, input.worldGroupId)
-  const { baseline, row } = await readBaseline(scope, input.worldGroupId)
+  await assertLongformHistoryScopeV1(scope, input.worldGroupId)
+  const { baseline } = await readBaseline(scope, input.worldGroupId)
   const snapshot: HistoryTextSnapshotV1 = { version: 1, scope, worldGroupId: input.worldGroupId, request, baseline, baselineHash: await hashCanonicalValue(baseline) }
   const skill = resolveAgentSkillV1('world-origin', 'world-origin.history-text')
   const resolution = resolveRequestConfig(input.configOverride ?? useAIConfigStore.getState().config, { category: 'agent.world-foundation.history-text' })
   const config = resolution.config
-  const profile = input.contextProfile ?? 'balanced', policy = resolveAgentContextPolicy(skill.contextTaskKind, profile)
-  // Resolve registered resource identities only; Canon Gateway supplies every formal source text.
-  const rows = await readOwnedRows<HistoricalTimelineEvent>(scope, 'historicalTimelineEvents', { owner: 'world' })
-  const resources = await Promise.all([
-    ...(row ? [canonRowResourceKeysV1('histories', { ...row })] : []),
-    ...rows.filter(item => (item.worldGroupId ?? null) === input.worldGroupId).map(item => canonRowResourceKeysV1('historicalTimelineEvents', { ...item })),
-  ])
-  const mandatory = resources.map(item => { if (!item.record) throw new Error('历史来源缺少可验证身份，未调用模型。'); return item.record })
-  const contextGatewayExecution = await executeContextGatewayV1({ skill, modelConfig: config, scope, worldGroupId: input.worldGroupId,
-    query: `${HISTORY_TEXT_LABELS_V1[request.field]}：${input.authorRequest}。依据当前世界起源、历史、纪年、事件和作者约束创作。`,
-    mandatoryResourceKeys: mandatory, mandatoryFullResourceKeys: mandatory, targetResourceKeys: row ? [mandatory[0]] : [],
-    budgetTokens: Math.min(policy.maxInputTokens, skill.contextGateway!.maxRetrievedTokens), additionalReadsEnabled: false, signal: input.signal })
-  const assembled = assembleContextGatewayPacketV1(contextGatewayExecution, contextGatewayExecution.modelBudget?.inputBudget ?? policy.maxInputTokens)
-  const state = projectContextGatewayInputStateV1(skill, contextGatewayExecution, assembled)
-  const contextEvidence = attachAgentContextInputStateV1(evidenceFromContextResult(profile, assembled), state)
-  contextEvidence.inputStateSourceKeys = contextGatewayInputStateSourceKeysV1(skill, contextGatewayExecution)
+  const { assembled, state, contextEvidence, contextGatewayExecution } = await prepareHistoryAuthoringContextV1({ scope,
+    worldGroupId: input.worldGroupId, skill, config, label: HISTORY_TEXT_LABELS_V1[request.field], authorRequest: input.authorRequest,
+    profile: input.contextProfile, signal: input.signal })
   const assertFresh = () => assertHistoryTextCandidateReadyV1({ scope, worldGroupId: input.worldGroupId, snapshot, draft: '{"version":1,"value":""}' })
   let messages = appendSimplifiedChineseOutputConstraint([{ role: 'system', content: [
     '你是叙事熔炉历史文本创作 Skill。只输出本次固定字段的可编辑候选，不直接写正式设定。',

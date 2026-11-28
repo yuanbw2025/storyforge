@@ -10,6 +10,7 @@ export function masterCandidateWriteTargetV1(payload: MasterCandidatePayload): s
   if (payload.skillId === 'world-origin.story-core' && payload.storyCoreField) {
     return `storyCores.${payload.storyCoreField}`
   }
+  if (payload.skillId === 'world-origin.history-events') return 'historicalTimelineEvents.title'
   if (payload.skillId === 'world-origin.history-text' && payload.historyTextRequest) return `histories.${payload.historyTextRequest.field}`
   if (payload.skillId === 'world-origin.power-authoring' && payload.powerAuthoringRequest) return `${payload.powerAuthoringRequest.target.table}.${payload.powerAuthoringRequest.target.field}`
   if (payload.skillId === 'outline.details') return 'detailedOutlines.scenes'

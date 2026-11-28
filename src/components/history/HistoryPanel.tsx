@@ -1,4 +1,5 @@
 import HistoryTextAuthoring from './HistoryTextAuthoring'
+import HistoryEventAuthoringV1, { HistoryEventAIButtonV1 } from './HistoryEventAuthoring'
 import { useState, useEffect, useMemo, useRef } from 'react'
 import {
   Plus, Clock,
@@ -385,6 +386,7 @@ export default function HistoryPanel({ project, resizableInputs = false, confirm
 
       {/* Tab 内容：历史时间轴 */}
       {activeTab === 'timeline' && (
+        <HistoryEventEntry key={historyViewKey} project={project} worldGroupId={scopeGroupId} canEdit={canEdit} hasEvents={scopedEvents.length > 0} onAdopted={() => loadEvents({ projectId: project.id!, worldId: project.activeWorldId! })}>
         <div className={compact ? 'grid min-w-0 grid-cols-1 gap-4' : 'grid grid-cols-1 lg:grid-cols-3 gap-6'}>
           {/* 左侧/中侧：时间轴列表 */}
           <div className={compact ? 'min-w-0 space-y-4' : 'lg:col-span-2 space-y-4'}>
@@ -393,6 +395,7 @@ export default function HistoryPanel({ project, resizableInputs = false, confirm
                 时间轴事件 ({scopedEvents.length})
                 {isMW && worldTab === 'all' && <span className="ml-1 text-text-muted">· 一览（只读）</span>}
               </h3>
+              <div className="flex items-center gap-3"><HistoryEventAIButtonV1 />
               {canEdit && !compact && (
                 <button
                   onClick={handleAddEvent}
@@ -402,6 +405,7 @@ export default function HistoryPanel({ project, resizableInputs = false, confirm
                   添加事件
                 </button>
               )}
+              </div>
             </div>
 
             {scopedEvents.some(event => event.year === null) && <p className="text-xs text-text-muted">未填数字年份的事件按添加顺序列在后面；具体时间文字保留，不自动推断先后关系。</p>}
@@ -473,6 +477,7 @@ export default function HistoryPanel({ project, resizableInputs = false, confirm
 
           {compact ? <details className="text-xs text-text-muted"><summary>历史考证与细节提示</summary><TimelineHistoryHelp /></details> : <TimelineHistoryHelp />}
         </div>
+        </HistoryEventEntry>
       )}
 
       {/* Tab 内容：历史细节风暴 */}
@@ -591,4 +596,9 @@ export default function HistoryPanel({ project, resizableInputs = false, confirm
 function HistoryTextEntry({ project, worldGroupId, onAdopted, children }: { project: Project; worldGroupId: number | null; onAdopted: () => Promise<unknown>; children: React.ReactNode }) {
   return project.workspacePurpose !== 'world-engine' && project.activeWorkId != null
     ? <HistoryTextAuthoring project={project} worldGroupId={worldGroupId} onAdopted={onAdopted}>{children}</HistoryTextAuthoring> : children
+}
+
+function HistoryEventEntry({ project, worldGroupId, canEdit, hasEvents, onAdopted, children }: { project: Project; worldGroupId: number | null; canEdit: boolean; hasEvents: boolean; onAdopted: () => Promise<unknown>; children: React.ReactNode }) {
+  return canEdit && project.workspacePurpose !== 'world-engine' && project.activeWorkId != null
+    ? <HistoryEventAuthoringV1 project={project} worldGroupId={worldGroupId} hasEvents={hasEvents} onAdopted={onAdopted}>{children}</HistoryEventAuthoringV1> : children
 }
