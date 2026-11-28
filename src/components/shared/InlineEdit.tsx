@@ -58,7 +58,7 @@ function useInlineDraft(value: string, onChange: InlineSave, readable = true, lo
   }, [value, localSave])
   useBeforeUnload(saving || (editing && (draft !== baseline || Boolean(error))))
 
-  const begin = () => {
+  const begin = useCallback(() => {
     draftRef.current = latestValueRef.current
     baselineRef.current = latestValueRef.current
     editSaveRef.current = latestSaveRef.current
@@ -73,7 +73,7 @@ function useInlineDraft(value: string, onChange: InlineSave, readable = true, lo
     errorRef.current = ''
     setError('')
     setEditing(true)
-  }
+  }, [])
   const change = (next: string) => {
     if (next !== draftRef.current) { generationRef.current++; setDirty(true); setConfirmed(null) }
     draftRef.current = next; setDraft(next)
@@ -209,6 +209,16 @@ export function InlineTextarea({ value, onChange, placeholder, className, minRow
 }) {
   const readable = value == null || typeof value === 'string'
   const editor = useInlineDraft(typeof value === 'string' ? value : '', onChange, readable, localSave)
+  // Re-renders of the same acknowledged field must not cancel ReadView's
+  // delayed single click. A different source/owner still invalidates it;
+  // unacknowledged consumers also keep their writer-identity boundary.
+  const markdownTarget = localSave ? localSaveIdentityKeyV1(localSave.identity) : onChange
+  const markdownTargetRef = useRef(markdownTarget)
+  markdownTargetRef.current = markdownTarget
+  const begin = editor.begin
+  const requestMarkdownEdit = useCallback((original: string) => {
+    if (original === value && markdownTargetRef.current === markdownTarget) begin()
+  }, [value, begin, markdownTarget])
   const ref = useRef<HTMLTextAreaElement>(null)
   const resize = useCallback(() => {
     const el = ref.current
@@ -244,7 +254,7 @@ export function InlineTextarea({ value, onChange, placeholder, className, minRow
   const readView = markdownRead && typeof value === 'string' && value.length > 0
     ? <div className="min-w-0 text-sm text-text-primary leading-relaxed"><MarkdownReadView
         key={localSave ? localSaveIdentityKeyV1(localSave.identity) : undefined} value={value}
-        onRequestEdit={original => { if (original === value) editor.begin() }} /></div>
+        onRequestEdit={requestMarkdownEdit} /></div>
     : <div onClick={editor.begin} className={`text-sm cursor-text py-0.5 ${value ? 'text-text-primary leading-relaxed whitespace-pre-wrap' : 'text-text-muted/40'}`}>
     {value || placeholder || '点击编辑…'}
   </div>
