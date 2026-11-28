@@ -211,6 +211,7 @@ for (const entry of registry.entries ?? []) {
 const actualCalls = []
 const actualTransports = []
 const scannedFiles = [
+  'src/lib/agent/power-authoring-copilot.ts',
   'src/lib/world-map/atlas/paint-preview.ts',
   // B01: the durable extractor is a formal service under the same literal binding gate.
   'src/lib/agent/run/codex-extraction-v2-runtime.ts',

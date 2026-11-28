@@ -66,6 +66,7 @@ export const REGISTERED_AGENT_IDS = [...DOMAIN_AGENT_IDS, ...TEXT_ADVENTURE_PROD
 export type RegisteredAgentId = typeof REGISTERED_AGENT_IDS[number]
 
 export type AgentSkillExecutionModeV1 =
+  | 'power-authoring'
   | 'worldview-field'
   | 'world-suggest'
   | 'worldview-expand'
@@ -1450,6 +1451,29 @@ export const AGENT_SKILLS = [
     writeTargets: [{ table: 'worldviews', fields: WORLDVIEW_GENERATABLE_FIELD_SPECS.map(spec => spec.field) }],
     // Source/contract review date only; this inert proposal has not run tests.
     lastVerifiedAt: '2026-11-22', regressionTests: ['R-WORLDVIEW-FIELD-V2'],
+  },
+  {
+    version: 1, id: 'world-origin.power-authoring', agentId: 'world-origin', defaultForAgent: false,
+    label: '力量体系定点创作', owner: 'world-foundation-agent', promptVersion: 'power-authoring-copilot-v1',
+    executionMode: 'power-authoring', contextTaskKind: 'agent-world-origin', readToolNames: [],
+    contextSourceKeys: ['worldview', 'powerSystem', 'storyCore', 'creativeRules'], optionalContextSourceKeys: [],
+    inputPolicy: { sourceKeys: ['worldview', 'powerSystem'], states: {
+      empty: { handling: 'require-author-input', instruction: '必须完整读取原力量目标，缺失则不得调用模型。' },
+      partial: { handling: 'grounded-transform', instruction: '只转换本次固定字段；其它已确认设定是约束，不补造未读取事实。' },
+      complete: { handling: 'grounded-transform', instruction: '依据已读取正式设定，只建议当前目标；保留阶段 ID、分叉和引用。' },
+    } },
+    contextCompression: compressionPolicy(['worldview', 'powerSystem', 'storyCore', 'creativeRules']),
+    contextGateway: { version: 1, rollout: 'required', providerSourceKeys: ['ragSelection'],
+      requiredWriteTargets: ['worldviews.powerHierarchy', 'powerSystems.name', 'powerSystems.description', 'powerSystems.levels', 'powerSystems.rules', 'cultivationSystems.name', 'cultivationSystems.description', 'cultivationSystems.stages'],
+      allowedResourceKinds: ['world', 'worldview-field', 'story-core-field', 'character', 'codex-entry', 'fact'],
+      allowedDepths: ['index', 'summary', 'focused', 'full', 'original'], retrievalBudgetMode: 'model-capacity', maxReadCalls: 4, maxRetrievedTokens: 48_000,
+      maxPlanningSteps: 1, maxPlanningModelTokens: 1, allowOriginalRead: true, additionalReadToolNames: ['list_context_catalog', 'search_context', 'read_context_resource', 'read_original_evidence'],
+    },
+    // Team accounting forecast only. The wire call uses the routed model's evidenced capacity.
+    maxOutputTokens: 8_000,
+    writeTargets: [{ table: 'worldviews', fields: ['powerHierarchy'] }, { table: 'powerSystems', fields: ['name', 'description', 'levels', 'rules'] },
+      { table: 'cultivationSystems', fields: ['name', 'description', 'stages'] }],
+    lastVerifiedAt: '2026-11-28', regressionTests: ['R-BUG048-power-authoring-copilot'],
   },
   {
     version: 1,
@@ -6473,7 +6497,7 @@ export function validateAgentSkillDefinitionsV1(
 ): void {
   const productProductionModes = new Set<AgentSkillExecutionModeV1>(['product-production'])
   const executionModesByAgent: Record<RegisteredAgentId, ReadonlySet<AgentSkillExecutionModeV1>> = {
-    'world-origin': new Set(['worldview-field', 'world-suggest', 'worldview-expand', 'world-link-context', 'constitution-extract', 'narrative-annotation-extract', 'codex-extract', 'codex-enrich', 'story-core', 'creative-rules', 'locations', 'map-config', 'history-consult', 'history-storm', 'review']),
+    'world-origin': new Set(['power-authoring', 'worldview-field', 'world-suggest', 'worldview-expand', 'world-link-context', 'constitution-extract', 'narrative-annotation-extract', 'codex-extract', 'codex-enrich', 'story-core', 'creative-rules', 'locations', 'map-config', 'history-consult', 'history-storm', 'review']),
     character: new Set(['create', 'supplement', 'lifecycle', 'relationships', 'character-reply', 'memory-curator']),
     inspiration: new Set(['work-cover-image', 'reference-summary', 'reference-characters', 'reference-analysis-private-chunk', 'document-import-parse', 'reverse', 'review']),
     outline: new Set(['auto', 'story-arcs', 'foreshadow-suggestions', 'storyline-progress', 'character-driven', 'character-revision', 'impact-summary-regenerate', 'volumes', 'chapters', 'details', 'adaptation-source-analysis', 'adaptation-causal-graph', 'screenplay-adaptation-brief', 'screenplay-decision-pass', 'screenplay-beat-sheet', 'screenplay-scene-card', 'screenplay-grounding-review', 'screenplay-dramaturgy-review', 'comic-adaptation-brief', 'comic-decision-pass', 'comic-script-adaptation', 'comic-page-rhythm', 'comic-panel-plan', 'comic-visual-bible', 'comic-image-request', 'comic-visual-continuity-review', 'comic-targeted-repair', 'comic-page-review', 'motion-drama-series-bible', 'motion-drama-asset-bible', 'motion-drama-episode-outline', 'motion-drama-shot-design', 'motion-drama-image-prompts', 'motion-drama-video-prompts', 'motion-drama-quality-review', 'short-intent-brief', 'short-story-design', 'short-scene-plan', 'short-continuity-review', 'character-interaction-production', 'product-production']),

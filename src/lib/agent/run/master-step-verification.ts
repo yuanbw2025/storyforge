@@ -1,3 +1,4 @@
+import { parsePowerAuthoringCandidateV1, parsePowerAuthoringSnapshotV1 } from '../power-authoring-copilot'
 import { parseDetailedOutlineCopilotDraftV1 } from '../detailed-outline-copilot'
 import type { AgentRunStepVerificationReceiptV1 } from '../../types/agent-run'
 import { parseCharacterCandidateDraft } from '../character-copilot'
@@ -30,6 +31,7 @@ export const MASTER_CANDIDATE_STEP_VERIFIER_SET_VERSION_V1 = 'master-candidate-s
 
 function validateCandidateDraft(payload: MasterCandidatePayload, draft: string): void {
   if (payload.agentId === 'world-origin') {
+    if (payload.skillId === 'world-origin.power-authoring') { parsePowerAuthoringCandidateV1(draft, parsePowerAuthoringSnapshotV1(payload.baseSnapshot)); return }
     if (payload.skillId === 'world-origin.worldview-field') {
       const candidate = parseWorldviewFieldCandidateDraft(draft)
       if (candidate.field !== payload.worldviewField) {
