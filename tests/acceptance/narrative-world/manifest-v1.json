@@ -21,7 +21,7 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261128-power048-adoption-v1.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261128-power048-copilot-v1.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
       {
@@ -1583,6 +1583,11 @@
         "path": "tests/acceptance/narrative-world/domain-projection-20261128-power048-adoption-v1.json",
         "sha256": "335203061f2d70c03a7c18bc22b4aee4521ea8a9770035c70b6cc4fc7bde1b6a",
         "note": "Remeasured exact power adoption/registry type inputs; all prior deterministic observations/gaps unchanged. No new model, product, device, release or human acceptance inferred."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261128-power048-adoption-v1.json",
+        "sha256": "e59ee4449fa03b44ef318470b8b53a18186d3d8b08dc03e93843b3b8ca019f87",
+        "note": "Preserve actual pre-copilot receipt before the two registered Skill/AI-entry input changes. Remeasure the original deterministic queries without claiming power generation, model, device or release acceptance."
       }
     ],
     "comparison": "NW-2E checkpoint of the unchanged legacy v3 120-query comparator. Typed v4 query, exact product plans, current impact diagnostics and scale failures have separate receipts; no model or human quality acceptance is inferred."
