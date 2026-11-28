@@ -2,7 +2,7 @@ import StoryCorePanel from '../../src/components/worldview/StoryCorePanel'
 import { act, createElement, type ComponentType } from 'react'
 import { createRoot } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { Project } from '../../src/lib/types'
+import type { Project, PowerSystem } from '../../src/lib/types'
 import { db } from '../../src/lib/db/schema'
 import { WorldSettingsLayoutProvider } from '../../src/components/longform/WorldSettingsLayout'
 
@@ -26,6 +26,9 @@ const mocks = vi.hoisted(() => ({
     activeWorldGroupId: null,
     loading: false,
     loadError: null,
+    powerSystem: null as PowerSystem | null,
+    powerSystems: [] as PowerSystem[],
+    savePowerSystem: vi.fn(async () => undefined),
     worldview: {
       id: 7,
       projectId: 1,
@@ -206,6 +209,8 @@ function generateButton(host: HTMLElement) {
 }
 
 beforeEach(async () => {
+  mocks.worldviewStore.powerSystem = null
+  mocks.worldviewStore.powerSystems = []
   await db.agentConversations.clear()
   await db.agentConversations.put({
     id: 31, projectId: project.id!, workId: project.activeWorkId!, worldGroupId: null,
