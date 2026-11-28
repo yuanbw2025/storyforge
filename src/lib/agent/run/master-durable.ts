@@ -545,7 +545,7 @@ function promptModuleForPlanTaskV1(
   if (skill.executionMode === 'history-keyword-content') return 'history.keyword-content'
   if (skill.executionMode === 'history-keyword-suggestions') return 'history.keyword-suggestions'
   if (skill.executionMode === 'history-events') return 'history.timeline'
-  if (skill.executionMode === 'history-text') return historyTextRequest?.field === 'eraSystem' ? 'history.calendar' : 'history.overview'
+  if (skill.executionMode === 'history-text') return historyTextRequest?.field === 'joint' ? 'history.overview-calendar' : historyTextRequest?.field === 'eraSystem' ? 'history.calendar' : 'history.overview'
   if (skill.executionMode === 'worldview-field') return 'worldview.dimension'
   if (skill.executionMode === 'story-core') return 'story.generate'
   if (agentId === 'character' && skill.executionMode === 'create') return 'character.generate'
@@ -734,7 +734,7 @@ function writeTargetsForPlan(plan: MasterAgentPlan): Array<{
   plan.tasks.forEach(task => {
     const skill = resolveAgentSkillV1(task.agentId, task.skillId)
     const writeTargets = skill.executionMode === 'history-text'
-      ? [{ table: 'histories', fields: [task.historyTextRequest!.field] }]
+      ? [{ table: 'histories', fields: task.historyTextRequest!.field === 'joint' ? ['overview', 'eraSystem'] : [task.historyTextRequest!.field] }]
       : skill.executionMode === 'power-authoring'
       ? [{ table: task.powerAuthoringRequest!.target.table, fields: [task.powerAuthoringRequest!.target.field] }]
       : skill.executionMode === 'worldview-field'
@@ -787,7 +787,7 @@ function requiredContextGatewayWriteTargetForTaskV1(task: MasterAgentTask): stri
     : skill.executionMode === 'history-events'
     ? 'historicalTimelineEvents.title'
     : skill.executionMode === 'history-text'
-    ? `histories.${task.historyTextRequest!.field}`
+    ? `histories.${task.historyTextRequest!.field === 'joint' ? 'overview' : task.historyTextRequest!.field}`
     : skill.executionMode === 'power-authoring'
     ? `${task.powerAuthoringRequest!.target.table}.${task.powerAuthoringRequest!.target.field}`
     : skill.executionMode === 'worldview-field'

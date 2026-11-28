@@ -28,6 +28,7 @@ export const PROMPT_MODULE_KEYS = [
   'history.overview',
   'history.calendar',
   'history.timeline',
+  'history.overview-calendar',
   'history.keyword-content',
   'history.keyword-suggestions',
   // 角色

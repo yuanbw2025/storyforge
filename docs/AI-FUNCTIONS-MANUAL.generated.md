@@ -8,7 +8,7 @@
 
 ## 一、Prompt 模板清单（PromptModuleKey 事实源）
 
-共 75 个唯一 moduleKey，220 条内置模板定义。
+共 76 个唯一 moduleKey，221 条内置模板定义。
 
 | moduleKey | 模板数 | 代表名称 | 说明 | 读取变量 |
 |---|---:|---|---|---|
@@ -16,6 +16,7 @@
 | `history.overview` | 1 | 内置-历史总述起草 | 为当前历史字段起草可编辑候选，作者确认后才写入正式设定。 | `dimension` `generationMode` `currentValue` `worldContext` `userHint` |
 | `history.calendar` | 1 | 内置-纪年体系起草 | 为当前历史字段起草可编辑候选，作者确认后才写入正式设定。 | `dimension` `generationMode` `currentValue` `worldContext` `userHint` |
 | `history.timeline` | 1 | 内置-历史事件起草 | 从零或补充历史事件候选，作者逐项选择后增加，不改已有时间轴。 | `generationMode` `userHint` `worldContext` |
+| `history.overview-calendar` | 1 | 内置-历史总述纪年联合起草 | 同一份输入起草一致的历史总述与纪年候选，作者分别选择采纳。 | `generationMode` `currentValue` `worldContext` `userHint` |
 | `history.keyword-content` | 1 | 内置-历史关键词条目创作 | 仅为作者选中的关键词草稿及字段生成可编辑候选，逐字段确认后加入草稿。 | `userHint` `worldContext` |
 | `history.keyword-suggestions` | 1 | 内置-历史关键词推荐 | 建议不同维度的历史关键词，作者选择后转入独立草稿，不直接写正式设定。 | `userHint` `worldContext` |
 | `character.generate` | 6 | 内置-角色完整设计 | 基于世界观和已有角色，设计一个新角色的完整资料。 | `projectName` `genres` `worldContext` `existingCharacters` `userHint` |
@@ -613,4 +614,4 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 
 ---
 
-生成时间基准:commit `30b58f9e3`
+生成时间基准:commit `e1afdb81e`

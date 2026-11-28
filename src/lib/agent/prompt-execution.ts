@@ -21,6 +21,7 @@ export type GovernedPromptModuleKeyV1 =
   | 'history.overview'
   | 'history.calendar'
   | 'history.timeline'
+  | 'history.overview-calendar'
   | 'history.keyword-content'
   | 'history.keyword-suggestions'
   | 'story.generate'
@@ -90,7 +91,7 @@ export interface PromptExecutionEvidenceV1 {
 const GOVERNED_MODULES = new Set<PromptModuleKey>([
   'inspiration.reverse', 'inspiration.reverse.multiworld',
   ...Object.values(INSPIRATION_PREPARATION_MODULES),
-  'worldview.dimension', 'history.overview', 'history.calendar', 'history.timeline', 'history.keyword-suggestions', 'history.keyword-content',
+  'worldview.dimension', 'history.overview', 'history.calendar', 'history.timeline', 'history.keyword-suggestions', 'history.keyword-content', 'history.overview-calendar',
   'story.generate',
   'character.generate',
 ])
