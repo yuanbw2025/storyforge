@@ -21,9 +21,19 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261128-history061-joint-text-main832-v1.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261128-history061-joint-text-main835-v1.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261128-history061-joint-text-main832-v1.json",
+        "sha256": "c681ccb589edd91152d1eca7b46e129e6a13f03b61aa0f39de277184d6b927f2",
+        "note": "Preserve measured joint-text integration receipt before current main835 integration."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261128-history061-keyword-content-main832-v1.json",
+        "sha256": "9ca4c7dde1ec33ec223820db434cc2e53d35d0a025b378582e047cfc152098e3",
+        "note": "Preserve delivered main835 keyword-content receipt while integrating one-call joint history drafting."
+      },
       {
         "path": "tests/acceptance/narrative-world/baseline-20261128-history061-joint-text-v1.json",
         "sha256": "1456a6224bc11a9b455c57a6bbc01724ec958f84c21a17e6971f856f584271d4",
