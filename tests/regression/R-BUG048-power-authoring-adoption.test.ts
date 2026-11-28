@@ -98,16 +98,18 @@ it('treats newly added references as stale and refuses corrupt cross-World links
  const r=await refs(f)
  await expect(adopt(input)).rejects.toThrow('引用已变化')
  const other=await seedCurrentWorkspace('引用的外部世界')
- await db.characters.update(r.character,{worldId:other.scope.worldId})
+ // Deliberately corrupt framework-owned metadata in this isolated negative fixture.
+ await db.characters.where('id').equals(r.character).modify(row=>{Reflect.set(row,'worldId',other.scope.worldId)})
  await expect(readPowerAuthoringBaselineV1(f.powerScope,stageTarget(f.id))).rejects.toThrow('跨 World')
  expect((await db.cultivationSystems.get(f.id))!.stages).toBe(stages)
- expect((await db.characters.get(r.character))!.worldId).toBe(other.scope.worldId)
+ expect(Reflect.get((await db.characters.get(r.character))!,'worldId')).toBe(other.scope.worldId)
 })
 
 it('allows explicitly affected progress in a sibling Work of the same World and stales its old named-stage evidence', async () => {
  const f=await fixture(), r=await refs(f)
  const workId=await db.works.add(currentWorkFixtureRecordV1({projectId:f.scope.projectId,worldId:f.scope.worldId,title:'同世界另一原作'}))
- await db.cultivationProgress.update(r.progress,{workId})
+ // Work ownership is registered infrastructure metadata, not a domain-field extension.
+ await db.cultivationProgress.where('id').equals(r.progress).modify(row=>{Reflect.set(row,'workId',workId)})
  const input=await intent(f,{table:'cultivationSystems',recordId:f.id,field:'stages',stageId:'merge',stageField:'name'},'新合流')
  await adopt(input)
  expect(await db.cultivationProgress.get(r.progress)).toMatchObject({workId,stageId:'merge',stageName:'合流',status:'stale',sourceQuote:'保留原进度证据'})

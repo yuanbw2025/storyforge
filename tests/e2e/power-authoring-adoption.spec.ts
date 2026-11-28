@@ -48,7 +48,7 @@ test('048 native exact power adoption rolls back with its Run owner, preserves o
     const rolledBack=await read()
     const originalUpdate=db.cultivationProgress.update
     let caughtLifecycle='',caughtTransaction='',nativeAborted=false
-    db.cultivationProgress.update=(async()=>0) as typeof db.cultivationProgress.update
+    db.cultivationProgress.update=()=>Dexie.Promise.resolve(0)
     try{await db.transaction('rw',policy.powerAuthoringTransactionTablesV1('cultivationSystems'),()=>{
       const transaction=Dexie.currentTransaction!
       transaction.idbtrans!.addEventListener('abort',()=>{nativeAborted=true},{once:true})

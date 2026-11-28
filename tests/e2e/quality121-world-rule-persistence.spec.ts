@@ -49,11 +49,17 @@ test('世界规则精确保存和刷新；写入失败保稿重试，删除后�
     db.worldRulesProfiles.hook('updating', fault)
   })
   await note.fill(retryDraft)
-  await expect(page.getByRole('alert')).toContainText('隔离Quota写入失败')
+  // Both the field and the panel legitimately report a failed save. Assert
+  // the unique panel warning that promises draft retention and recovery.
+  const retainedDraftAlert = page.getByRole('alert').filter({ hasText: '原输入仍保留在本页，请重试或导出草稿。' })
+  await expect(retainedDraftAlert).toHaveCount(1)
+  await expect(retainedDraftAlert).toContainText('隔离Quota写入失败')
   expect(await page.evaluate(() => Reflect.get(window, 'sfqa121QuotaHits'))).toBe(1)
   expect((await read())?.globalNote).toBe(saved)
   await expect(note).toHaveValue(retryDraft)
-  await page.getByRole('button', { name: '重试保存规则', exact: true }).click()
+  const retryRule = retainedDraftAlert.locator('..').getByRole('button', { name: '重试保存规则', exact: true })
+  await expect(retryRule).toHaveCount(1)
+  await retryRule.click()
   await expect.poll(async () => (await read())?.globalNote).toBe(retryDraft)
 
   const otherPage = await page.context().newPage()
@@ -65,7 +71,8 @@ test('世界规则精确保存和刷新；写入失败保稿重试，删除后�
   }, target.id)
   await otherPage.close()
   await note.fill(deletedDraft)
-  await expect(page.getByRole('alert')).toContainText('规则目标已删除')
+  await expect(retainedDraftAlert).toHaveCount(1)
+  await expect(retainedDraftAlert).toContainText('规则目标已删除')
   await expect(note).toHaveValue(deletedDraft)
   expect(await read()).toBeUndefined()
   const [download] = await Promise.all([

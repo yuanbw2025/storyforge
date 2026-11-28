@@ -29,7 +29,7 @@ it('commits overview and nested location raw text atomically through the origina
   const uid = (saved as GeographyFormRecordV1).ragDocumentId; expect(isPortableResourceUidV1(uid, 'geography')).toBe(true)
   db.close(); await db.open()
   expect(await row()).toMatchObject({ id: saved.id, ragDocumentId: uid, overview: raw, locations, worldId: scope.worldId })
-  expect(Object.hasOwn(await row(), 'workId')).toBe(false)
+  expect(Object.prototype.hasOwnProperty.call(await row(), 'workId')).toBe(false)
 })
 it('keeps both original fields after quota, zero-row and corrupt-poststate failures; an explicit retry uses the same basis', async () => {
   const scope = await fixture(); await store.getState().save({ projectId: scope.projectId, overview: 'old', locations: '[]' }, scope)

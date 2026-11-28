@@ -70,7 +70,10 @@ it('rereads late plan snapshots and preserves original soft-reference normalizat
 })
 it('identifies a known committed input when the postcommit native read fails without claiming a successful save',async()=>{
  const f=await fixture(),before=await f.read(),original=db.characterDrivenPlans.get.bind(db.characterDrivenPlans)
- const fault=vi.spyOn(db.characterDrivenPlans,'get').mockImplementation(key=>!Dexie.currentTransaction&&key===f.id?Promise.reject(new Error('plan postcommit read fault')):original(key))
+ const fault=vi.spyOn(db.characterDrivenPlans,'get').mockImplementation(key=>{
+  const lookup:unknown=key
+  return !Dexie.currentTransaction&&typeof lookup==='number'&&lookup===f.id?Dexie.Promise.reject(new Error('plan postcommit read fault')):original(key)
+ })
  let error:unknown;try{await f.save(before)}catch(cause){error=cause}fault.mockRestore()
  expect(error).toBeInstanceOf(Error)
  const committed=Reflect.get(error as object,'committedCharacterDrivenInputsV1')

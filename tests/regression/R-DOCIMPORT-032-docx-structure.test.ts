@@ -54,7 +54,7 @@ it('renders a bounded read-only preview with full structure retained and no live
     await act(async () => root.render(createElement(ImportDocIntro, { chunkSize: 50000, docxStructure: structure })))
     expect(host.querySelector('[aria-label="Word 文档结构对照"]')?.textContent).toContain('27 段结构 · 1 张表格')
     expect(host.textContent).toContain('只限制此处展示')
-    expect(structure.blocks.at(-1)).toMatchObject({ kind: 'table', rows: [[{ text: '完整末尾格' }]] })
+    expect(structure.blocks[structure.blocks.length - 1]).toMatchObject({ kind: 'table', rows: [[{ text: '完整末尾格' }]] })
     expect(host.querySelector('iframe,script,img,a')).toBeNull()
     await act(async () => root.render(createElement(ImportDocIntro, { chunkSize: 50000, docxStructure: null })))
     expect(host.querySelector('[aria-label="Word 文档结构对照"]')).toBeNull()

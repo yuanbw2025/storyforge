@@ -9,7 +9,7 @@ import { useCultivationStore } from '../../src/stores/cultivation'
 import { useCodexStore } from '../../src/stores/codex'
 import { seedCurrentWorkspace } from '../helpers/current-workspace'
 
-globalThis.IS_REACT_ACT_ENVIRONMENT = true
+Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
 let host: HTMLDivElement, root: ReturnType<typeof createRoot>
 beforeEach(async () => {
   await db.delete(); await db.open()
@@ -22,11 +22,11 @@ async function waitFor(check: () => void) {
 async function fixture() {
   const { scope, project } = await seedCurrentWorkspace('775 readonly boundary')
   await useCodexStore.getState().loadExisting(scope)
-  const categoryId = await useCodexStore.getState().addCategory({ projectId: scope.projectId, domain: 'nature', parentId: null,
+  const categoryId = await useCodexStore.getState().addCategory({ projectId: scope.projectId, domain: 'natural', parentId: null,
     name: '异兽', builtInKey: 'beast', fieldSchema: '[]', hidden: false, order: 0 })
   const id = await useCodexStore.getState().addEntry({ projectId: scope.projectId, categoryId, name: '白鹿', summary: '', description: '原文', fields: '{}', refs: '{}', tags: '[]', order: 0 })
   const category = (await db.codexCategories.get(categoryId))!, entry = (await db.codexEntries.get(id))!
-  const systemId = await useCultivationStore.getState().addSystem({ projectId: scope.projectId, worldId: scope.worldId, name: '原世界体系', description: '原文', stages: '[]' }, scope)
+  const systemId = await useCultivationStore.getState().addSystem({ projectId: scope.projectId, name: '原世界体系', description: '原文', stages: '[]' }, scope)
   const before = { entries: await db.codexEntries.toArray(), systems: await db.cultivationSystems.toArray(), progress: await db.cultivationProgress.toArray() }
   const workspace = (await db.projects.get(scope.projectId))!
   await db.projects.delete(scope.projectId)
