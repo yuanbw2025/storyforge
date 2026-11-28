@@ -123,6 +123,8 @@ it('freezes the selected per-field template and real overrides across changes an
   usePromptStore.setState({ templates: [template] })
   const plan = await createMasterAgentPlan({ projectId: f.scope.projectId, scope: f.scope, worldGroupId: null, request: '按作者总述模板起草', pinnedTask: { agentId: 'world-origin', skillId: 'world-origin.history-text', instruction: '仅生成历史总述', historyTextRequest: { field: 'overview', mode: 'rewrite' }, promptExecution: { version: 1, moduleKey: 'history.overview', userOverride: '本次用户覆盖，仅做正文，不自行拼接资料。' } } })
   const frozen = plan.tasks[0].promptExecution!
+  const oldPlan = structuredClone(plan);delete oldPlan.tasks[0].promptExecution
+  expect(parseMasterAgentPlanV1(oldPlan).tasks[0].promptExecution).toBeUndefined()
   expect(frozen.template.name).toBe('作者总述模板 A');expect(frozen.userOverride).toContain('本次用户覆盖')
   usePromptStore.setState({ templates: [{ ...template, systemPrompt: 'Later-template-B', name: '后来模板 B', updatedAt: 2 }] })
   const conversation = await getOrCreateAgentConversation({ projectId: f.scope.projectId, scope: f.scope, worldGroupId: null, purpose: 'history061-template' })
